@@ -21,19 +21,25 @@ def process_input():
                 {
                     "role": "system",
                     "content": (
-                        "You are an AI assistant extracting booking details for a taxi. "
-                        "Reply ONLY with a JSON like: "
-                        '{"pickup_address": "123 ABC St", '
-                        '"dropoff_address": "Wellington Airport", '
-                        '"pickup_datetime": "5 PM today"}'
+                        "You are an AI assistant that extracts taxi booking details. "
+                        "ONLY respond with valid JSON. DO NOT explain anything. "
+                        "Example:\n"
+                        '{\n'
+                        '  "pickup_address": "123 ABC St",\n'
+                        '  "dropoff_address": "Wellington Airport",\n'
+                        '  "pickup_datetime": "5 PM today"\n'
+                        '}'
                     )
                 },
-                {"role": "user", "content": speech_input}
+                {
+                    "role": "user",
+                    "content": speech_input
+                }
             ]
         )
 
         ai_reply = completion.choices[0].message.content.strip()
-        parsed_data = json.loads(ai_reply)
+        parsed_data = json.loads(ai_reply)  # must be valid JSON
 
         return jsonify(parsed_data)
 
