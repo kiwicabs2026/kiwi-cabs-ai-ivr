@@ -19,25 +19,28 @@ def process_input():
             model="gpt-4",
             messages=[
                 {
-                    {
-    "role": "system",
-    "content": (
-        "You are an AI assistant that extracts taxi booking details only. "
-        "Respond ONLY in this exact JSON format and include ALL fields. "
-        "Do NOT add any extra text or explanation. If anything is missing, just guess. "
-        "Format must be:\n"
-        '{\n'
-        '  "pickup_address": "123 Main St",\n'
-        '  "dropoff_address": "Wellington Airport",\n'
-        '  "pickup_datetime": "5 PM today"\n'
-        '}'
-    )
-}
-
+                    "role": "system",
+                    "content": (
+                        "You are an AI assistant that extracts taxi booking details from a customer speech. "
+                        "Reply ONLY with this exact JSON structure, with NO extra text, no labels, no greetings:\n"
+                        '{\n'
+                        '  "pickup_address": "123 Main St",\n'
+                        '  "dropoff_address": "Wellington Airport",\n'
+                        '  "pickup_datetime": "5 PM today"\n'
+                        '}'
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": speech_input
+                }
+            ]
+        )
 
         ai_reply = completion.choices[0].message.content.strip()
-        parsed_data = json.loads(ai_reply)
+        print("AI RAW REPLY:", ai_reply)  # ← this shows the raw response in Render logs
 
+        parsed_data = json.loads(ai_reply)  # This must be valid JSON
         return jsonify(parsed_data)
 
     except Exception as e:
