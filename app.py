@@ -19,21 +19,21 @@ def process_input():
             model="gpt-4",
             messages=[
                 {
-                    "role": "system",
-                    "content": (
-                        "You are an AI assistant that extracts taxi booking details. "
-                        "ONLY respond with valid JSON. DO NOT explain anything. "
-                        "Format strictly as: "
-                        '{\n'
-                        '  "pickup_address": "123 ABC St",\n'
-                        '  "dropoff_address": "Wellington Airport",\n'
-                        '  "pickup_datetime": "5 PM today"\n'
-                        '}'
-                    )
-                },
-                {"role": "user", "content": speech_input}
-            ]
-        )
+                    {
+    "role": "system",
+    "content": (
+        "You are an AI assistant that extracts taxi booking details only. "
+        "Respond ONLY in this exact JSON format and include ALL fields. "
+        "Do NOT add any extra text or explanation. If anything is missing, just guess. "
+        "Format must be:\n"
+        '{\n'
+        '  "pickup_address": "123 Main St",\n'
+        '  "dropoff_address": "Wellington Airport",\n'
+        '  "pickup_datetime": "5 PM today"\n'
+        '}'
+    )
+}
+
 
         ai_reply = completion.choices[0].message.content.strip()
         parsed_data = json.loads(ai_reply)
