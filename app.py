@@ -18,3 +18,7 @@ def process_input():
     safe_reply = ". ".join(chunks)
 
     return jsonify({"reply": safe_reply})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
