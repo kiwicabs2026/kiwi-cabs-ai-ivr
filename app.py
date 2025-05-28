@@ -10,7 +10,7 @@ app = Flask(__name__)
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 # Test route to confirm server is running
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "HEAD"])
 def home():
     return jsonify({"message": "Kiwi Cabs AI API is running"}), 200
 
