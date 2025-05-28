@@ -1,29 +1,20 @@
 from flask import Flask, request, jsonify
-import openai
-import os
 
 app = Flask(__name__)
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Kiwi Cabs AI IVR is running!"
-
-@app.route("/process-booking", methods=["POST"])
-def process_booking():
+@app.route("/", methods=["POST"])
+def process_input():
     data = request.get_json()
-    user_input = data.get("message", "")
+    speech_input = data.get("speech_input", "")
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You're an assistant for a taxi booking service."},
-            {"role": "user", "content": user_input}
-        ]
-    )
+    # Simulate AI logic (or replace with OpenAI result later)
+    full_text = f"You said: {speech_input}"
 
-    return jsonify({"response": response.choices[0]["message"]["content"]})
+    # Break into chunks of max 29 characters
+    chunk_size = 29
+    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    # Join chunks with short pauses (Twilio reads ". " as a pause)
+    safe_reply = ". ".join(chunks)
+
+    return jsonify({"reply": safe_reply})
