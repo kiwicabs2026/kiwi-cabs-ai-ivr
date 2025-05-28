@@ -1,60 +1,49 @@
 from flask import Flask, request, jsonify
 import openai
 import os
-import json
 
-# Create Flask app instance
 app = Flask(__name__)
-
-# Load OpenAI API key from environment variable
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-# Test route to confirm server is running
 @app.route("/", methods=["GET", "HEAD"])
-def home():
+def health_check():
     return jsonify({"message": "Kiwi Cabs AI API is running"}), 200
 
-# Main AI chat route
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        # Get JSON data from POST request
         data = request.get_json()
-
-        # Get the prompt from request
         prompt = data.get("prompt", "").strip()
 
         if not prompt:
-            return jsonify({"error": "No prompt provided"}), 400
+            return jsonify({"reply": "Sorry, I didn’t hear anything. Please say your name, pickup, drop-off, and time again."}), 200
 
-        # Call OpenAI Chat API
+        print("📥 Prompt received:", prompt)
+
         response = openai.ChatCompletion.create(
-    model="gpt-4",
-    messages=[
-        {
-            "role": "system",
-            "content": (
-                "You are a helpful taxi booking assistant for Kiwi Cabs. "
-                "You are allowed to simulate booking taxis. "
-                "When given a name, pickup address, drop-off address, and time, confirm the booking clearly. "
-                "Speak directly to the customer like a real booking assistant."
-            )
-        },
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-)
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful taxi booking assistant for Kiwi Cabs. "
+                        "You are allowed to simulate booking taxis. "
+                        "When given a name, pickup address, drop-off address, and time, confirm the booking clearly. "
+                        "Respond in one polite sentence, like a real assistant."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
 
-
-        # Extract the assistant's reply
         reply = response["choices"][0]["message"]["content"].strip()
 
-        # Return reply in JSON
+        print("🤖 AI reply:", reply)
         return jsonify({"reply": reply}), 200
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Do NOT add app.run() here – Render will handle running the app using gunicorn
+        print("❌ Error:", str(e))
+        return jsonify({"reply": "Sorry, something went wrong while processing your booking. Please try again."}), 200
