@@ -21,20 +21,13 @@ def process_input():
                 {
                     "role": "system",
                     "content": (
-                        "You are an AI assistant that extracts taxi booking details. "
-                        "ONLY respond with valid JSON. DO NOT explain anything. "
-                        "Example:\n"
-                        '{\n'
-                        '  "pickup_address": "123 ABC St",\n'
-                        '  "dropoff_address": "Wellington Airport",\n'
-                        '  "pickup_datetime": "5 PM today"\n'
-                        '}'
+                        "You are a strict AI that extracts only booking details for a taxi. "
+                        "Reply ONLY with this JSON format: "
+                        '{ "pickup_address": "...", "dropoff_address": "...", "pickup_datetime": "..." }. '
+                        "Do not add any text, explanation, or greetings."
                     )
                 },
-                {
-                    "role": "user",
-                    "content": speech_input
-                }
+                {"role": "user", "content": speech_input}
             ]
         )
 
