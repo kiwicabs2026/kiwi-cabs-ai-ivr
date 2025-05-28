@@ -20,13 +20,18 @@ def process_input():
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an AI assistant extracting booking details for a taxi. Reply ONLY with a JSON like this: {\"pickup_address\": \"123 ABC St\", \"dropoff_address\": \"Wellington Airport\", \"pickup_datetime\": \"5 PM today\"}."
+                    "content": (
+                        "You are an AI assistant extracting booking details for a taxi. "
+                        "Reply ONLY with a JSON like: "
+                        '{"pickup_address": "123 ABC St", '
+                        '"dropoff_address": "Wellington Airport", '
+                        '"pickup_datetime": "5 PM today"}'
+                    )
                 },
                 {"role": "user", "content": speech_input}
             ]
         )
 
-        # Try to parse the returned text as JSON
         ai_reply = completion.choices[0].message.content.strip()
         parsed_data = json.loads(ai_reply)
 
@@ -34,3 +39,7 @@ def process_input():
 
     except Exception as e:
         return jsonify({"reply": "There was a problem replying."})
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
