@@ -1,24 +1,40 @@
 from flask import Flask, request, jsonify
+import openai
+import os
 
 app = Flask(__name__)
+
+# Load the OpenAI key securely from environment variable
+openai.api_key = os.environ.get("OPENAI_API_KEY")
 
 @app.route("/", methods=["POST"])
 def process_input():
     data = request.get_json()
     speech_input = data.get("speech_input", "")
 
-    # Simulate AI logic (or replace with OpenAI result later)
-    full_text = f"You said: {speech_input}"
+    if not speech_input:
+        return jsonify({"reply": "Sorry, I didn't catch that."})
 
-    # Break into chunks of max 29 characters
+    # Send input to OpenAI GPT-4
+    try:
+        completion = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You're a helpful AI assistant taking taxi bookings by voice."},
+                {"role": "user", "content": speech_input}
+            ]
+        )
+        reply = completion.choices[0].message.content.strip()
+    except Exception as e:
+        return jsonify({"reply": "There was a problem replying."})
+
+    # Split reply into <=29-character chunks for Twilio speech
     chunk_size = 29
-    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
-
-    # Join chunks with short pauses (Twilio reads ". " as a pause)
+    chunks = [reply[i:i+chunk_size] for i in range(0, len(reply), chunk_size)]
     safe_reply = ". ".join(chunks)
 
     return jsonify({"reply": safe_reply})
 
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
