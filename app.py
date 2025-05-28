@@ -38,9 +38,9 @@ def process_input():
         )
 
         ai_reply = completion.choices[0].message.content.strip()
-        print("AI RAW REPLY:", ai_reply)  # ← this shows the raw response in Render logs
+        print("AI RAW REPLY:", ai_reply)  # 
 
-        parsed_data = json.loads(ai_reply)  # This must be valid JSON
+        parsed_data = json.loads(ai_reply)  # 
         return jsonify(parsed_data)
 
     except Exception as e:
