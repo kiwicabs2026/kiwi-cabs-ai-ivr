@@ -3,49 +3,46 @@ import openai
 import os
 import json
 
+# Create Flask app instance
 app = Flask(__name__)
+
+# Load OpenAI API key from environment variable
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-@app.route("/", methods=["POST"])
-def process_input():
-    data = request.get_json()
-    speech_input = data.get("speech_input", "")
+# Test route to confirm server is running
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({"message": "Kiwi Cabs AI API is running"}), 200
 
-    if not speech_input:
-        return jsonify({"reply": "Sorry, I didn't catch that."})
-
+# Main AI chat route
+@app.route("/ask", methods=["POST"])
+def ask():
     try:
-        completion = openai.ChatCompletion.create(
+        # Get JSON data from POST request
+        data = request.get_json()
+
+        # Get the prompt from request
+        prompt = data.get("prompt", "").strip()
+
+        if not prompt:
+            return jsonify({"error": "No prompt provided"}), 400
+
+        # Call OpenAI Chat API
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an AI assistant that extracts taxi booking details from a customer speech. "
-                        "Reply ONLY with this exact JSON structure, with NO extra text, no labels, no greetings:\n"
-                        '{\n'
-                        '  "pickup_address": "123 Main St",\n'
-                        '  "dropoff_address": "Wellington Airport",\n'
-                        '  "pickup_datetime": "5 PM today"\n'
-                        '}'
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": speech_input
-                }
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
             ]
         )
 
-        ai_reply = completion.choices[0].message.content.strip()
-        print("AI RAW REPLY:", ai_reply)  # 
+        # Extract the assistant's reply
+        reply = response["choices"][0]["message"]["content"].strip()
 
-        parsed_data = json.loads(ai_reply)  # 
-        return jsonify(parsed_data)
+        # Return reply in JSON
+        return jsonify({"reply": reply}), 200
 
     except Exception as e:
-        return jsonify({"reply": "There was a problem replying."})
+        return jsonify({"error": str(e)}), 500
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+# Do NOT add app.run() here – Render will handle running the app using gunicorn
