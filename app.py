@@ -29,12 +29,24 @@ def ask():
 
         # Call OpenAI Chat API
         response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt}
-            ]
-        )
+    model="gpt-4",
+    messages=[
+        {
+            "role": "system",
+            "content": (
+                "You are a helpful taxi booking assistant for Kiwi Cabs. "
+                "You are allowed to simulate booking taxis. "
+                "When given a name, pickup address, drop-off address, and time, confirm the booking clearly. "
+                "Speak directly to the customer like a real booking assistant."
+            )
+        },
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
+)
+
 
         # Extract the assistant's reply
         reply = response["choices"][0]["message"]["content"].strip()
