@@ -4,17 +4,17 @@ import openai
 
 app = Flask(__name__)
 
-# Set your OpenAI API key securely via Render environment variable
+# Load API key from environment variable in Render
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        # Get JSON data from the incoming POST request
+        # Get the full JSON payload from Twilio
         data = request.get_json()
-        print("DEBUG - Incoming data:", data)  # Debug for Render logs
+        print("DEBUG - Incoming data:", data)
 
-        # Combine inputs from all gather widgets (if available)
+        # Combine text from available widgets (if any)
         prompt = " ".join([
             data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
             data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
@@ -24,28 +24,32 @@ def ask():
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
 
-        # Call OpenAI API to simulate AI assistant
+        # Build messages for OpenAI
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful AI assistant for Kiwi Cabs.\n"
+                    "You help users book taxis, modify details, or cancel bookings.\n"
+                    "When the user provides a name, pickup address, drop-off address, and time/date, "
+                    "respond clearly confirming the job. Speak like a real assistant."
+                )
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+
+        # Call OpenAI ChatCompletion
         response = openai.ChatCompletion.create(
             model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant for Kiwi Cabs. "
-                        "You can assist callers by taking taxi bookings, modifying details, or canceling bookings. "
-                        "When the user gives their name, pickup address, destination, and time/date, respond clearly and confirm. "
-                        "Speak like a natural assistant with polite and helpful tone."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            messages=messages
         )
 
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
+
         return jsonify({"reply": ai_reply}), 200
 
     except Exception as e:
