@@ -61,12 +61,12 @@ def ask():
                 ai_reply = response["choices"][0]["message"]["content"].strip()
                 print("AI RAW REPLY:", ai_reply)
 
-               try:
-                 parsed = json.loads(ai_reply)
-                 print("Parsed JSON:", parsed)
-                 return jsonify(parsed), 200
-               except json.JSONDecodeError:
-                  return jsonify({"reply": ai_reply}), 200
+                 try:
+                     parsed = json.loads(ai_reply)
+                     print("Parsed JSON:", parsed)
+                     return jsonify(parsed), 200
+                  except json.JSONDecodeError:
+                     return jsonify({"reply": ai_reply}), 200
 
 
 
