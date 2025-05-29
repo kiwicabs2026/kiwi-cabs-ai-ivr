@@ -4,32 +4,37 @@ import openai
 
 app = Flask(__name__)
 
-# Set your OpenAI API key securely via Render environment variable
+# Set your OpenAI key securely from Render environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        # Get JSON data from the POST request
+        # Get JSON from the incoming POST request
         data = request.get_json()
+        print("DEBUG - Incoming data:", data)  # Debug log for Render
 
-        # Extract 'prompt' from incoming payload (expected from Twilio)
-        prompt = data.get("prompt", "").strip()
+        # Combine inputs from all gather widgets (if available)
+        prompt = " ".join([
+            data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
+            data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
+            data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
+        ]).strip()
 
         if not prompt:
-            return jsonify({"error": "No prompt provided"}), 400
+            return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
 
-        # Call OpenAI ChatCompletion
+        # Call OpenAI API to simulate AI assistant
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are a helpful taxi booking assistant for Kiwi Cabs. "
-                        "You are allowed to simulate booking, modifying, or canceling taxis. "
-                        "When the user gives name, pickup address, destination, and time/date, "
-                        "respond clearly confirming the job. Speak naturally like a real assistant."
+                        "You are a helpful AI assistant for Kiwi Cabs. "
+                        "You can assist callers by taking taxi bookings, modifying details, or canceling bookings. "
+                        "When the user gives their name, pickup address, destination, and time/date, respond clearly and confirm. "
+                        "Speak like a natural assistant with polite and helpful tone."
                     )
                 },
                 {
@@ -39,11 +44,10 @@ def ask():
             ]
         )
 
-        # Extract the AI's reply
-        reply = response["choices"][0]["message"]["content"].strip()
-
-        # Return it as JSON for Twilio Studio to read
-        return jsonify({"reply": reply}), 200
+        ai_reply = response["choices"][0]["message"]["content"].strip()
+        print("AI RAW REPLY:", ai_reply)
+        return jsonify({"reply": ai_reply}), 200
 
     except Exception as e:
+        print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
