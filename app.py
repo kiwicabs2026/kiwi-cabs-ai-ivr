@@ -3,28 +3,28 @@ from flask import Flask, request, jsonify
 import openai
 
 app = Flask(__name__)
-
-# Set your OpenAI key securely from Render environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        # Get JSON from the incoming POST request
         data = request.get_json()
-        print("DEBUG - Incoming data:", data)  # Debug log for Render
+        print("DEBUG - Incoming data:", data)
 
-        # Combine inputs from all gather widgets (if available)
-        prompt = " ".join([
-            data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
-        ]).strip()
+        # Try pulling direct prompt first (for Postman/manual testing)
+        prompt = data.get("prompt", "").strip()
+
+        # If no prompt, try gathering from widget SpeechResults
+        if not prompt:
+            prompt = " ".join(filter(None, [
+                data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
+                data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
+                data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
+            ])).strip()
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
 
-        # Call OpenAI API to simulate AI assistant
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
