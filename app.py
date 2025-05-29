@@ -1,28 +1,25 @@
+import os
 from flask import Flask, request, jsonify
 import openai
-import os
 
 app = Flask(__name__)
-openai.api_key = os.environ.get("OPENAI_API_KEY")
 
-@app.route("/", methods=["GET", "HEAD"])
-def health_check():
-    return jsonify({"message": "Kiwi Cabs AI API is running"}), 200
+# Set your OpenAI API key securely via Render environment variable
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-@app.route@app.route("/ask", methods=["POST"])
+@app.route("/ask", methods=["POST"])
 def ask():
     try:
-        print("🔧 Incoming request")
+        # Get JSON data from the POST request
+        data = request.get_json()
 
-        data = request.get_json(force=True)
-        print("📦 Raw data received:", data)
-
+        # Extract 'prompt' from incoming payload (expected from Twilio)
         prompt = data.get("prompt", "").strip()
-        print("📝 Extracted prompt:", prompt)
 
         if not prompt:
-            return jsonify({"reply": "Sorry, I didn’t hear anything. Please try again."}), 200
+            return jsonify({"error": "No prompt provided"}), 400
 
+        # Call OpenAI ChatCompletion
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
@@ -30,8 +27,9 @@ def ask():
                     "role": "system",
                     "content": (
                         "You are a helpful taxi booking assistant for Kiwi Cabs. "
-                        "You are allowed to simulate booking taxis. "
-                        "When given a name, pickup address, drop-off address, and time, confirm the booking clearly."
+                        "You are allowed to simulate booking, modifying, or canceling taxis. "
+                        "When the user gives name, pickup address, destination, and time/date, "
+                        "respond clearly confirming the job. Speak naturally like a real assistant."
                     )
                 },
                 {
@@ -41,12 +39,11 @@ def ask():
             ]
         )
 
+        # Extract the AI's reply
         reply = response["choices"][0]["message"]["content"].strip()
-        print("✅ GPT Reply:", reply)
 
+        # Return it as JSON for Twilio Studio to read
         return jsonify({"reply": reply}), 200
 
     except Exception as e:
-        print("❌ Exception:", str(e))
-        return jsonify({"reply": "Internal error: " + str(e)}), 200
-
+        return jsonify({"error": str(e)}), 500
