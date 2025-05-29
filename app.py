@@ -1,7 +1,6 @@
 import os
 from flask import Flask, request, jsonify
 import openai
-import json
 
 app = Flask(__name__)
 
@@ -13,7 +12,7 @@ def ask():
     try:
         # Get JSON data from the incoming POST request
         data = request.get_json()
-        print("DEBUG - Incoming data:", data)
+        print("DEBUG - Incoming data:", data)  # Debug for Render logs
 
         # Combine inputs from all gather widgets (if available)
         prompt = " ".join([
@@ -33,11 +32,9 @@ def ask():
                     "role": "system",
                     "content": (
                         "You are a helpful AI assistant for Kiwi Cabs. "
-                        "Extract booking information from the customer. "
-                        "Return a valid JSON object ONLY with the following keys: "
-                        "name, pickup_address, dropoff_address, date, time. "
-                        "If any detail is missing, set its value to null. "
-                        "Do NOT return any explanation, just the raw JSON."
+                        "You can assist callers by taking taxi bookings, modifying details, or canceling bookings. "
+                        "When the user gives their name, pickup address, destination, and time/date, respond clearly and confirm. "
+                        "Speak like a natural assistant with polite and helpful tone."
                     )
                 },
                 {
@@ -49,10 +46,7 @@ def ask():
 
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
-
-        # Attempt to parse JSON response
-        parsed_data = json.loads(ai_reply)
-        return jsonify(parsed_data), 200
+        return jsonify({"reply": ai_reply}), 200
 
     except Exception as e:
         print("ERROR:", str(e))
