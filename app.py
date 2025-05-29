@@ -1,5 +1,5 @@
 import os
-import json  # ← This was missing before — needed for json.loads
+import json
 from flask import Flask, request, jsonify
 import openai
 from datetime import datetime, timedelta
@@ -13,7 +13,6 @@ def ask():
     try:
         data = request.get_json()
         print("DEBUG - Incoming data:", data)
-
 
         # Combine speech input from all widgets
         inputs = [
@@ -58,18 +57,15 @@ def ask():
             ]
         )
 
-                        ai_reply = response["choices"][0]["message"]["content"].strip()
-                        print("AI RAW REPLY:", ai_reply)
+        ai_reply = response["choices"][0]["message"]["content"].strip()
+        print("AI RAW REPLY:", ai_reply)
 
-                        try:
-                            parsed = json.loads(ai_reply)
-                            print("Parsed JSON:", parsed)
-                            return jsonify(parsed), 200
-                        except json.JSONDecodeError:
-                            return jsonify({"reply": ai_reply}), 200
-
-
-
+        try:
+            parsed = json.loads(ai_reply)
+            print("Parsed JSON:", parsed)
+            return jsonify(parsed), 200
+        except json.JSONDecodeError:
+            return jsonify({"reply": ai_reply}), 200
 
     except Exception as e:
         print("ERROR:", str(e))
