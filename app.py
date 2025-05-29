@@ -65,7 +65,7 @@ def ask():
                      parsed = json.loads(ai_reply)
                      print("Parsed JSON:", parsed)
                      return jsonify(parsed), 200
-	        except json.JSONDecodeError:
+	             except json.JSONDecodeError:
                      return jsonify({"reply": ai_reply}), 200
 
 
