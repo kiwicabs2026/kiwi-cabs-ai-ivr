@@ -4,25 +4,28 @@ import openai
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
+
+# Set your OpenAI API key securely via Render environment variable
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
+        # Get JSON data from the incoming POST request
         data = request.get_json()
-        print("DEBUG - Incoming data:", data)
+        print("DEBUG - Incoming data:", data)  # Debug log for Render
 
-        # Safe default empty string for each widget
-        if not isinstance(data.get("widgets"), dict):
-            return jsonify({"reply": "Invalid request format — 'widgets' must be an object."}), 400
+        # Combine inputs from all gather widgets (if available)
+        prompt_parts = []
+        for key in ["gather_trip_details", "gather_modify_voice", "gather_cancel_voice"]:
+            widget_data = data.get("widgets", {}).get(key, {})
+            speech = widget_data.get("SpeechResult", "")
+            if speech:
+                prompt_parts.append(speech)
 
-        trip = data["widgets"].get("gather_trip_details", {}).get("SpeechResult", "")
-        modify = data["widgets"].get("gather_modify_voice", {}).get("SpeechResult", "")
-        cancel = data["widgets"].get("gather_cancel_voice", {}).get("SpeechResult", "")
+        prompt = " ".join(prompt_parts).strip()
 
-        prompt = " ".join([trip, modify, cancel]).strip()
-
-        # Replace 'tomorrow' with NZ-style date
+        # Replace 'tomorrow' with NZ-style date (DD/MM/YYYY)
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
             words = prompt.split()
@@ -31,7 +34,7 @@ def ask():
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
 
-        # Call OpenAI with booking assistant instructions
+        # Call OpenAI API to simulate AI assistant
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
@@ -39,17 +42,20 @@ def ask():
                     "role": "system",
                     "content": (
                         "You are a helpful AI assistant for Kiwi Cabs. "
-                        "You can assist callers by taking taxi bookings, modifying details, or canceling bookings. "
-                        "When the user provides name, pickup address, destination, and time/date, respond clearly like this:\n"
+                        "You can assist callers by taking taxi bookings, modifying booking details, or canceling bookings. "
+                        "When the user provides their name, pickup address, destination, and time/date, confirm the booking like this format:\n"
                         "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
                         "Pick-up: [Pickup Address]\n"
                         "Drop-off: [Dropoff Address]\n"
-                        "Time: [Time and Date]\n"
+                        "Time: [Time and Day/Date].\n"
                         "Thank you for choosing Kiwi Cabs.\n"
-                        "Do not say anything about notifications or ask if they need anything else."
+                        "Do not mention sending notifications or ask if the user needs anything else."
                     )
                 },
-                {"role": "user", "content": prompt}
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ]
         )
 
@@ -60,3 +66,6 @@ def ask():
     except Exception as e:
         print("ERROR:", str(e))
         return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True)
