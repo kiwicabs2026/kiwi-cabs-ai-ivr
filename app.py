@@ -21,10 +21,11 @@ def ask():
             data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
         ]).strip()
 
-        # Convert 'tomorrow' to a real date in NZ format (DD/MM/YYYY)
+        # Replace 'tomorrow' with NZ-style date (DD/MM/YYYY), case-insensitive
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = prompt.lower().replace("tomorrow", tomorrow_date)
+            words = prompt.split()
+            prompt = " ".join([tomorrow_date if word.lower() == "tomorrow" else word for word in words])
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
