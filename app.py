@@ -9,29 +9,31 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        # Get JSON data from the request
         data = request.get_json()
         print("DEBUG - Incoming data:", data)
 
-        # Gather input from all widgets
-        prompt = " ".join([
+        # Combine speech input from all widgets
+        inputs = [
             data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
             data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
             data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
-        ]).strip()
+        ]
+        prompt = " ".join([text for text in inputs if text]).strip()
+        print("DEBUG - Combined Prompt:", prompt)
 
-        # Replace "tomorrow" with NZ-style date (DD/MM/YYYY)
+        # Replace 'tomorrow' with formatted date in NZ style
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            words = prompt.split()
-            prompt = " ".join(
-                [tomorrow_date if word.lower() == "tomorrow" else word for word in words]
-            )
+            prompt = " ".join([
+                tomorrow_date if word.lower() == "tomorrow" else word
+                for word in prompt.split()
+            ])
+            print("DEBUG - Updated Prompt with NZ date:", prompt)
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
 
-        # OpenAI system instruction
+        # Call OpenAI API
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
@@ -39,14 +41,14 @@ def ask():
                     "role": "system",
                     "content": (
                         "You are a helpful AI assistant for Kiwi Cabs.\n"
-                        "You assist callers by taking taxi bookings, modifying details, or canceling bookings.\n"
+                        "You assist with taxi bookings, modifying details, or cancellations.\n"
                         "When the user provides name, pickup address, destination, and time/date, confirm like this:\n"
                         "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
                         "Pick-up: [Pickup Address]\n"
                         "Drop-off: [Dropoff Address]\n"
                         "Time: [Time and Date]\n"
                         "Thank you for choosing Kiwi Cabs.\n"
-                        "Do not say anything about notifications or further help."
+                        "Do not mention notifications or ask if they need anything else."
                     )
                 },
                 {
