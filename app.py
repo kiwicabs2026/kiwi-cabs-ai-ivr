@@ -1,4 +1,5 @@
 import os
+import json  # ← This was missing before — needed for json.loads
 from flask import Flask, request, jsonify
 import openai
 from datetime import datetime, timedelta
@@ -12,6 +13,7 @@ def ask():
     try:
         data = request.get_json()
         print("DEBUG - Incoming data:", data)
+
 
         # Combine speech input from all widgets
         inputs = [
