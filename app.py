@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, jsonify
 import openai
 from datetime import datetime, timedelta
+import re  # Needed for replacing 'tomorrow' accurately
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -21,13 +22,10 @@ def ask():
         prompt = " ".join([text for text in inputs if text]).strip()
         print("DEBUG - Combined Prompt:", prompt)
 
-        # Replace 'tomorrow' with formatted date in NZ style
+        # Replace 'tomorrow' with formatted NZ date using regex
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = " ".join([
-                tomorrow_date if word.lower() == "tomorrow" else word
-                for word in prompt.split()
-            ])
+            prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
             print("DEBUG - Updated Prompt with NZ date:", prompt)
 
         if not prompt:
