@@ -24,10 +24,17 @@ def ask():
         print("DEBUG - Combined Prompt:", prompt)
 
         # Replace 'tomorrow' with formatted NZ date using regex
+        # Replace 'tomorrow' and 'after tomorrow' with formatted NZ dates (dd/mm/yyyy)
+        if "after tomorrow" in prompt.lower():
+            day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
+            prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
+
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
             prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
-            print("DEBUG - Updated Prompt with NZ date:", prompt)
+
+        print("DEBUG - Final Prompt with replaced date:", prompt)
+
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
