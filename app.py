@@ -57,6 +57,8 @@ def ask():
                         "Drop-off: [Dropoff Address]\n"
                         "Time: [Time and Date]\n"
                         "Thank you for choosing Kiwi Cabs.\n"
+                        "If the time or date is missing or unclear (e.g. 'tomorrow', 'afternoon', or 'evening'), ask the user to provide an exact date and time like '31 May at 3:00 PM'.\n"
+                        "You must not guess vague times like 'afternoon'. Always ask the user to clarify."
                         "Do not mention notifications or ask if they need anything else."
                     )
                 },
