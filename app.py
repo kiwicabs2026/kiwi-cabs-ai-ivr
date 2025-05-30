@@ -68,12 +68,42 @@ def ask():
         print("AI RAW REPLY:", ai_reply)
 
         try:
-            parsed = json.loads(ai_reply)
-            print("Parsed JSON:", parsed)
-            return jsonify(parsed), 200
-        except json.JSONDecodeError:
-            return jsonify({"reply": ai_reply}), 200
+    parsed = json.loads(ai_reply)
+    print("Parsed JSON:", parsed)
 
-    except Exception as e:
-        print("ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
+    from datetime import datetime
+    import requests
+
+    pickup_time = parsed["time"]
+    pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")s
+
+    iso_time = pickup_datetime.isoformat()
+
+    job_data = {
+        "job": {
+            "pickup": {"address": parsed["pickup"]},
+            "dropoff": {"address": parsed["dropoff"]},
+            "time": iso_time,
+            "client": {"name": parsed["name"]}
+        }
+    }
+
+    response = requests.post(
+        "https://api-rc.taxicaller.net/api/v1/book/order",
+        json=job_data,
+        headers={
+            "Authorization": "Bearer YOUR_REAL_API_KEY_HERE",
+            "Content-Type": "application/json"
+        }
+    )
+
+    print("TAXICALLER RESPONSE:", response.text)
+
+    return jsonify(parsed), 200
+
+except json.JSONDecodeError:
+    return jsonify({"reply": ai_reply}), 200
+
+except Exception as e:
+    print("ERROR:", str(e))
+    return jsonify({"error": str(e)}), 500
