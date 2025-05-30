@@ -58,6 +58,7 @@ def ask():
                         "Time: [Time and Date]\n"
                         "Thank you for choosing Kiwi Cabs.\n"
                         "If the time or date is missing or unclear (e.g. 'tomorrow', 'afternoon', or 'evening'), ask the user to provide an exact date and time like '31 May at 3:00 PM'.\n"
+                        "If the user says 'now' or 'right away', treat it as an immediate request and use the current time exactly. Do not ask again.\n"
                         "You must not guess vague times like 'afternoon'. Always ask the user to clarify."
                         "Do not mention notifications or ask if they need anything else."
                     )
@@ -77,7 +78,12 @@ def ask():
             print("Parsed JSON:", parsed)
 
             pickup_time = parsed["time"]
-            pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
+            
+            if pickup_time.strip().lower() in ["now", "right away"]:
+                pickup_datetime = datetime.now()
+            else:
+                pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
+                
             iso_time = pickup_datetime.isoformat()
 
             job_data = {
