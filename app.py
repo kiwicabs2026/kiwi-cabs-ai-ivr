@@ -88,11 +88,15 @@ def ask():
             }
 
             # Get Bearer token first
-            token_url = f"https://api-rc.taxicaller.net/api/v1/jwt/for-key?key={TAXICALLER_API_KEY}&sub={TAXICALLER_SUB}"
-            token_response = requests.get(token_url)
-            if token_response.status_code != 200:
-                raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
+            api_key = "c18afde179ec057037084b4daf10f01a"  # your TaxiCaller API key
+            sub = "*"  # or use an actual sub like an email if needed
 
+            token_url = f"https://api-rc.taxicaller.net/api/v1/jwt/for-key?key={api_key}&sub={sub}"
+            token_response = requests.get(token_url)
+
+            if token_response.status_code != 200:
+            raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
+            
             bearer_token = token_response.json().get("token")
             if not bearer_token:
                 raise ValueError("Token not found in response")
