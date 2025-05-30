@@ -95,7 +95,7 @@ def ask():
             token_response = requests.get(token_url)
 
             if token_response.status_code != 200:
-            raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
+                raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
             
             bearer_token = token_response.json().get("token")
             if not bearer_token:
