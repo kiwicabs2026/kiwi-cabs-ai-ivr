@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 import openai
 from datetime import datetime, timedelta
 import re  # Needed for replacing 'tomorrow' accurately
+import requests
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -23,8 +24,7 @@ def ask():
         prompt = " ".join([text for text in inputs if text]).strip()
         print("DEBUG - Combined Prompt:", prompt)
 
-        # Replace 'tomorrow' with formatted NZ date using regex
-        # Replace 'tomorrow' and 'after tomorrow' with formatted NZ dates (dd/mm/yyyy)
+        # Replace 'tomorrow' and 'after tomorrow' with formatted NZ dates
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
             prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
@@ -34,7 +34,6 @@ def ask():
             prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
-
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
@@ -67,41 +66,38 @@ def ask():
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
 
-    try:
-        parsed = json.loads(ai_reply)
-        print("Parsed JSON:", parsed)
+        try:
+            parsed = json.loads(ai_reply)
+            print("Parsed JSON:", parsed)
 
-        from datetime import datetime
-        import requests
+            pickup_time = parsed["time"]
+            pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
+            iso_time = pickup_datetime.isoformat()
 
-        pickup_time = parsed["time"]
-        pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
-        iso_time = pickup_datetime.isoformat()
-
-        job_data = {
-            "job": {
-            "pickup": {"address": parsed["pickup"]},
-            "dropoff": {"address": parsed["dropoff"]},
-            "time": iso_time,
-            "client": {"name": parsed["name"]}
-        }
-    }
-
-    response = requests.post(
-        "https://api-rc.taxicaller.net/api/v1/book/order",
-        json=job_data,
-        headers={
-            "Authorization": "Bearer YOUR_REAL_API_KEY_HERE",
-            "Content-Type": "application/json"
+            job_data = {
+                "job": {
+                    "pickup": {"address": parsed["pickup"]},
+                    "dropoff": {"address": parsed["dropoff"]},
+                    "time": iso_time,
+                    "client": {"name": parsed["name"]}
+                }
             }
-        )
 
-    print("TAXICALLER RESPONSE:", response.text)
-    return jsonify(parsed), 200
+            response = requests.post(
+                "https://api-rc.taxicaller.net/api/v1/book/order",
+                json=job_data,
+                headers={
+                    "Authorization": "Bearer YOUR_REAL_API_KEY_HERE",
+                    "Content-Type": "application/json"
+                }
+            )
 
-    except json.JSONDecodeError:
-    return jsonify({"reply": ai_reply}), 200
+            print("TAXICALLER RESPONSE:", response.text)
+            return jsonify(parsed), 200
 
-except Exception as e:
-    print("ERROR:", str(e))
-    return jsonify({"error": str(e)}), 500
+        except json.JSONDecodeError:
+            return jsonify({"reply": ai_reply}), 200
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        return jsonify({"error": str(e)}), 500
