@@ -67,7 +67,7 @@ def ask():
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
 
-        try:
+ try:
     parsed = json.loads(ai_reply)
     print("Parsed JSON:", parsed)
 
@@ -75,8 +75,7 @@ def ask():
     import requests
 
     pickup_time = parsed["time"]
-    pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")s
-
+    pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
     iso_time = pickup_datetime.isoformat()
 
     job_data = {
@@ -98,8 +97,8 @@ def ask():
     )
 
     print("TAXICALLER RESPONSE:", response.text)
-
     return jsonify(parsed), 200
+
 
 except json.JSONDecodeError:
     return jsonify({"reply": ai_reply}), 200
