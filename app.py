@@ -11,7 +11,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # TaxiCaller credentials
 TAXICALLER_API_KEY = "c18afde179ec057037084b4daf10f01a"
-TAXICALLER_SUB = "*"  # Use actual sub if required
+TAXICALLER_SUB = "*"
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -19,21 +19,33 @@ def ask():
         data = request.get_json()
         print("DEBUG - Incoming data:", data)
 
+        widgets = data.get("widgets", {})
+        stage = data.get("stage", "initial")
+
+        if stage == "confirm":
+            prompt = widgets.get("gather_trip_details", {}).get("SpeechResult", "").strip().lower()
+            if prompt in ["yes", "yeah", "confirm"]:
+                return jsonify({"reply": "Your taxi has been confirmed and dispatched. Thank you!"}), 200
+            elif prompt in ["no", "nope", "change", "wrong"]:
+                return jsonify({"reply": "Okay, let's update your booking. Please repeat your details."}), 200
+            else:
+                return jsonify({"reply": "Sorry, I didn’t catch that. Please say 'yes' to confirm or 'no' to make changes."}), 200
+
+        # Combine speech input for initial booking
         inputs = [
-            data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
+            widgets.get("gather_trip_details", {}).get("SpeechResult", ""),
+            widgets.get("gather_modify_voice", {}).get("SpeechResult", ""),
+            widgets.get("gather_cancel_voice", {}).get("SpeechResult", "")
         ]
         prompt = " ".join([text for text in inputs if text]).strip()
-        print("DEBUG - Combined Prompt:", prompt)
 
+        # Replace relative dates
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
-
+            prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\\btomorrow\\b", tomorrow_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
         if "today" in prompt.lower():
             today_date = datetime.now().strftime("%d/%m/%Y")
             prompt = re.sub(r"\btoday\b", today_date, prompt, flags=re.IGNORECASE)
@@ -78,12 +90,6 @@ def ask():
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
 
-        if prompt.strip().lower() in ["yes", "yeah", "confirm"]:
-            return jsonify({"reply": "Your taxi has been confirmed and dispatched. Thank you!"}), 200
-
-        elif prompt.strip().lower() in ["no", "nope", "change", "wrong"]:
-            return jsonify({"reply": "Okay, let’s update your booking. Please repeat your details."}), 200
-
         try:
             parsed = json.loads(ai_reply)
             print("Parsed JSON:", parsed)
@@ -96,7 +102,6 @@ def ask():
                 f"Time: {parsed['time']}\n"
                 f"Say 'yes' to confirm, or 'no' to make changes."
             )
-
             return jsonify({"confirmation": confirmation_prompt}), 200
 
         except json.JSONDecodeError:
