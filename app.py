@@ -57,7 +57,7 @@ def ask():
                         "Only respond in valid JSON format like:\n"
                         "{'name': 'Sam', 'pickup': '27 Rex Street', 'dropoff': 'Wellington Hospital', 'time': '31/05/2025 15:00'}\n"
                         "If the time is vague (e.g. 'tomorrow', 'afternoon', 'evening'), clearly respond:\n"
-                        "'I need an exact date and time like 31 May at 3:00 PM to book your taxi.'\n"
+                        "Could you please give me the exact date and time? For example, say something like '31 May at 9:00 PM'.\n"
                         "If the user says 'now' or 'right away', use the current exact time immediately and continue without asking again.\n"
                         "Never guess vague times. Never confirm bookings unless all fields are complete and valid.\n"
                         "After confirming the booking details, ask: 'Shall I confirm this booking? Please say yes or no.'\n"
