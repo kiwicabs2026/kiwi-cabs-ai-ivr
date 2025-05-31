@@ -62,8 +62,11 @@ def ask():
                         "If the time is vague (e.g. 'tomorrow', 'afternoon', 'evening'), clearly respond:\n"
                         "'I need an exact date and time like 31 May at 3:00 PM to book your taxi.'\n"
                         "If the user says 'now' or 'right away', use the current exact time immediately and continue without asking again.\n"
-                        "Never guess vague times. Never confirm bookings unless all fields are complete and valid."
+                        "Never guess vague times. Never confirm bookings unless all fields are complete and valid.\n"
+                        "After confirming the booking details, ask: 'Shall I confirm this booking? Please say yes or no.'\n"
+                        "If the user says 'yes', proceed. If 'no', ask them to repeat the correct details.\n"
                         "Do not mention notifications or ask if they need anything else."
+
                     )
                 },
                 {
@@ -79,6 +82,17 @@ def ask():
         try:
             parsed = json.loads(ai_reply)
             print("Parsed JSON:", parsed)
+            
+            confirmation_prompt = (
+        f"Please confirm your booking details:\n"
+        f"Name: {parsed['name']}\n"
+        f"Pickup: {parsed['pickup']}\n"
+        f"Drop-off: {parsed['dropoff']}\n"
+        f"Time: {parsed['time']}\n"
+        f"Say 'yes' to confirm, or 'no' to make changes."
+)
+
+    return jsonify({"confirmation": confirmation_prompt}), 200
 
             pickup_time = parsed["time"]
             
