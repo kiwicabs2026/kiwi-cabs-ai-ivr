@@ -75,6 +75,12 @@ def ask():
         ai_reply = response["choices"][0]["message"]["content"].strip()
         print("AI RAW REPLY:", ai_reply)
 
+        if prompt.strip().lower() in ["yes", "yeah", "confirm"]:
+            return jsonify({"reply": "Your taxi has been confirmed and dispatched. Thank you!"}), 200
+
+        elif prompt.strip().lower() in ["no", "nope", "change", "wrong"]:
+            return jsonify({"reply": "Okay, let’s update your booking. Please repeat your details."}), 200
+
         try:
             parsed = json.loads(ai_reply)
             print("Parsed JSON:", parsed)
