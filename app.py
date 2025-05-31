@@ -34,6 +34,9 @@ def ask():
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
             prompt = re.sub(r"\\btomorrow\\b", tomorrow_date, prompt, flags=re.IGNORECASE)
+        if "today" in prompt.lower():
+            today_date = datetime.now().strftime("%d/%m/%Y")
+            prompt = re.sub(r"\btoday\b", today_date, prompt, flags=re.IGNORECASE)
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
 
