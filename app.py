@@ -1,18 +1,20 @@
 import os
 import json
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
 import openai
 from datetime import datetime, timedelta
 import re
 import requests
 
 app = Flask(__name__)
-app.secret_key = "any-random-string"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # TaxiCaller credentials
 TAXICALLER_API_KEY = "c18afde179ec057037084b4daf10f01a"
-TAXICALLER_SUB = "*"
+TAXICALLER_SUB = "*"  # Can be updated to actual sub if needed
+
+# Session memory store
+user_sessions = {}
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -29,6 +31,9 @@ def ask():
         prompt = " ".join([text for text in inputs if text]).strip()
         print("DEBUG - Combined Prompt:", prompt)
 
+        if not prompt:
+            return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
+
         # Replace vague date terms
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
@@ -42,59 +47,15 @@ def ask():
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
 
-        if not prompt:
-            return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
+        user_id = data.get("user_id", "default_user")  # Use a unique ID per caller if possible
 
-        # OpenAI call
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant for Kiwi Cabs.\n"
-                        "You assist with taxi bookings, modifying details, or cancellations.\n"
-                        "When the user provides name, pickup address, destination, and time/date, confirm like this:\n"
-                        "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
-                        "Pick-up: [Pickup Address]\n"
-                        "Drop-off: [Dropoff Address]\n"
-                        "Time: [Time and Date]\n"
-                        "Please say 'yes' to confirm or 'no' to update.\n"
-                        "If the time or date is missing or unclear, ask the user to provide an exact date and time like '31 May at 3:00 PM'.\n"
-                        "If the user says 'now' or 'right away', use the current exact time immediately and continue without asking again.\n"
-                        "Reject addresses outside the Wellington region and inform the user.\n"
-                        "Do not mention notifications or ask if they need anything else."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ]
-        )
+        # Check if it's a yes/no response only
+        if prompt.lower() in ["yes", "yeah", "yep"]:
+            previous = user_sessions.get(user_id)
+            if not previous:
+                return jsonify({"reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"}), 200
 
-        ai_reply = response["choices"][0]["message"]["content"].strip()
-        print("AI RAW REPLY:", ai_reply)
-
-        try:
-            parsed = json.loads(ai_reply)
-            print("Parsed JSON:", parsed)
-
-            confirmation = parsed.get("confirmation", "").lower()
-
-            if confirmation == "yes":
-                parsed = session.get("last_booking")
-                if not parsed:
-                    return jsonify({"reply": "Sorry, I don’t have your previous booking. Please repeat the details."}), 200
-            elif confirmation == "no":
-                return jsonify({"reply": "Sure, let's update your booking. Please provide the correct details."}), 200
-            elif confirmation != "yes":
-                session['last_booking'] = parsed  # store booking info temporarily
-                confirmation_prompt = (
-                    f"Hello {parsed.get('name')}, your Kiwi Cab has been scheduled. Here are the details:\n"
-                    f"Pick-up: {parsed.get('pickup')}\n"
-                    f"Drop-off: {parsed.get('dropoff')}\n"
-                    f"Time: {parsed.get('time')}\n"
-                    "Please say 'yes' to confirm or 'no' to update."
-                )
-                return jsonify({"reply": confirmation_prompt}), 200
+            parsed = previous
 
             pickup_time = parsed["time"]
             if pickup_time.strip().lower() in ["now", "right away"]:
@@ -131,7 +92,54 @@ def ask():
             )
 
             print("TAXICALLER RESPONSE:", response.text)
-            return jsonify(parsed), 200
+            return jsonify({"reply": f"Thanks {parsed.get('name')}, your booking has been confirmed!"}), 200
+
+        elif prompt.lower() in ["no", "nah", "not really"]:
+            user_sessions.pop(user_id, None)
+            return jsonify({"reply": "No problem. Let’s try again. Please tell me your name, pickup address, destination, and time."}), 200
+
+        # Otherwise treat as a new input to AI
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful AI assistant for Kiwi Cabs.\n"
+                        "You assist with taxi bookings, modifying details, or cancellations.\n"
+                        "When the user provides name, pickup address, destination, and time/date, confirm like this:\n"
+                        "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
+                        "Pick-up: [Pickup Address]\n"
+                        "Drop-off: [Dropoff Address]\n"
+                        "Time: [Time and Date]\n"
+                        "Please say 'yes' to confirm or 'no' to update.\n"
+                        "If the time or date is missing or unclear, ask the user to provide an exact date and time like '31 May at 3:00 PM'.\n"
+                        "If the user says 'now' or 'right away', use the current exact time immediately and continue without asking again.\n"
+                        "Reject addresses outside the Wellington region and inform the user.\n"
+                        "Do not mention notifications or ask if they need anything else."
+                    )
+                },
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        ai_reply = response["choices"][0]["message"]["content"].strip()
+        print("AI RAW REPLY:", ai_reply)
+
+        try:
+            parsed = json.loads(ai_reply)
+            print("Parsed JSON:", parsed)
+            user_sessions[user_id] = parsed  # Save session data
+
+            confirmation_prompt = (
+                f"Please confirm your booking:\n"
+                f"Name: {parsed.get('name')}\n"
+                f"Pickup: {parsed.get('pickup')}\n"
+                f"Dropoff: {parsed.get('dropoff')}\n"
+                f"Time: {parsed.get('time')}\n"
+                "Say 'yes' to confirm or 'no' to change."
+            )
+            return jsonify({"confirmation": confirmation_prompt}), 200
 
         except json.JSONDecodeError:
             return jsonify({"reply": ai_reply}), 200
