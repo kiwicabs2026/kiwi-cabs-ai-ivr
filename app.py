@@ -37,13 +37,13 @@ def ask():
         # Replace vague date terms
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\btomorrow\\b", tomorrow_date, prompt, flags=re.IGNORECASE)
         if "today" in prompt.lower():
             today_date = datetime.now().strftime("%d/%m/%Y")
-            prompt = re.sub(r"\btoday\b", today_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\btoday\\b", today_date, prompt, flags=re.IGNORECASE)
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
 
@@ -52,118 +52,22 @@ def ask():
         # Handle "yes" confirmation
         if any(word in prompt.lower() for word in ["yes", "yeah", "yep", "confirm", "go ahead", "that's right", "sounds good"]):
             previous = user_sessions.get(user_id)
-            
 
-        if not previous:
+            if not previous:
+                return jsonify({
+                    "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
+                }), 200
+
+            parsed = previous  # Now safely set
             return jsonify({
-                "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
+                "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
             }), 200
-
-    parsed = previous  # Now safely set
-    return jsonify({
-        "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
-    }), 200
-
-
-    parsed = previous  # Now safely set
-    return jsonify({
-        "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
-    }), 200
-
-
-    try:
-        pickup_time = parsed["time"]
-        if pickup_time.strip().lower() in ["now", "right away"]:
-            pickup_datetime = datetime.now()
-        else:
-            pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
-
-        iso_time = pickup_datetime.isoformat()
-        job_data = {
-            "job": {
-                "pickup": {"address": parsed["pickup"]},
-                "dropoff": {"address": parsed["dropoff"]},
-                "time": iso_time,
-                "client": {"name": parsed["name"]}
-            }
-        }
-
-        token_url = f"https://api-rc.taxicaller.net/api/v1/jwt/for-key?key={TAXICALLER_API_KEY}&sub={TAXICALLER_SUB}"
-        token_response = requests.get(token_url)
-        if token_response.status_code != 200:
-            raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
-
-        bearer_token = token_response.json().get("token")
-        if not bearer_token:
-            raise ValueError("Token not found in response")
-
-        response = requests.post(
-            "https://api-rc.taxicaller.net/api/v1/book/order",
-            json=job_data,
-            headers={
-                "Authorization": f"Bearer {bearer_token}",
-                "Content-Type": "application/json"
-            }
-        )
-
-        print("TAXICALLER RESPONSE:", response.text)
-        return jsonify({
-            "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
-        }), 200
-
-    except Exception as e:
-        print("BOOKING ERROR:", str(e))
-        return jsonify({"reply": "Something went wrong while confirming your booking. Please try again or say your details again."}), 200
-
-
-            try:
-                parsed = previous
-                pickup_time = parsed["time"]
-                if pickup_time.strip().lower() in ["now", "right away"]:
-                    pickup_datetime = datetime.now()
-                else:
-                    pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
-
-                iso_time = pickup_datetime.isoformat()
-                job_data = {
-                    "job": {
-                        "pickup": {"address": parsed["pickup"]},
-                        "dropoff": {"address": parsed["dropoff"]},
-                        "time": iso_time,
-                        "client": {"name": parsed["name"]}
-                    }
-                }
-
-                token_url = f"https://api-rc.taxicaller.net/api/v1/jwt/for-key?key={TAXICALLER_API_KEY}&sub={TAXICALLER_SUB}"
-                token_response = requests.get(token_url, timeout=5)
-                token_response.raise_for_status()
-
-                bearer_token = token_response.json().get("token")
-                if not bearer_token:
-                    raise ValueError("Token not found in response")
-
-                response = requests.post(
-                    "https://api-rc.taxicaller.net/api/v1/book/order",
-                    json=job_data,
-                    headers={
-                        "Authorization": f"Bearer {bearer_token}",
-                        "Content-Type": "application/json"
-                    },
-                    timeout=5
-                )
-
-                print("TAXICALLER RESPONSE:", response.text)
-                return jsonify({"reply": f"Thanks {parsed.get('name')}, your booking has been confirmed!"}), 200
-
-            except Exception as e:
-                print("BOOKING ERROR:", str(e))
-                return jsonify({"reply": "Something went wrong while confirming your booking. Please try again or say your details again."}), 200
 
         # Handle "no" confirmation
         elif any(word in prompt.lower() for word in ["no", "nah", "nope", "not really", "cancel", "start over", "change", "redo", "not now", "try again"]):
-                user_sessions.pop(user_id, None)
-                print("DEBUG - User chose to restart the booking.")
-                return jsonify({"reply": "No problem. Let's try again. Please tell me your name, pickup location, drop-off location, and pickup time."}), 200
+            user_sessions.pop(user_id, None)
+            print("DEBUG - User chose to restart the booking.")
+            return jsonify({"reply": "No problem. Let's try again. Please tell me your name, pickup location, drop-off location, and pickup time."}), 200
 
         # Otherwise treat as new input to AI
         response = openai.ChatCompletion.create(
@@ -206,7 +110,7 @@ def ask():
                 f"Time: {parsed.get('time')}\n"
                 "Say 'yes' to confirm or 'no' to change."
             )
-            return jsonify({"confirmation": confirmation_prompt}), 200
+            return jsonify({"reply": confirmation_prompt}), 200
 
         except json.JSONDecodeError:
             return jsonify({"reply": ai_reply}), 200
