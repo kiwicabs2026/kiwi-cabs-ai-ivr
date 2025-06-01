@@ -54,10 +54,16 @@ def ask():
             previous = user_sessions.get(user_id)
             
 
-            if not previous:
-        return jsonify({
-            "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
-        }), 200
+        if not previous:
+            return jsonify({
+                "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
+            }), 200
+
+    parsed = previous  # Now safely set
+    return jsonify({
+        "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
+    }), 200
+
 
     parsed = previous  # Now safely set
     return jsonify({
