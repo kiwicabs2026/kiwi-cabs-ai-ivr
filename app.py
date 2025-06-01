@@ -50,7 +50,7 @@ def ask():
         user_id = data.get("user_id", "default_user")  # Use a unique ID per caller if possible
 
         # Handle "yes" confirmation
-        if prompt.lower() in ["yes", "yeah", "yep"]:
+        if any(word in prompt.lower() for word in ["yes", "yeah", "yep", "confirm", "go ahead", "that's right", "sounds good"]):
             previous = user_sessions.get(user_id)
             if not previous:
                 return jsonify({"reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"}), 200
@@ -99,9 +99,10 @@ def ask():
                 return jsonify({"reply": "Something went wrong while confirming your booking. Please try again or say your details again."}), 200
 
         # Handle "no" confirmation
-        elif prompt.lower() in ["no", "nah", "not really"]:
-            user_sessions.pop(user_id, None)
-            return jsonify({"reply": "No problem. Let’s try again. Please tell me your name, pickup address, destination, and time."}), 200
+        elif any(word in prompt.lower() for word in ["no", "nah", "nope", "not really", "cancel", "start over", "change", "redo", "not now", "try again"]):
+                user_sessions.pop(user_id, None)
+                print("DEBUG - User chose to restart the booking.")
+                return jsonify({"reply": "No problem. Let's try again. Please tell me your name, pickup location, drop-off location, and pickup time."}), 200
 
         # Otherwise treat as new input to AI
         response = openai.ChatCompletion.create(
