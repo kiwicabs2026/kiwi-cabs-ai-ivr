@@ -1,17 +1,18 @@
 import os
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 import openai
 from datetime import datetime, timedelta
 import re
 import requests
 
 app = Flask(__name__)
+app.secret_key = "any-random-string"
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # TaxiCaller credentials
 TAXICALLER_API_KEY = "c18afde179ec057037084b4daf10f01a"
-TAXICALLER_SUB = "*"  # Can be updated to actual sub if needed
+TAXICALLER_SUB = "*"
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -31,13 +32,13 @@ def ask():
         # Replace vague date terms
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\btomorrow\\b", tomorrow_date, prompt, flags=re.IGNORECASE)
         if "today" in prompt.lower():
             today_date = datetime.now().strftime("%d/%m/%Y")
-            prompt = re.sub(r"\btoday\b", today_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\\btoday\\b", today_date, prompt, flags=re.IGNORECASE)
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
 
@@ -78,21 +79,23 @@ def ask():
 
             confirmation = parsed.get("confirmation", "").lower()
 
-            if confirmation == "no":
+            if confirmation == "yes":
+                parsed = session.get("last_booking")
+                if not parsed:
+                    return jsonify({"reply": "Sorry, I don’t have your previous booking. Please repeat the details."}), 200
+            elif confirmation == "no":
                 return jsonify({"reply": "Sure, let's update your booking. Please provide the correct details."}), 200
-
             elif confirmation != "yes":
+                session['last_booking'] = parsed  # store booking info temporarily
                 confirmation_prompt = (
-                    f"Please confirm the booking:\n"
-                    f"Name: {parsed.get('name')}\n"
-                    f"Pickup: {parsed.get('pickup')}\n"
-                    f"Dropoff: {parsed.get('dropoff')}\n"
+                    f"Hello {parsed.get('name')}, your Kiwi Cab has been scheduled. Here are the details:\n"
+                    f"Pick-up: {parsed.get('pickup')}\n"
+                    f"Drop-off: {parsed.get('dropoff')}\n"
                     f"Time: {parsed.get('time')}\n"
-                    "Say 'yes' to confirm or 'no' to change."
+                    "Please say 'yes' to confirm or 'no' to update."
                 )
-                return jsonify({"confirmation": confirmation_prompt}), 200
+                return jsonify({"reply": confirmation_prompt}), 200
 
-            # Handle confirmed booking
             pickup_time = parsed["time"]
             if pickup_time.strip().lower() in ["now", "right away"]:
                 pickup_datetime = datetime.now()
@@ -100,7 +103,6 @@ def ask():
                 pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
 
             iso_time = pickup_datetime.isoformat()
-
             job_data = {
                 "job": {
                     "pickup": {"address": parsed["pickup"]},
