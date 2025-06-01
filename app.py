@@ -31,13 +31,13 @@ def ask():
         # Replace vague date terms
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\bafter tomorrow\b", day_after, prompt, flags=re.IGNORECASE)
         if "tomorrow" in prompt.lower():
             tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
-            prompt = re.sub(r"\\btomorrow\\b", tomorrow_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\btomorrow\b", tomorrow_date, prompt, flags=re.IGNORECASE)
         if "today" in prompt.lower():
             today_date = datetime.now().strftime("%d/%m/%Y")
-            prompt = re.sub(r"\\btoday\\b", today_date, prompt, flags=re.IGNORECASE)
+            prompt = re.sub(r"\btoday\b", today_date, prompt, flags=re.IGNORECASE)
 
         print("DEBUG - Final Prompt with replaced date:", prompt)
 
@@ -77,8 +77,10 @@ def ask():
             print("Parsed JSON:", parsed)
 
             confirmation = parsed.get("confirmation", "").lower()
+
             if confirmation == "no":
                 return jsonify({"reply": "Sure, let's update your booking. Please provide the correct details."}), 200
+
             elif confirmation != "yes":
                 confirmation_prompt = (
                     f"Please confirm the booking:\n"
@@ -90,6 +92,7 @@ def ask():
                 )
                 return jsonify({"confirmation": confirmation_prompt}), 200
 
+            # Handle confirmed booking
             pickup_time = parsed["time"]
             if pickup_time.strip().lower() in ["now", "right away"]:
                 pickup_datetime = datetime.now()
@@ -97,6 +100,7 @@ def ask():
                 pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
 
             iso_time = pickup_datetime.isoformat()
+
             job_data = {
                 "job": {
                     "pickup": {"address": parsed["pickup"]},
