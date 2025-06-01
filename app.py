@@ -59,11 +59,51 @@ def ask():
             "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
             }), 200
 
-            parsed = previous  # Only run this AFTER we've confirmed 'previous' exists
+                parsed = previous
 
+    try:
+        pickup_time = parsed["time"]
+        if pickup_time.strip().lower() in ["now", "right away"]:
+            pickup_datetime = datetime.now()
+        else:
+            pickup_datetime = datetime.strptime(pickup_time, "%d/%m/%Y %H:%M")
+
+        iso_time = pickup_datetime.isoformat()
+        job_data = {
+            "job": {
+                "pickup": {"address": parsed["pickup"]},
+                "dropoff": {"address": parsed["dropoff"]},
+                "time": iso_time,
+                "client": {"name": parsed["name"]}
+            }
+        }
+
+        token_url = f"https://api-rc.taxicaller.net/api/v1/jwt/for-key?key={TAXICALLER_API_KEY}&sub={TAXICALLER_SUB}"
+        token_response = requests.get(token_url)
+        if token_response.status_code != 200:
+            raise Exception(f"Failed to get token: {token_response.status_code} {token_response.text}")
+
+        bearer_token = token_response.json().get("token")
+        if not bearer_token:
+            raise ValueError("Token not found in response")
+
+        response = requests.post(
+            "https://api-rc.taxicaller.net/api/v1/book/order",
+            json=job_data,
+            headers={
+                "Authorization": f"Bearer {bearer_token}",
+                "Content-Type": "application/json"
+            }
+        )
+
+        print("TAXICALLER RESPONSE:", response.text)
         return jsonify({
             "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
-            }), 200
+        }), 200
+
+    except Exception as e:
+        print("BOOKING ERROR:", str(e))
+        return jsonify({"reply": "Something went wrong while confirming your booking. Please try again or say your details again."}), 200
 
 
             try:
