@@ -1,36 +1,44 @@
+from flask import Flask, request, make_response
+import openai
 import os
 import json
-from flask import Flask, request, jsonify
-import openai
 from datetime import datetime, timedelta
 import re
-import requests
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# TaxiCaller credentials
-TAXICALLER_API_KEY = "c18afde179ec057037084b4daf10f01a"
-TAXICALLER_SUB = "*"  # Can be updated to actual sub if needed
-
-# Session memory store
+# Memory store
 user_sessions = {}
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        data = request.form.to_dict()
-        print("DEBUG - Incoming data:", data)
-        
-        prompt = data.get("SpeechResult", "").strip()
-        print("DEBUG - Combined Prompt:", prompt)
+        # STEP 1: Handle first call without SpeechResult
+        speech_result = request.form.get("SpeechResult")
 
+        if not speech_result:
+            # Return TwiML to gather speech
+            twiml = """
+                <Response>
+                    <Gather input="speech" action="/ask" method="POST">
+                        <Say voice="Polly.Aria-Neural">Please tell me your name, pickup location, destination, and pickup time.</Say>
+                    </Gather>
+                    <Say>I didn't hear anything. Goodbye.</Say>
+                </Response>
+            """
+            response = make_response(twiml)
+            response.headers["Content-Type"] = "application/xml"
+            return response
 
+        # STEP 2: Received actual speech input
+        prompt = speech_result.strip()
+        print("DEBUG - SpeechResult:", prompt)
 
         if not prompt:
-            return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
+            return twiml_response("Sorry, I didn’t catch that. Please repeat your booking details.")
 
-        # Replace vague date terms
+        # Replace date references
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
             prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
@@ -41,76 +49,57 @@ def ask():
             today_date = datetime.now().strftime("%d/%m/%Y")
             prompt = re.sub(r"\\btoday\\b", today_date, prompt, flags=re.IGNORECASE)
 
-        print("DEBUG - Final Prompt with replaced date:", prompt)
+        # Check for confirmation
+        user_id = request.form.get("From", "default_user")
 
-        user_id = data.get("user_id", "default_user")  # Use a unique ID per caller if possible
-
-        # Handle "yes" confirmation
-        if any(word in prompt.lower() for word in ["yes", "yeah", "yep", "confirm", "go ahead", "that's right", "sounds good"]):
+        if prompt.lower() in ["yes", "yeah", "yep", "confirm"]:
             previous = user_sessions.get(user_id)
-
             if not previous:
-                return jsonify({
-                    "reply": "Sorry, I don’t have your booking details. Could you please repeat the full information?"
-                }), 200
+                return twiml_response("Sorry, I don’t have your booking details. Please repeat everything.")
+            reply = f"Thanks {previous.get('name')}, your booking is confirmed."
+            return twiml_response(reply)
 
-            parsed = previous  # Now safely set
-            return jsonify({
-                "reply": f"Thanks {parsed.get('name')}, your booking is confirmed. Your booking reference is the same phone number you're calling from now."
-            }), 200
-
-        # Handle "no" confirmation
-        elif any(word in prompt.lower() for word in ["no", "nah", "nope", "not really", "cancel", "start over", "change", "redo", "not now", "try again"]):
+        if prompt.lower() in ["no", "nah", "cancel", "change"]:
             user_sessions.pop(user_id, None)
-            print("DEBUG - User chose to restart the booking.")
-            return jsonify({"reply": "No problem. Let's try again. Please tell me your name, pickup location, drop-off location, and pickup time."}), 200
+            return twiml_response("Okay, let's start over. Please tell me your name, pickup, drop-off, and time.")
 
-        # Otherwise treat as new input to AI
-        response = openai.ChatCompletion.create(
+        # Otherwise, assume it's a new booking prompt
+        ai_response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful AI assistant for Kiwi Cabs.\n"
-                        "You assist with taxi bookings, modifying details, or cancellations.\n"
-                        "When the user provides name, pickup address, destination, and time/date, confirm like this:\n"
-                        "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
-                        "Pick-up: [Pickup Address]\n"
-                        "Drop-off: [Dropoff Address]\n"
-                        "Time: [Time and Date]\n"
-                        "Please say 'yes' to confirm or 'no' to update.\n"
-                        "If the time or date is missing or unclear, ask the user to provide an exact date and time like '31 May at 3:00 PM'.\n"
-                        "If the user says 'now' or 'right away', use the current exact time immediately and continue without asking again.\n"
-                        "Reject addresses outside the Wellington region and inform the user.\n"
-                        "Do not mention notifications or ask if they need anything else."
-                    )
-                },
+                {"role": "system", "content": (
+                    "You are a helpful AI assistant for Kiwi Cabs. When the user provides name, pickup, dropoff and time, confirm like this:\n"
+                    "Hello [Name], your Kiwi Cab has been scheduled. Here are the details:\n"
+                    "Pick-up: [Pickup]\nDrop-off: [Dropoff]\nTime: [Time]\nSay 'yes' to confirm or 'no' to change."
+                )},
                 {"role": "user", "content": prompt}
             ]
         )
 
-        ai_reply = response["choices"][0]["message"]["content"].strip()
-        print("AI RAW REPLY:", ai_reply)
+        raw = ai_response["choices"][0]["message"]["content"]
+        print("AI Response:", raw)
 
         try:
-            parsed = json.loads(ai_reply)
-            print("Parsed JSON:", parsed)
-            user_sessions[user_id] = parsed  # Save session data
-
-            confirmation_prompt = (
-                f"Please confirm your booking:\n"
-                f"Name: {parsed.get('name')}\n"
-                f"Pickup: {parsed.get('pickup')}\n"
-                f"Dropoff: {parsed.get('dropoff')}\n"
-                f"Time: {parsed.get('time')}\n"
+            parsed = json.loads(raw)
+            user_sessions[user_id] = parsed
+            reply = (
+                f"Please confirm your booking. Name: {parsed.get('name')}. "
+                f"Pickup: {parsed.get('pickup')}. Drop-off: {parsed.get('dropoff')}. Time: {parsed.get('time')}. "
                 "Say 'yes' to confirm or 'no' to change."
             )
-            return jsonify({"reply": confirmation_prompt}), 200
+        except:
+            reply = raw
 
-        except json.JSONDecodeError:
-            return jsonify({"reply": ai_reply}), 200
+        return twiml_response(reply)
 
     except Exception as e:
         print("ERROR:", str(e))
-        return jsonify({"error": str(e)}), 500
+        return twiml_response("Sorry, an error occurred. Please try again.")
+
+
+def twiml_response(text):
+    return f"""
+        <Response>
+            <Say voice="Polly.Aria-Neural">{text}</Say>
+        </Response>
+    """, 200, {"Content-Type": "application/xml"}
