@@ -21,15 +21,11 @@ def ask():
     try:
         data = request.form.to_dict()
         print("DEBUG - Incoming data:", data)
-
-        # Combine speech input
-        inputs = [
-            data.get("widgets", {}).get("gather_trip_details", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_modify_voice", {}).get("SpeechResult", ""),
-            data.get("widgets", {}).get("gather_cancel_voice", {}).get("SpeechResult", "")
-        ]
-        prompt = " ".join([text for text in inputs if text]).strip()
+        
+        prompt = data.get("SpeechResult", "").strip()
         print("DEBUG - Combined Prompt:", prompt)
+
+
 
         if not prompt:
             return jsonify({"reply": "Sorry, I didn’t catch that. Could you please repeat your booking details?"}), 200
