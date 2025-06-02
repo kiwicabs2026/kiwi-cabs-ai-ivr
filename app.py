@@ -19,7 +19,7 @@ user_sessions = {}
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        data = request.get_json()
+        data = request.form.to_dict()
         print("DEBUG - Incoming data:", data)
 
         # Combine speech input
