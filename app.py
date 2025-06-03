@@ -2,6 +2,8 @@ import os
 import json
 from flask import Flask, request, jsonify
 import openai
+from twilio.twiml.voice_response import VoiceResponse, Gather
+
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -80,3 +82,34 @@ def ask():
                 return make_twiml_speech_response("Please say 'yes' to confirm or 'no' to update.")
 
     return make_twiml_speech_response("Unhandled flow or step.")
+    
+    @app.route("/voice", methods=["POST"])
+def voice():
+    response = VoiceResponse()
+    gather = Gather(input="speech", action="/process_speech", method="POST", timeout=5)
+    gather.say("Welcome to Kiwi Cabs. Please say your booking details.")
+    response.append(gather)
+    response.redirect("/voice")
+    return str(response)
+
+@app.route("/process_speech", methods=["POST"])
+def process_speech():
+    speech_result = request.form.get("SpeechResult", "")
+    session_id = request.form.get("From", "caller")  # fallback if caller ID missing
+
+    # Build request payload for /ask
+    data = {
+        "flow": "new_booking",
+        "step": "collect_details",
+        "speech": speech_result,
+        "session_id": session_id
+    }
+
+    with app.test_request_context(json=data):
+        result = ask()
+        reply = json.loads(result.get_data(as_text=True))["say"]
+
+    response = VoiceResponse()
+    response.say(reply)
+    return str(response)
+
