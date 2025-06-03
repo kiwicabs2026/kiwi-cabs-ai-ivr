@@ -94,12 +94,6 @@ def ask():
         response.redirect("/voice")
         return str(response)
 
-    
-    
-    
-    
-    
-
 @app.route("/process_speech", methods=["POST"])
 def process_speech():
     speech_result = request.form.get("SpeechResult", "")
