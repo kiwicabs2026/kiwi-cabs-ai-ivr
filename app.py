@@ -84,7 +84,7 @@ def ask():
     return make_twiml_speech_response("Unhandled flow or step.")
     
     @app.route("/voice", methods=["POST"])
-def voice():
+    def voice():
     response = VoiceResponse()
     gather = Gather(input="speech", action="/process_speech", method="POST", timeout=5)
     gather.say("Welcome to Kiwi Cabs. Please say your booking details.")
