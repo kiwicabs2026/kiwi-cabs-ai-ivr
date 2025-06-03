@@ -39,8 +39,7 @@ def ask():
     # Main Menu - Initial greeting with options
     if current_step == "menu":
         greeting = (
-            "Kia ora, and welcome to Kiwi Cabs. "
-            "Your trusted taxi service in the Wellington region. "
+            "Kia ora, and welcome to Kiwi Cabs. "      
             "I'm an A.I. assistant and I understand what you say. "
             "This call may be recorded for training and security purposes. "
             "Press 1 to book a new taxi, Press 2 to modify or cancel an existing booking, or Press 3 to speak to a team member."
