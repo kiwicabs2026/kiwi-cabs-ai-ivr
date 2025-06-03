@@ -71,16 +71,22 @@ def ask():
         else:
             return make_twiml_dtmf_response("Invalid selection. Please press 1, 2, or 3.")
 
-    if current_flow == "new_booking":
-        if current_step == "collect_details":
-           sanitized = sanitize_asr_errors(speech_result)
-           full_prompt = replace_date_keywords(sanitized)
+if current_flow == "new_booking":
+    if current_step == "collect_details":
+        sanitized = sanitize_asr_errors(speech_result)
+        full_prompt = replace_date_keywords(sanitized)
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        ...
+                    }
+                ]
+            )
 
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-4",
-                    messages=[
-                        {
+
+
                             "role": "system",
                             "content": (
                                 "You are a helpful AI assistant for Kiwi Cabs.\n"
