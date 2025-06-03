@@ -74,7 +74,7 @@ def ask():
     if current_flow == "new_booking":
         if current_step == "collect_details":
            sanitized = sanitize_asr_errors(speech_result)
-            full_prompt = replace_date_keywords(sanitized)
+           full_prompt = replace_date_keywords(sanitized)
 
             try:
                 response = openai.ChatCompletion.create(
