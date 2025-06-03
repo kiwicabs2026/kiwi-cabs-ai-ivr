@@ -24,7 +24,7 @@ def ask():
   <Say voice="Polly.Aria-Neural">
     Kia ora, and welcome to Kiwi Cabs.
     <break time="400ms"/>
-    I’m an A. I. assistant, here to help you book your taxi.
+    I’m an A.I assistant, here to help you book your taxi.
     <break time="500ms"/>
     This call may be recorded for training and security purposes.
   </Say>
@@ -79,7 +79,7 @@ def ask():
                 {
                     "role": "system",
                     "content": (
-                        "You are a helpful AI assistant for Kiwi Cabs.\n"
+                        "You are a helpful A.I assistant for Kiwi Cabs.\n"
                         "You assist with taxi bookings. When the user provides name, pickup, drop-off, and time/date, confirm like this:\n"
                         "Hello [Name], your Kiwi Cab has been scheduled. Pick-up: [Pickup]. Drop-off: [Dropoff]. Time: [Time].\n"
                         "Ask: Say 'yes' to confirm or 'no' to update."
