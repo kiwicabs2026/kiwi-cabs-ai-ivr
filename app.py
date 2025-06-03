@@ -85,12 +85,20 @@ def ask():
     
     @app.route("/voice", methods=["POST"])
     def voice():
-    response = VoiceResponse()
-    gather = Gather(input="speech", action="/process_speech", method="POST", timeout=5)
-    gather.say("Welcome to Kiwi Cabs. Please say your booking details.")
-    response.append(gather)
-    response.redirect("/voice")
-    return str(response)
+    @app.route("/voice", methods=["POST"])
+    def voice():
+        response = VoiceResponse()
+        gather = Gather(input="speech", action="/process_speech", method="POST", timeout=5)
+        gather.say("Welcome to Kiwi Cabs. Please say your booking details.")
+        response.append(gather)
+        response.redirect("/voice")
+        return str(response)
+
+    
+    
+    
+    
+    
 
 @app.route("/process_speech", methods=["POST"])
 def process_speech():
