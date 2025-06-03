@@ -18,30 +18,29 @@ def ask():
         speech_result = request.form.get("SpeechResult")
 
         if not speech_result:
-            # Return TwiML to gather speech
-                    twiml = """
-        <Response>
-            <Say voice="Polly.Aria-Neural">
-                Kia ora, and welcome to Kiwi Cabs. 
-                <break time="400ms"/>
-                I’m an A. I. assistant, here to help you book your taxi. 
-                <break time="500ms"/>
-                This call may be recorded for training and security purposes.
-            </Say>
-            <Gather input="speech" action="/ask" method="POST">
+            # Return TwiML to gather speech with greeting
+            twiml = """
+            <Response>
                 <Say voice="Polly.Aria-Neural">
-                    Please tell me your name, pickup location, destination, and pickup time.
+                    Kia ora, and welcome to Kiwi Cabs.
+                    <break time="400ms"/>
+                    I’m an A. I. assistant, here to help you book your taxi.
+                    <break time="500ms"/>
+                    This call may be recorded for training and security purposes.
                 </Say>
-            </Gather>
-            <Say>I didn’t hear anything. Goodbye.</Say>
-        </Response>
-        """
-
-            
-            response = make_response(twiml)
+                <Gather input="speech" action="/ask" method="POST">
+                    <Say voice="Polly.Aria-Neural">
+                        Please tell me your name, pickup location, destination, and pickup time.
+                    </Say>
+                </Gather>
+                <Say>I didn’t hear anything. Goodbye.</Say>
+            </Response>
+            """
+                     response = make_response(twiml)
             response.headers["Content-Type"] = "application/xml"
             return response
 
+          
         # STEP 2: Received actual speech input
         prompt = speech_result.strip()
         print("DEBUG - SpeechResult:", prompt)
