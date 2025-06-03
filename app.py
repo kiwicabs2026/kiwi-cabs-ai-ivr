@@ -4,51 +4,38 @@ import os
 import json
 from datetime import datetime, timedelta
 import re
+import requests
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Memory store
+# Memory store for session context
 user_sessions = {}
-
-def twiml_response(text):
-    return f"""
-    <Response>
-        <Say voice="Polly.Aria-Neural">{text}</Say>
-    </Response>
-    """
-
-def twiml_greeting():
-    return """
-    <Response>
-        <Say voice="Polly.Aria-Neural">
-            Kia ora, and welcome to Kiwi Cabs. 
-            I’m an A.I. assistant – a smart voice agent that understands what you say.
-            I'm here to help you book your taxi easily.
-            This call may be recorded for training and security purposes.
-        </Say>
-        <Pause length="1"/>
-        <Redirect method="POST">/ask</Redirect>
-    </Response>
-    """
 
 @app.route("/ask", methods=["POST"])
 def ask():
     try:
-        speech_result = request.form.get("SpeechResult")
         user_id = request.form.get("From", "default_user")
+        speech_result = request.form.get("SpeechResult", "").strip()
+        print("DEBUG - SpeechResult:", speech_result)
 
-        # If it's the first call without speech input
+        # Step 1: First call with no speech input
         if not speech_result:
-            return make_response(twiml_greeting(), 200, {"Content-Type": "application/xml"})
+            greeting = """
+            <Response>
+                <Say voice="Polly.Aria-Neural">
+                    Kia ora, and welcome to Kiwi Cabs. I’m an A.I. assistant and I understand what you say.
+                    <break time="300ms"/>
+                    Please tell me your name, pickup location, destination, and pickup time.
+                </Say>
+            </Response>
+            """
+            response = make_response(greeting)
+            response.headers["Content-Type"] = "application/xml"
+            return response
 
-        prompt = speech_result.strip()
-        print("DEBUG - SpeechResult:", prompt)
-
-        if not prompt:
-            return make_response(twiml_response("Sorry, I didn’t catch that. Please repeat your booking details."), 200, {"Content-Type": "application/xml"})
-
-        # Normalize vague date references
+        # Step 2: Replace vague time expressions
+        prompt = speech_result
         if "after tomorrow" in prompt.lower():
             day_after = (datetime.now() + timedelta(days=2)).strftime("%d/%m/%Y")
             prompt = re.sub(r"\\bafter tomorrow\\b", day_after, prompt, flags=re.IGNORECASE)
@@ -59,30 +46,39 @@ def ask():
             today = datetime.now().strftime("%d/%m/%Y")
             prompt = re.sub(r"\\btoday\\b", today, prompt, flags=re.IGNORECASE)
 
-        # If caller confirms
-        if any(word in prompt.lower() for word in ["yes", "yeah", "yep"]):
+        # Step 3: Handle yes/no response
+        if prompt.lower() in ["yes", "yeah", "confirm", "go ahead"]:
             parsed = user_sessions.get(user_id)
             if parsed:
-                return make_response(twiml_response(f"Thanks {parsed.get('name')}, your booking is confirmed. Your reference is your phone number."), 200, {"Content-Type": "application/xml"})
+                # Send to TaxiCaller (pseudo-code)
+                job_data = {
+                    "apiKey": os.getenv("TAXICALLER_API_KEY"),
+                    "name": parsed.get("name"),
+                    "pickup": parsed.get("pickup"),
+                    "dropoff": parsed.get("dropoff"),
+                    "time": parsed.get("time")
+                }
+                print("DEBUG - Sending job to TaxiCaller:", job_data)
+                # You would make actual requests.post() to TaxiCaller here
+                return twiml_response("Thanks, your booking is confirmed and has been dispatched.")
             else:
-                return make_response(twiml_response("Sorry, I don’t have your previous booking. Please start again."), 200, {"Content-Type": "application/xml"})
+                return twiml_response("Sorry, I don't have your booking info. Please say your booking details again.")
 
-        # If caller rejects and wants to update
-        elif any(word in prompt.lower() for word in ["no", "nah", "cancel", "change"]):
+        elif prompt.lower() in ["no", "nah", "cancel", "change", "not correct"]:
             user_sessions.pop(user_id, None)
-            return make_response(twiml_response("Okay, let's update your booking. Please say your name, pickup location, destination, and pickup time."), 200, {"Content-Type": "application/xml"})
+            return twiml_response("No problem. Please say your name, pickup, drop-off, and pickup time again.")
 
-        # AI to process new booking
+        # Step 4: Handle booking request
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are a helpful AI assistant for Kiwi Cabs.\n"
-                        "You assist with taxi bookings. When the user provides name, pickup, drop-off, and time/date, confirm like this:\n"
-                        "Hello [Name], your Kiwi Cab has been scheduled. Pick-up: [Pickup]. Drop-off: [Dropoff]. Time: [Time].\n"
-                        "Ask: Say 'yes' to confirm or 'no' to update."
+                        "You are an AI taxi assistant for Kiwi Cabs in Wellington.\n"
+                        "When the user gives you their name, pickup, drop-off, and time, reply like:\n"
+                        "Hello [name], your Kiwi Cab has been scheduled. Pick-up: [pickup]. Drop-off: [dropoff]. Time: [time].\n"
+                        "Then say: Say 'yes' to confirm or 'no' to change."
                     )
                 },
                 {"role": "user", "content": prompt}
@@ -95,16 +91,23 @@ def ask():
         try:
             parsed = json.loads(ai_reply)
             user_sessions[user_id] = parsed
-            confirmation_text = (
+            confirmation = (
                 f"Hello {parsed.get('name')}, your Kiwi Cab has been scheduled. "
-                f"Pick-up: {parsed.get('pickup')}. Drop-off: {parsed.get('dropoff')}. Time: {parsed.get('time')}. "
-                "Say 'yes' to confirm or 'no' to update."
+                f"Pick-up: {parsed.get('pickup')}. "
+                f"Drop-off: {parsed.get('dropoff')}. "
+                f"Time: {parsed.get('time')}. Say 'yes' to confirm or 'no' to change."
             )
-            return make_response(twiml_response(confirmation_text), 200, {"Content-Type": "application/xml"})
-
+            return twiml_response(confirmation)
         except json.JSONDecodeError:
-            return make_response(twiml_response(ai_reply), 200, {"Content-Type": "application/xml"})
+            return twiml_response(ai_reply)
 
     except Exception as e:
         print("ERROR:", str(e))
-        return make_response(twiml_response("Sorry, an application error occurred."), 200, {"Content-Type": "application/xml"})
+        return twiml_response("Sorry, an error occurred. Please try again.")
+
+def twiml_response(text):
+    return f"""
+    <Response>
+        <Say voice="Polly.Aria-Neural">{text}</Say>
+    </Response>
+    """
