@@ -85,6 +85,7 @@ def ask():
     
 
     @app.route("/voice", methods=["POST"])
+
     def voice():
         response = VoiceResponse()
         gather = Gather(input="speech", action="/process_speech", method="POST", timeout=5)
@@ -93,10 +94,10 @@ def ask():
         response.redirect("/voice")
         return str(response)
 
-@app.route("/process_speech", methods=["POST"])
-def process_speech():
-    speech_result = request.form.get("SpeechResult", "")
-    session_id = request.form.get("From", "caller")  # fallback if caller ID missing
+    @app.route("/process_speech", methods=["POST"])
+    def process_speech():
+        speech_result = request.form.get("SpeechResult", "")
+        session_id = request.form.get("From", "caller")  # fallback if caller ID missing
 
     # Build request payload for /ask
     data = {
