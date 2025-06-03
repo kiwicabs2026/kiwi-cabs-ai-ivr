@@ -18,6 +18,15 @@ def replace_date_keywords(text):
         text.replace("today", today.strftime("%d %B"))
             .replace("tomorrow", tomorrow.strftime("%d %B"))
     )
+    
+def sanitize_asr_errors(text):
+    return (
+        text.replace("Wilmington", "Wellington")
+            .replace("Williamston", "Wellington")
+            .replace("Wilmington Airport", "Wellington Airport")
+            .replace("Wilmington railway station", "Wellington Railway Station")
+    )
+    
 
 @app.route("/ask", methods=["POST"])
 def ask():
@@ -64,7 +73,9 @@ def ask():
 
     if current_flow == "new_booking":
         if current_step == "collect_details":
-            full_prompt = replace_date_keywords(speech_result)
+           sanitized = sanitize_asr_errors(speech_result)
+            full_prompt = replace_date_keywords(sanitized)
+
             try:
                 response = openai.ChatCompletion.create(
                     model="gpt-4",
