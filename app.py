@@ -121,11 +121,11 @@ def ask():
         
         # Handle NEW BOOKING flow
         if current_flow == "new_booking":
-            if current_step == "collect_details":
-                # Process booking details with AI
-                full_prompt = replace_date_keywords(speech_result)
-                
-         try:
+
+if current_step == "collect_details":
+    # Process booking details with AI
+    full_prompt = replace_date_keywords(speech_result)
+           try:
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -135,8 +135,7 @@ def ask():
                             "You are a helpful AI assistant for Kiwi Cabs.\n"
                             "IMPORTANT: Kiwi Cabs ONLY operates in Wellington region, New Zealand. "
                             "This includes Wellington CBD, Newtown, Thorndon, Kelburn, Island Bay, Miramar, Petone, Lower Hutt, Upper Hutt, Porirua, Kapiti Coast, Johnsonville, and Tawa.\n"
-                            "If pickup or destination is outside Wellington region, return: "
-                            '{"error": "outside_wellington", "message": "We only operate in Wellington region"}\n'
+                            "If pickup or destination is outside Wellington region, return: {\"error\": \"outside_wellington\", \"message\": \"We only operate in Wellington region\"}\n"
                             "Otherwise, extract booking details and return ONLY a JSON object with these exact keys:\n"
                             "{\n"
                             '  "name": "customer name",\n'
@@ -151,10 +150,10 @@ def ask():
                 ]
             )
 
-                    
-                    ai_reply = response.choices[0].message.content.strip()
-                    print("AI Reply:", ai_reply)
-                    
+            ai_reply = response.choices[0].message.content.strip()
+            print("AI Reply:", ai_reply)
+
+
                     # Try to parse JSON
                     parsed = json.loads(ai_reply)
                     
