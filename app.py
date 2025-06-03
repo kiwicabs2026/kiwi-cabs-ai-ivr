@@ -83,8 +83,7 @@ def ask():
 
     return make_twiml_speech_response("Unhandled flow or step.")
     
-    @app.route("/voice", methods=["POST"])
-    def voice():
+
     @app.route("/voice", methods=["POST"])
     def voice():
         response = VoiceResponse()
