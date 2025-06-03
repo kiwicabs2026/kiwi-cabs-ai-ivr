@@ -1,5 +1,5 @@
 from flask import Flask, request, make_response
-from openai import OpenAI
+import openai
 import os
 import json
 from datetime import datetime, timedelta
@@ -125,30 +125,32 @@ def ask():
                 # Process booking details with AI
                 full_prompt = replace_date_keywords(speech_result)
                 
-                try:
-                    response = client.chat.completions.create(
-                        model="gpt-4",
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You are a helpful AI assistant for Kiwi Cabs taxi booking service.\n"
-                                    "IMPORTANT: Kiwi Cabs ONLY operates in Wellington region, New Zealand. This includes Wellington city, Lower Hutt, Upper Hutt, Porirua, Kapiti Coast, and surrounding Wellington suburbs.\n"
-                                    "If pickup or destination is outside Wellington region, return: {\"error\": \"outside_wellington\", \"message\": \"We only operate in Wellington region\"}\n"
-                                    "Otherwise, extract booking details and return ONLY a JSON object with these exact keys:\n"
-                                    "{\n"
-                                    '  "name": "customer name",\n'
-                                    '  "pickup": "pickup location",\n'
-                                    '  "dropoff": "destination",\n'
-                                    '  "time": "pickup time/date"\n'
-                                    "}\n"
-                                    "If any information is missing, set the value to 'missing'.\n"
-                                    "Wellington region includes: Wellington CBD, Newtown, Thorndon, Kelburn, Island Bay, Miramar, Petone, Lower Hutt, Upper Hutt, Porirua, Paraparaumu, Kapiti, Johnsonville, Tawa, and all Wellington suburbs."
-                                )
-                            },
-                            {"role": "user", "content": full_prompt}
-                        ]
-                    )
+         try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful AI assistant for Kiwi Cabs.\n"
+                            "IMPORTANT: Kiwi Cabs ONLY operates in Wellington region, New Zealand. "
+                            "This includes Wellington CBD, Newtown, Thorndon, Kelburn, Island Bay, Miramar, Petone, Lower Hutt, Upper Hutt, Porirua, Kapiti Coast, Johnsonville, and Tawa.\n"
+                            "If pickup or destination is outside Wellington region, return: "
+                            '{"error": "outside_wellington", "message": "We only operate in Wellington region"}\n'
+                            "Otherwise, extract booking details and return ONLY a JSON object with these exact keys:\n"
+                            "{\n"
+                            '  "name": "customer name",\n'
+                            '  "pickup": "pickup location",\n'
+                            '  "dropoff": "destination",\n'
+                            '  "time": "pickup time/date"\n'
+                            "}\n"
+                            "If any field is missing, set its value to 'missing'."
+                        )
+                    },
+                    {"role": "user", "content": full_prompt}
+                ]
+            )
+
                     
                     ai_reply = response.choices[0].message.content.strip()
                     print("AI Reply:", ai_reply)
