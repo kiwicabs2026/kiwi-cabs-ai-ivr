@@ -77,27 +77,24 @@ if current_flow == "new_booking":
         full_prompt = replace_date_keywords(sanitized)
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[
-                    {
-                        ...
-                    }
-                ]
-            )
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful AI assistant for Kiwi Cabs.\n"
+                        "IMPORTANT: Kiwi Cabs ONLY operates in Wellington region, New Zealand.\n"
+                        "If pickup or destination is outside Wellington region, return: {\"error\": \"outside_wellington\", \"message\": \"Sorry, we only operate in Wellington region.\"}\n"
+                        "Otherwise, extract booking details and return ONLY a JSON object with these keys: {\"name\", \"pickup\", \"dropoff\", \"time\"}."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": full_prompt
+                }
+            ]
+        )
 
-
-
-                            "role": "system",
-                            "content": (
-                                "You are a helpful AI assistant for Kiwi Cabs.\n"
-                                "IMPORTANT: Kiwi Cabs ONLY operates in Wellington region, New Zealand.\n"
-                                "If pickup or destination is outside Wellington region, return: {\"error\": \"outside_wellington\", \"message\": \"We only operate in Wellington region\"}\n"
-                                "Otherwise, extract booking details and return ONLY a JSON object with these keys: {\"name\", \"pickup\", \"dropoff\", \"time\"}"
-                            )
-                        },
-                        {"role": "user", "content": full_prompt}
-                    ]
-                )
                 ai_reply = response.choices[0].message.content.strip()
                 parsed = json.loads(ai_reply)
                 if "error" in parsed:
