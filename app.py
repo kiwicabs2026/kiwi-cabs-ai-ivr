@@ -49,7 +49,7 @@ def book():
     response = """
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna" language="en-NZ">I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
+    <Say voice="Polly.Emma" language="en-NZ">I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
     <Gather input="speech" action="/ask" method="POST" timeout="10"/>
 </Response>
 """
