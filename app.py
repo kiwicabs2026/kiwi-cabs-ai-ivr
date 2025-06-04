@@ -13,33 +13,31 @@ user_sessions = {}
 
 @app.route("/voice", methods=["POST"])
 def voice():
-    response = f"""
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-        <Gather action="/menu" input="speech" method="POST" timeout="5">
-            <Say language="en-NZ">
-                <speak>
-                    Kia ora, and welcome to Kiwi Cabs.
-                    <break time='400ms'/>
-                    I am A I assistant, here to help you book your taxi.
-                    <break time='400ms'/>
-                    This call may be recorded for training and security purposes.
-                    <break time='400ms'/>
-                    Please listen carefully and respond clearly.
-                    <break time='300ms'/>
-                    Say option 1 to book a taxi.
-                    <break time='300ms'/>
-                    Say option 2 to change or cancel an existing booking.
-                    <break time='300ms'/>
-                    Say option 3 to speak to a team member.
-                    <break time='400ms'/>
-                    I am listening.
-                </speak>
-            </Say>
-        </Gather>
-        <Redirect>/voice</Redirect>
-    </Response>
-    """
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/menu" input="speech" method="POST" timeout="5">
+        <Say language="en-NZ">
+            <speak>
+                Kia ora, and welcome to Kiwi Cabs.
+                <break time='400ms'/>
+                I am A I assistant, here to help you book your taxi.
+                <break time='400ms'/>
+                This call may be recorded for training and security purposes.
+                <break time='400ms'/>
+                Please listen carefully and respond clearly.
+                <break time='300ms'/>
+                Say option 1 to book a taxi.
+                <break time='300ms'/>
+                Say option 2 to change or cancel an existing booking.
+                <break time='300ms'/>
+                Say option 3 to speak to a team member.
+                <break time='400ms'/>
+                I am listening.
+            </speak>
+        </Say>
+    </Gather>
+    <Redirect>/voice</Redirect>
+</Response>"""
     return Response(response, mimetype="text/xml")
 
 @app.route("/menu", methods=["POST"])
