@@ -25,27 +25,27 @@ def make_twiml_speech_response(text):
 @app.route("/voice", methods=["POST"])
 def voice():
     response = VoiceResponse()
-    gather = Gather(input="speech", action="/menu", method="POST", timeout=5)
+    gather = Gather(
+        input="speech",
+        action="/menu",
+        method="POST",
+        timeout=5,
+        hints="option one, option two, option three"
+    )
     gather.say(
         """
         <speak>
         Kia ora, and welcome to Kiwi Cabs.
-        <break time='400ms'/>
-        I’m an <say-as interpret-as="characters">A I</say-as> assistant, here to help you book your taxi.
-        <break time='500ms'/>
+        I am your A. I. assistant — artificial intelligence assistant — here to help you book your taxi.
         This call may be recorded for training and security purposes.
-        <break time='400ms'/>
-        Please listen to the following options carefully.
-        <break time='400ms'/>
+        Please listen carefully and respond clearly.
         Say option one to book a taxi.
-        <break time='300ms'/>
-        Say option two to modify or cancel an existing booking.
-        <break time='300ms'/>
-        Say option three to talk to a team member.
+        Say option two to change or cancel an existing booking.
+        Say option three to speak to a team member.
+        I'm listening.
         </speak>
         """,
-        language="en-NZ",
-        loop=1
+        language="en-NZ"
     )
     response.append(gather)
     response.redirect("/voice")
@@ -53,17 +53,17 @@ def voice():
 
 @app.route("/menu", methods=["POST"])
 def menu():
-    speech_result = request.form.get("SpeechResult", "").strip()
+    speech_result = request.form.get("SpeechResult", "").strip().lower()
     caller = request.form.get("From", "caller")
 
-    if "1" in speech_result:
+    if "1" in speech_result or "one" in speech_result:
         user_sessions[caller] = {"step": "collect_details"}
-        return make_twiml_speech_response("I’m listening. Please tell me your name, pickup location, destination, and time.")
+        return make_twiml_speech_response("Please tell me your name, pickup location, destination, and time.")
 
-    elif "2" in speech_result:
-        return make_twiml_speech_response("I’m listening. Please say the phone number used for your booking and the new time or date you want.")
+    elif "2" in speech_result or "two" in speech_result:
+        return make_twiml_speech_response("Please say the phone number used for your booking and the new time or date you want.")
 
-    elif "3" in speech_result:
+    elif "3" in speech_result or "three" in speech_result:
         response = VoiceResponse()
         response.say("Please wait while we connect you to our office.", language="en-NZ")
         response.dial("+648966156")
@@ -89,8 +89,6 @@ def process_speech():
                 ]
             )
             reply = ai_response.choices[0].message.content.strip()
-            if not reply:
-                return make_twiml_speech_response("Sorry, I didn’t catch that. Please try again.")
             parsed = json.loads(reply)
 
             if "error" in parsed:
