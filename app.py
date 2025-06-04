@@ -40,7 +40,6 @@ def voice():
         language="en-NZ"
     )
 
-    )
     response.append(gather)
     response.redirect("/voice")
     return str(response)
