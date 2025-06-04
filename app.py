@@ -46,14 +46,14 @@ def menu():
 
 @app.route("/book", methods=["POST"])
 def book():
-    response = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" action="/ask" method="POST" timeout="10">
         <Say>I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
-        <Gather input="speech" action="/ask" method="POST" timeout="10"/>
-    </Response>
-    """
+    </Gather>
+</Response>"""
     return Response(response, mimetype="text/xml")
+
 
 @app.route("/ask", methods=["POST"])
 def ask():
