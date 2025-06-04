@@ -42,7 +42,7 @@ def voice():
         "<break time='300ms'/>"
         "Say option 3 to speak to a team member."
         "<break time='300ms'/>"
-        "I'm listening."</speak>",
+        "I'm listening."</speak>"
         language="en-NZ")
     response.append(gather)
     response.redirect("/voice")
