@@ -32,11 +32,14 @@ def voice():
         "I’m an A. I. assistant, here to help you book your taxi."
         "<break time='500ms'/>"
         "This call may be recorded for training and security purposes."
-        "</speak>"
-        " Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team."
-        " If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z.",
-        language="en-NZ",
-        loop=1
+        "<break time='400ms'/>"
+        "Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team."
+        "<break time='300ms'/>"
+        "If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z."
+        "</speak>",
+        language="en-NZ"
+    )
+
     )
     response.append(gather)
     response.redirect("/voice")
