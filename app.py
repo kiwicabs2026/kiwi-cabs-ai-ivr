@@ -34,7 +34,6 @@ def voice():
         "This call may be recorded for training and security purposes."
         "</speak>"
         " Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team."
-        " We only operate in the Wellington region, New Zealand."
         " If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z.",
         language="en-NZ",
         loop=1
