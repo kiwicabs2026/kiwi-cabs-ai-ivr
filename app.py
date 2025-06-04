@@ -27,12 +27,17 @@ def voice():
     response = VoiceResponse()
     gather = Gather(input="speech", action="/menu", method="POST", timeout=5)
     gather.say(
-        "Kia ora, and welcome to Kiwi Cabs. "
-        "I’m an A.I. assistant, here to help you book your taxi. "
-        "This call may be recorded for training and security purposes. "
-        "Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team. "
-        "If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z.",
-        language="en-NZ"
+        "<speak>Kia ora, and welcome to Kiwi Cabs."
+        "<break time='400ms'/>"
+        "I’m an A. I. assistant, here to help you book your taxi."
+        "<break time='500ms'/>"
+        "This call may be recorded for training and security purposes."
+        "</speak>"
+        " Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team."
+        " We only operate in the Wellington region, New Zealand."
+        " If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z.",
+        language="en-NZ",
+        loop=1
     )
     response.append(gather)
     response.redirect("/voice")
@@ -75,10 +80,12 @@ def process_speech():
                     {"role": "user", "content": speech}
                 ]
             )
-            print("AI RAW REPLY:", reply)
             reply = ai_response.choices[0].message.content.strip()
+            print("AI RAW REPLY:", reply)
+
             if not reply:
-            return make_twiml_speech_response("Sorry, I didn’t catch that. Please try again.")
+                return make_twiml_speech_response("Sorry, I didn’t catch that. Please try again.")
+
             parsed = json.loads(reply)
 
             if "error" in parsed:
