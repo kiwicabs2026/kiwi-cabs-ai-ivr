@@ -65,10 +65,13 @@ def menu():
         return make_twiml_speech_response("Sorry, I didn’t get that. Please say 1, 2 or 3.")
 
 @app.route("/process_speech", methods=["POST"])
-speech = request.form.get("SpeechResult", "")
-caller = request.form.get("From", "caller")
-session = user_sessions.setdefault(caller, {})
-step    = session.get("step", "collect_details")
+def process_speech():
+    speech = request.form.get("SpeechResult", "")
+    caller = request.form.get("From", "caller")
+    session = user_sessions.setdefault(caller, {})
+    step = session.get("step", "collect_details")
+    
+    # (rest of the logic here)
 
 
     if step == "collect_details":
