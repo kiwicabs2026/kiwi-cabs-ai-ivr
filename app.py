@@ -33,37 +33,66 @@ def voice():
         "<break time='500ms'/>"
         "This call may be recorded for training and security purposes."
         "<break time='400ms'/>"
-        "Say 1 to book a taxi, say 2 to modify a pre-booking using your phone number, or say 3 to talk to our team."
+        "Please listen to the following options carefully."
+        "<break time='400ms'/>"
+        "Say option one to book a taxi."
         "<break time='300ms'/>"
-        "If you have a complaint or lost item, please fill out the form on our website kiwicabs hyphen wellington dot co dot n z."
+        "Say option two to modify or cancel an existing booking."
+        "<break time='300ms'/>"
+        "Say option three to talk to a team member."
         "</speak>",
-        language="en-NZ"
+        language="en-NZ",
+        loop=1
     )
-
     response.append(gather)
     response.redirect("/voice")
     return str(response)
 
 @app.route("/menu", methods=["POST"])
 def menu():
-    speech_result = request.form.get("SpeechResult", "").strip()
+    speech_result = request.form.get("SpeechResult", "").strip().lower()
     caller = request.form.get("From", "caller")
 
-    if "1" in speech_result:
-        user_sessions[caller] = {"step": "collect_details"}
-        return make_twiml_speech_response("Please tell me your name, pickup location, destination, and time.")
+    try:
+        ai_response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an AI assistant for a taxi company. The user will say something like 'option one', "
+                        "'book a taxi', 'change my booking', or 'talk to someone'."
+                        "Return only one of the following values in JSON:\n"
+                        "{ \"choice\": \"1\" } for booking a taxi,\n"
+                        "{ \"choice\": \"2\" } for modifying or cancelling a booking,\n"
+                        "{ \"choice\": \"3\" } for talking to a human.\n"
+                        "Do not say anything else. Only respond in JSON."
+                    )
+                },
+                {"role": "user", "content": speech_result}
+            ]
+        )
 
-    elif "2" in speech_result:
-        return make_twiml_speech_response("Please say the phone number used for your booking and the new time or date you want.")
+        reply = ai_response.choices[0].message.content.strip()
+        parsed = json.loads(reply)
 
-    elif "3" in speech_result:
-        response = VoiceResponse()
-        response.say("Please wait while we connect you to our office.", language="en-NZ")
-        response.dial("+648966156")
-        return str(response)
+        choice = parsed.get("choice")
+        if choice == "1":
+            user_sessions[caller] = {"step": "collect_details"}
+            return make_twiml_speech_response("Great. Please tell me your name, pickup location, destination, and time.")
+        elif choice == "2":
+            return make_twiml_speech_response("Sure. Please say the phone number used for your booking and what you want to change.")
+        elif choice == "3":
+            response = VoiceResponse()
+            response.say("Please wait while we connect you to our team.", language="en-NZ")
+            response.dial("+648966156")
+            return str(response)
+        else:
+            return make_twiml_speech_response("Sorry, I didn’t catch that. Please say option one, two, or three.")
 
-    else:
-        return make_twiml_speech_response("Sorry, I didn’t get that. Please say 1, 2 or 3.")
+    except Exception as e:
+        print("AI ERROR in /menu:", e)
+        return make_twiml_speech_response("There was an error understanding you. Please try again.")
 
 @app.route("/process_speech", methods=["POST"])
 def process_speech():
@@ -77,16 +106,20 @@ def process_speech():
             ai_response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a helpful AI assistant for Kiwi Cabs in Wellington, New Zealand. IMPORTANT: We only operate within Wellington region. If pickup or dropoff is outside Wellington, reply with {\"error\": \"outside_wellington\", \"message\": \"Sorry, we only operate in Wellington region.\"}. Otherwise, return JSON: {\"name\", \"pickup\", \"dropoff\", \"time\"}."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful AI assistant for Kiwi Cabs in Wellington, New Zealand. "
+                            "IMPORTANT: We only operate within the Wellington region. "
+                            "If pickup or dropoff is outside Wellington, reply with "
+                            "{\"error\": \"outside_wellington\", \"message\": \"Sorry, we only operate in Wellington region.\"}. "
+                            "Otherwise, return JSON: {\"name\", \"pickup\", \"dropoff\", \"time\"}."
+                        )
+                    },
                     {"role": "user", "content": speech}
                 ]
             )
             reply = ai_response.choices[0].message.content.strip()
-            print("AI RAW REPLY:", reply)
-
-            if not reply:
-                return make_twiml_speech_response("Sorry, I didn’t catch that. Please try again.")
-
             parsed = json.loads(reply)
 
             if "error" in parsed:
@@ -97,11 +130,12 @@ def process_speech():
             user_sessions[caller] = session
 
             return make_twiml_speech_response(
-                f"Let me confirm your booking. From {parsed['pickup']} to {parsed['dropoff']} at {parsed['time']}. Say yes to confirm or no to change."
+                f"Let me confirm your booking. From {parsed['pickup']} to {parsed['dropoff']} at {parsed['time']}. "
+                "Say yes to confirm or no to change."
             )
 
         except Exception as e:
-            print("AI ERROR:", e)
+            print("AI ERROR in /process_speech:", e)
             return make_twiml_speech_response("Sorry, I couldn't understand. Please try again.")
 
     elif step == "confirm":
