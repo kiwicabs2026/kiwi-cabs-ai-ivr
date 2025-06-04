@@ -15,7 +15,7 @@ def voice():
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="/menu" input="speech" method="POST" timeout="5">
-        <Say voice="Polly.Joanna" language="en-NZ">
+        <Say voice="Polly.Emma" language="en-NZ">
             Kia ora, and welcome to Kiwi Cabs.
             I am A I assistant, here to help you book your taxi.
             This call may be recorded for training and security purposes.
@@ -36,12 +36,16 @@ def menu():
     print("DEBUG - Menu SpeechResult:", data)
 
     if "1" in data or "one" in data:
+        print("Redirecting to /book")
         return redirect_to("/book")
     elif "2" in data or "two" in data:
+        print("Redirecting to /modify")
         return redirect_to("/modify")
     elif "3" in data or "three" in data:
+        print("Redirecting to /team")
         return redirect_to("/team")
     else:
+        print("Unrecognized input. Redirecting to /voice")
         return redirect_to("/voice")
 
 @app.route("/book", methods=["POST"])
@@ -49,8 +53,36 @@ def book():
     response = """
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Emma" language="en-NZ">I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
+    <Say voice="Polly.Emma" language="en-NZ">
+        I’m listening. Please tell me your name, pickup location, destination, and time.
+    </Say>
     <Gather input="speech" action="/ask" method="POST" timeout="10"/>
+</Response>
+"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/modify", methods=["POST"])
+def modify():
+    response = """
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Emma" language="en-NZ">
+        Please tell me what part of your booking you want to change.
+    </Say>
+    <Gather input="speech" action="/ask" method="POST" timeout="8"/>
+</Response>
+"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/team", methods=["POST"])
+def team():
+    response = """
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Emma" language="en-NZ">
+        Please hold while we transfer you to a team member.
+    </Say>
+    <Dial>+6448880188</Dial>
 </Response>
 """
     return Response(response, mimetype="text/xml")
@@ -63,7 +95,7 @@ def ask():
     response = f"""
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna" language="en-NZ">
+    <Say voice="Polly.Emma" language="en-NZ">
         Let me confirm your booking. {data}. Say yes to confirm or no to change.
     </Say>
     <Gather input="speech" action="/confirm" method="POST" timeout="5"/>
@@ -80,7 +112,9 @@ def confirm():
         return Response("""
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna" language="en-NZ">Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.</Say>
+    <Say voice="Polly.Emma" language="en-NZ">
+        Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.
+    </Say>
     <Hangup/>
 </Response>
 """, mimetype="text/xml")
