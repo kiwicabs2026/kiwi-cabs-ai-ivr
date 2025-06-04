@@ -4,7 +4,6 @@ from flask import Flask, request, Response, jsonify
 import openai
 from datetime import datetime
 import re
-import requests
 
 app = Flask(__name__)
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -18,23 +17,13 @@ def voice():
 <Response>
     <Gather action="/menu" input="speech" method="POST" timeout="5">
         <Say language="en-NZ">
-            <speak>
-                Kia ora, and welcome to Kiwi Cabs.
-                <break time='400ms'/>
-                I am A I assistant, here to help you book your taxi.
-                <break time='400ms'/>
-                This call may be recorded for training and security purposes.
-                <break time='400ms'/>
-                Please listen carefully and respond clearly.
-                <break time='300ms'/>
-                Say option 1 to book a taxi.
-                <break time='300ms'/>
-                Say option 2 to change or cancel an existing booking.
-                <break time='300ms'/>
-                Say option 3 to speak to a team member.
-                <break time='400ms'/>
-                I am listening.
-            </speak>
+            Kia ora, and welcome to Kiwi Cabs. I am A I assistant, here to help you book your taxi. 
+            This call may be recorded for training and security purposes. 
+            Please listen carefully and respond clearly. 
+            Say option 1 to book a taxi. 
+            Say option 2 to change or cancel an existing booking. 
+            Say option 3 to speak to a team member. 
+            I am listening.
         </Say>
     </Gather>
     <Redirect>/voice</Redirect>
@@ -61,7 +50,7 @@ def book():
     <?xml version="1.0" encoding="UTF-8"?>
     <Response>
         <Say>I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
-        <Gather input="speech" action="/ask" method="POST" timeout="10" />
+        <Gather input="speech" action="/ask" method="POST" timeout="10"/>
     </Response>
     """
     return Response(response, mimetype="text/xml")
@@ -71,15 +60,14 @@ def ask():
     data = request.form.get("SpeechResult", "")
     print("DEBUG - Booking Info Captured:", data)
 
-    user_sessions[request.form.get("From", "caller")] = {
-        "latest_booking": data
-    }
+    caller = request.form.get("From", "unknown")
+    user_sessions[caller] = {"latest_booking": data}
 
     response = f"""
     <?xml version="1.0" encoding="UTF-8"?>
     <Response>
         <Say>Let me confirm your booking. {data}. Say yes to confirm or no to change.</Say>
-        <Gather input="speech" action="/confirm" method="POST" timeout="5" />
+        <Gather input="speech" action="/confirm" method="POST" timeout="5"/>
     </Response>
     """
     return Response(response, mimetype="text/xml")
@@ -87,37 +75,46 @@ def ask():
 @app.route("/confirm", methods=["POST"])
 def confirm():
     data = request.form.get("SpeechResult", "").lower()
+    caller = request.form.get("From", "unknown")
     print("DEBUG - Confirmation Response:", data)
 
     if "yes" in data:
-        booking_data = user_sessions.get(request.form.get("From", "caller"), {}).get("latest_booking", "")
+        booking_data = user_sessions.get(caller, {}).get("latest_booking", "")
         try:
+            import requests
             requests.post("https://your-render-url.com/bookings", json={"details": booking_data})
         except Exception as e:
             print("Failed to send to Render:", e)
 
-        return Response("""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say>Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.</Say>
-    <Hangup/>
-</Response>""", mimetype="text/xml")
+        return Response("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+            <Say>Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.</Say>
+            <Hangup/>
+        </Response>
+        """, mimetype="text/xml")
     else:
         return redirect_to("/book")
 
 @app.route("/modify", methods=["POST"])
 def modify():
-    return Response("""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say>Please say the phone number and new time or date you want to change the booking to.</Say>
-    <Gather input="speech" action="/ask_modify" method="POST" timeout="10"/>
-</Response>""", mimetype="text/xml")
+    return Response("""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+        <Say>Please say the phone number and new time or date you want to change the booking to.</Say>
+        <Gather input="speech" action="/ask_modify" method="POST" timeout="10"/>
+    </Response>
+    """, mimetype="text/xml")
 
 @app.route("/team", methods=["POST"])
 def team():
-    return Response("""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Dial>+648966156</Dial>
-</Response>""", mimetype="text/xml")
+    return Response("""
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+        <Say>Please wait while we connect you to a team member.</Say>
+        <Dial>+648966156</Dial>
+    </Response>
+    """, mimetype="text/xml")
 
 def redirect_to(path):
     return Response(f"""
@@ -126,6 +123,3 @@ def redirect_to(path):
         <Redirect>{path}</Redirect>
     </Response>
     """, mimetype="text/xml")
-
-if __name__ == '__main__':
-    app.run(debug=True)
