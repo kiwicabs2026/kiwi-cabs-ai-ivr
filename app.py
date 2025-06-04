@@ -20,7 +20,7 @@ def voice():
             <speak>
                 Kia ora, and welcome to Kiwi Cabs.
                 <break time='400ms'/>
-                I am A I assistant, here to help you book your taxi.
+                I am your A I assistant, here to help you book your taxi.
                 <break time='400ms'/>
                 This call may be recorded for training and security purposes.
                 <break time='400ms'/>
@@ -36,7 +36,6 @@ def voice():
             </speak>
         </Say>
     </Gather>
-    <Redirect>/voice</Redirect>
 </Response>"""
     return Response(response, mimetype="text/xml")
 
@@ -56,13 +55,12 @@ def menu():
 
 @app.route("/book", methods=["POST"])
 def book():
-    response = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" action="/ask" method="POST" timeout="10">
         <Say>I’m listening. Please tell me your name, pickup location, destination, and time.</Say>
-        <Gather input="speech" action="/ask" method="POST" timeout="10"/>
-    </Response>
-    """
+    </Gather>
+</Response>"""
     return Response(response, mimetype="text/xml")
 
 @app.route("/ask", methods=["POST"])
@@ -70,14 +68,12 @@ def ask():
     data = request.form.get("SpeechResult", "")
     print("DEBUG - Booking Info Captured:", data)
 
-    # Dummy confirmation message
-    response = f"""
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
+    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather input="speech" action="/confirm" method="POST" timeout="5">
         <Say>Let me confirm your booking. {data}. Say yes to confirm or no to change.</Say>
-        <Gather input="speech" action="/confirm" method="POST" timeout="5"/>
-    </Response>
-    """
+    </Gather>
+</Response>"""
     return Response(response, mimetype="text/xml")
 
 @app.route("/confirm", methods=["POST"])
@@ -86,20 +82,32 @@ def confirm():
     print("DEBUG - Confirmation Response:", data)
 
     if "yes" in data:
-        return Response("""
-        <?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say>Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.</Say>
-            <Hangup/>
-        </Response>
-        """, mimetype="text/xml")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Thanks. Your taxi has been booked. Thank you for using Kiwi Cabs.</Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
     else:
         return redirect_to("/book")
 
+@app.route("/modify", methods=["POST"])
+def modify():
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Please say the phone number and new time or date you want to change the booking to.</Say>
+    <Gather input="speech" action="/ask_modify" method="POST" timeout="10"/>
+</Response>""", mimetype="text/xml")
+
+@app.route("/team", methods=["POST"])
+def team():
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Connecting you to a team member. Please hold.</Say>
+    <Dial>+648966156</Dial>
+</Response>""", mimetype="text/xml")
+
 def redirect_to(path):
-    return Response(f"""
-    <?xml version="1.0" encoding="UTF-8"?>
-    <Response>
-        <Redirect>{path}</Redirect>
-    </Response>
-    """, mimetype="text/xml")
+    return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Redirect>{path}</Redirect>
+</Response>""", mimetype="text/xml")
