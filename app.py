@@ -42,14 +42,14 @@ def voice():
 
 @app.route("/menu", methods=["POST"])
 def menu():
-    data = request.form.get("SpeechResult", "").lower().strip()
+    data = request.form.get("SpeechResult", "").lower()
     print("DEBUG - Menu SpeechResult:", data)
 
-    if data in ["1", "option 1", "one", "option one"]:
+    if any(word in data for word in ["1", "one", "option 1", "option one"]):
         return redirect_to("/book")
-    elif data in ["2", "option 2", "two", "option two"]:
+    elif any(word in data for word in ["2", "two", "option 2", "option two"]):
         return redirect_to("/modify")
-    elif data in ["3", "option 3", "three", "option three"]:
+    elif any(word in data for word in ["3", "three", "option 3", "option three"]):
         return redirect_to("/team")
     else:
         return redirect_to("/voice")
@@ -70,11 +70,7 @@ def ask():
     data = request.form.get("SpeechResult", "")
     print("DEBUG - Booking Info Captured:", data)
 
-    # Store booking temporarily
-    caller = request.form.get("From", "unknown")
-    session = user_sessions.get(caller, {})
-    session["latest_booking"] = data
-    user_sessions[caller] = session
+    user_sessions["latest_booking"] = data
 
     response = f"""
     <?xml version="1.0" encoding="UTF-8"?>
@@ -91,8 +87,7 @@ def confirm():
     print("DEBUG - Confirmation Response:", data)
 
     if "yes" in data:
-        caller = request.form.get("From", "unknown")
-        booking_data = user_sessions.get(caller, {}).get("latest_booking", "")
+        booking_data = user_sessions.get("latest_booking", "")
         try:
             requests.post("https://your-render-url.com/bookings", json={"details": booking_data})
         except Exception as e:
@@ -124,8 +119,8 @@ def team():
     return Response("""
     <?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say>Transferring you to one of our team members now.</Say>
-        <Dial>+6441234567</Dial>
+        <Say>Please hold while we connect you to our team.</Say>
+        <Dial>+6448880188</Dial>
     </Response>
     """, mimetype="text/xml")
 
