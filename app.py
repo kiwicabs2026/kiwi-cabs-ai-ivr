@@ -88,7 +88,7 @@ def process_speech():
 
     elif step == "confirm":
         if "yes" in speech.lower():
-            booking_data = {key: session[key] for key in ["name", "pickup", "dropoff", "time"] if key in session]
+            booking_data = {key: session[key] for key in ["name", "pickup", "dropoff", "time"] if key in session}
             # POST to Render
             try:
                 import requests
