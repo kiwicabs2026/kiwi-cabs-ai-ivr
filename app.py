@@ -44,7 +44,7 @@ def parse_booking_speech(speech_text):
                 booking_data['name'] = potential_name
                 break
     
-    # Extract pickup address - improved patterns
+    # Extract pickup address - improved patterns with cleaning
     pickup_patterns = [
         r"from\s+(.+?)(?:\s+(?:to|going|I am going|destination))",
         r"pickup(?:\s+from)?\s+(.+?)(?:\s+(?:to|going|destination))",
@@ -55,14 +55,19 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             pickup = match.group(1).strip()
-            # Clean up pickup address
+            # Clean up pickup address - remove extra words
+            pickup = pickup.replace("number ", "")
+            pickup = pickup.replace(" in Karori and", ", Karori")
+            pickup = pickup.replace(" in Miramar and", ", Miramar") 
+            pickup = pickup.replace(" and I'm", "")
             pickup = pickup.replace(" at ", " ")
-            booking_data['pickup_address'] = pickup
+            pickup = re.sub(r'\s+', ' ', pickup)  # Remove extra spaces
+            booking_data['pickup_address'] = pickup.strip()
             break
     
-    # Extract destination - improved with corrections and cleanup
+    # Extract destination - improved with cleaning and proper parsing
     destination_patterns = [
-        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|date|time|today|tomorrow|tonight|on|\d{1,2}/\d{1,2}/\d{4}|and my name))",
+        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:after|at|date|time|today|tomorrow|tonight|on|\d{1,2}/\d{1,2}/\d{4}|and my name))",
         r"(?:to|going to|destination)\s+(.+?)$"
     ]
     
@@ -70,15 +75,20 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             destination = match.group(1).strip()
-            # Clean up destination - remove extra words
+            # Clean up destination - remove extra words and standardize
             destination = destination.replace(". Thank you", "").replace(" Thank you", "")
             destination = destination.replace("wellington wellington", "wellington")
-            # Common speech recognition corrections
-            destination = destination.replace("railway station", "Wellington Railway Station")
-            destination = destination.replace("train station", "Wellington Railway Station") 
-            destination = destination.replace("air port", "airport") 
+            destination = destination.replace(" after", "")  # Remove "after" 
+            destination = destination.replace(" before", "")
+            destination = destination.replace("the airport", "Wellington Airport")
+            destination = destination.replace("airport", "Wellington Airport")
+            destination = destination.replace("the hospital", "Wellington Hospital")
             destination = destination.replace("hospital", "Wellington Hospital")
-            booking_data['destination'] = destination
+            destination = destination.replace("railway station", "Wellington Railway Station")
+            destination = destination.replace("train station", "Wellington Railway Station")
+            destination = destination.replace("the station", "Wellington Railway Station")
+            destination = re.sub(r'\s+', ' ', destination)  # Remove extra spaces
+            booking_data['destination'] = destination.strip()
             break
     
     # Extract date - intelligent parsing for natural language
