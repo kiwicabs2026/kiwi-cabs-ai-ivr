@@ -28,21 +28,25 @@ def parse_booking_speech(speech_text):
         'raw_speech': speech_text
     }
     
-    # Extract name (usually first few words or after "I'm" or "this is")
+    # Extract name - improved patterns
     name_patterns = [
-        r"(?:I'm|this is|my name is)\s+([A-Za-z\s]+?)(?:\s+I|\s+and|\s+need|\s+want)",
-        r"^([A-Za-z\s]+?)(?:\s+I|\s+and|\s+need|\s+want)",
+        r"(?:my name is|I'm|this is)\s+([A-Za-z\s]+?)(?:\s|$)",
+        r"and my name is\s+([A-Za-z\s]+?)(?:\s|$)",
+        r"(?:^|\s)([A-Z][a-z]+\s+[A-Z][a-z]+)(?:\s|$)",  # Match "Sam Abraham" pattern
     ]
     
     for pattern in name_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
-            booking_data['name'] = match.group(1).strip()
-            break
+            potential_name = match.group(1).strip()
+            # Filter out common non-name words
+            if not any(word in potential_name.lower() for word in ['need', 'want', 'going', 'from', 'taxi', 'booking']):
+                booking_data['name'] = potential_name
+                break
     
-    # Extract pickup address (from/pickup keywords)
+    # Extract pickup address - improved patterns
     pickup_patterns = [
-        r"from\s+(.+?)(?:\s+(?:to|going|destination|I am going))",
+        r"from\s+(.+?)(?:\s+(?:to|going|I am going|destination))",
         r"pickup(?:\s+from)?\s+(.+?)(?:\s+(?:to|going|destination))",
         r"pick\s*up\s+(.+?)(?:\s+(?:to|going|destination))"
     ]
@@ -50,22 +54,30 @@ def parse_booking_speech(speech_text):
     for pattern in pickup_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
-            booking_data['pickup_address'] = match.group(1).strip()
+            pickup = match.group(1).strip()
+            # Clean up pickup address
+            pickup = pickup.replace(" at ", " ")
+            booking_data['pickup_address'] = pickup
             break
     
-    # Extract destination (to/going keywords) 
+    # Extract destination - improved with corrections
     destination_patterns = [
-        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|date|time|today|tomorrow|on|\d{1,2}/\d{1,2}/\d{4}))",
+        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|date|time|today|tomorrow|on|\d{1,2}/\d{1,2}/\d{4}|and my name))",
         r"(?:to|going to|destination)\s+(.+?)$"
     ]
     
     for pattern in destination_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
-            booking_data['destination'] = match.group(1).strip()
+            destination = match.group(1).strip()
+            # Common speech recognition corrections
+            destination = destination.replace("wellington hospital", "Wellington Hospital")  # Keep hospital if that's what they said
+            destination = destination.replace("air port", "airport") 
+            destination = destination.replace("wellington train station", "wellington railway station")
+            booking_data['destination'] = destination
             break
     
-    # Extract date in NZ format (dd/mm/yyyy or dd/mm/yy)
+    # Extract date - improved patterns for "tomorrow"
     date_patterns = [
         r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{4})",
         r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{2})",
@@ -73,16 +85,24 @@ def parse_booking_speech(speech_text):
         r"(\d{1,2}/\d{1,2}/\d{2})"
     ]
     
-    for pattern in date_patterns:
-        match = re.search(pattern, speech_text, re.IGNORECASE)
-        if match:
-            booking_data['pickup_date'] = match.group(1).strip()
-            break
+    # Check for "tomorrow" keyword
+    if "tomorrow" in speech_text.lower():
+        from datetime import datetime, timedelta
+        tomorrow = datetime.now() + timedelta(days=1)
+        booking_data['pickup_date'] = tomorrow.strftime("%d/%m/%Y")
+    else:
+        for pattern in date_patterns:
+            match = re.search(pattern, speech_text, re.IGNORECASE)
+            if match:
+                booking_data['pickup_date'] = match.group(1).strip()
+                break
     
-    # Extract time
+    # Extract time - improved patterns
     time_patterns = [
         r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"at\s+(quarter\s+past\s+\d{1,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"at\s+(half\s+past\s+\d{1,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"(?:today|tomorrow)\s+at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))"
     ]
@@ -90,7 +110,20 @@ def parse_booking_speech(speech_text):
     for pattern in time_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
-            booking_data['pickup_time'] = match.group(1).strip()
+            time_str = match.group(1).strip()
+            # Convert quarter past, half past
+            if "quarter past" in time_str:
+                time_str = time_str.replace("quarter past ", "").replace("quarter past", "")
+                hour = time_str.split()[0]
+                ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
+                time_str = f"{hour}:15 {ampm}"
+            elif "half past" in time_str:
+                time_str = time_str.replace("half past ", "").replace("half past", "")
+                hour = time_str.split()[0]
+                ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
+                time_str = f"{hour}:30 {ampm}"
+            
+            booking_data['pickup_time'] = time_str
             break
     
     return booking_data
@@ -133,7 +166,7 @@ def send_booking_to_api(booking_data, caller_number):
         response = requests.post(
             RENDER_ENDPOINT,
             json=api_data,
-            timeout=10
+            timeout=30
         )
         
         if response.status_code in [200, 201]:
@@ -527,9 +560,10 @@ def book_with_location():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
-        Please tell me your name, pickup address, destination, date, and what time you need the taxi.
+        Please speak clearly and tell me your name, pickup address, destination, date, and what time you need the taxi.
+        For example: John Smith, pickup from 123 Main Street Wellington, going to Wellington Airport, date 7th of August 2025, time 3 PM.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="3" finishOnKey=""/>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
 </Response>"""
     return Response(response_xml, mimetype="text/xml")
 
@@ -563,6 +597,20 @@ def process_booking():
     caller_number = request.form.get("From", "")
     
     print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
+    
+    # Check speech confidence
+    confidence_score = float(confidence) if confidence else 0.0
+    if confidence_score < 0.7:
+        print(f"⚠️ LOW CONFIDENCE ({confidence_score}) - asking caller to repeat")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I didn't hear that clearly. Please speak slowly and clearly.
+        Tell me your name, pickup address, destination, date, and time.
+        For example: John Smith, pickup from 123 Main Street, going to Wellington Airport, date 7th August, time 3 PM.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
+</Response>""", mimetype="text/xml")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
@@ -602,24 +650,33 @@ def process_booking():
     user_sessions[call_sid]['pending_booking'] = booking_data
     user_sessions[call_sid]['caller_number'] = caller_number
     
-    # Create confirmation message with parsed details
-    name_part = f"Customer: {booking_data['name']}" if booking_data['name'] else "Customer name not provided"
-    pickup_part = f"Pickup from: {booking_data['pickup_address']}" if booking_data['pickup_address'] else "Pickup address not provided"
-    destination_part = f"Going to: {booking_data['destination']}" if booking_data['destination'] else "Destination not provided"
-    date_part = f"Date: {booking_data['pickup_date']}" if booking_data['pickup_date'] else "Date: today"
-    time_part = f"Time: {booking_data['pickup_time']}" if booking_data['pickup_time'] else "Time: as soon as possible"
+    # Create clean confirmation message
+    confirmation_parts = []
+    
+    if booking_data['name']:
+        confirmation_parts.append(booking_data['name'])
+    
+    if booking_data['pickup_address']:
+        confirmation_parts.append(f"from {booking_data['pickup_address']}")
+    
+    if booking_data['destination']:
+        confirmation_parts.append(f"to {booking_data['destination']}")
+    
+    if booking_data['pickup_date']:
+        confirmation_parts.append(booking_data['pickup_date'])
+    
+    if booking_data['pickup_time']:
+        confirmation_parts.append(booking_data['pickup_time'])
+    
+    # Join all parts with commas
+    confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
     
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Let me confirm your booking details:
-            {name_part}.
-            {pickup_part}.
-            {destination_part}.
-            {date_part}.
-            {time_part}.
-            Is this correct? Please say yes to confirm, or no to make changes.
+            {confirmation_text}.
+            Is this correct? Say yes to confirm or no to make changes.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
