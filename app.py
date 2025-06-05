@@ -1,4 +1,19 @@
-@app.route("/book", methods=["POST"])
+@app.route("/process_location_booking", methods=["POST"])
+def process_location_booking():
+    """Process booking with location suggestions"""
+    data = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+    
+    print(f"🗺️ LOCATION BOOKING: '{data}'")
+    
+    # Get stored location and nearby suggestions
+    session_data = user_sessions.get(call_sid, {})
+    caller_location = session_data.get('caller_location', {})
+    
+    # Check if user selected a nearby option
+    option_patterns = [
+        r'@app.route("/book", methods=["POST"])
 def book():
     """Standard booking process (fallback)"""
     response = """<?xml version="1.0" encoding="UTF-8"?>
