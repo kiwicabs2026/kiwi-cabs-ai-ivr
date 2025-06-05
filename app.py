@@ -729,6 +729,27 @@ def process_booking():
     <Hangup/>
 </Response>""", mimetype="text/xml")
     
+    # Check if we got enough booking details before asking for confirmation
+    missing_details = []
+    if not booking_data['name']:
+        missing_details.append("name")
+    if not booking_data['pickup_address']:
+        missing_details.append("pickup address")
+    if not booking_data['destination']:
+        missing_details.append("destination")
+    
+    # If missing critical details, ask to repeat instead of confirming garbage
+    if len(missing_details) >= 2:  # Missing 2 or more critical details
+        print(f"❓ MISSING DETAILS: {missing_details} - asking caller to repeat")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I didn't get all your details clearly. 
+        Please repeat your name, pickup address, destination, date, and time.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey=""/>
+</Response>""", mimetype="text/xml")
+
     # Store booking data in session for confirmation
     if call_sid not in user_sessions:
         user_sessions[call_sid] = {}
