@@ -1123,6 +1123,22 @@ def confirm_booking():
     <Hangup/>
 </Response>""", mimetype="text/xml")
     elif any(pattern in data for pattern in no_patterns):
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No worries! What would you like to change about your booking?
+        Say pickup location, destination, time, or cancel booking.
+    </Say>
+    <Gather input="speech" action="/process_modification" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey=""/>
+</Response>""", mimetype="text/xml")
+    else:
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I didn't catch that. Please say yes to confirm your booking changes, or no to make different changes.
+    </Say>
+    <Gather input="speech" action="/confirm_modification" method="POST" timeout="5" language="en-NZ" speechTimeout="2" finishOnKey=""/>
+</Response>""", mimetype="text/xml") in no_patterns):
         return redirect_to("/book")
     else:
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
