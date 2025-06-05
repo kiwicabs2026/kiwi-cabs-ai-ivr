@@ -81,25 +81,29 @@ def parse_booking_speech(speech_text):
             booking_data['destination'] = destination
             break
     
-    # Extract date - improved with real-time calculation
+    # Extract date - intelligent parsing for natural language
     from datetime import datetime, timedelta
     
-    # TODAY keywords = current date when caller calls
+    # AFTER TOMORROW keywords = day after tomorrow (+2 days)
+    after_tomorrow_keywords = ["after tomorrow", "day after tomorrow", "the day after tomorrow"]
+    
+    # TOMORROW keywords = next day (+1 day)
+    tomorrow_keywords = ["tomorrow morning", "tomorrow afternoon", "tomorrow evening", "tomorrow night", "tomorrow"]
+    
+    # TODAY keywords = current date (same day)
     today_keywords = ["tonight", "today", "later today", "this afternoon", 
                       "this evening", "this morning"]
     
-    # TOMORROW keywords = next day from when caller calls  
-    tomorrow_keywords = ["tomorrow", "tomorrow morning", "tomorrow afternoon",
-                         "tomorrow evening", "tomorrow night"]
-    
-    # Check for today keywords
-    if any(keyword in speech_text.lower() for keyword in today_keywords):
-        today = datetime.now()
-        booking_data['pickup_date'] = today.strftime("%d/%m/%Y")
-    # Check for tomorrow keywords
+    # Smart parsing - check longer phrases first
+    if any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
+        day_after_tomorrow = datetime.now() + timedelta(days=2)
+        booking_data['pickup_date'] = day_after_tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
         tomorrow = datetime.now() + timedelta(days=1)
         booking_data['pickup_date'] = tomorrow.strftime("%d/%m/%Y")
+    elif any(keyword in speech_text.lower() for keyword in today_keywords):
+        today = datetime.now()
+        booking_data['pickup_date'] = today.strftime("%d/%m/%Y")
     else:
         # Try to find explicit date formats
         date_patterns = [
@@ -832,7 +836,7 @@ def team():
         No problem! I'm connecting you with one of our friendly team members now.
         Please hold the line.
     </Say>
-    <Dial>+6448880188</Dial>
+    <Dial>+6448966156</Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
 
