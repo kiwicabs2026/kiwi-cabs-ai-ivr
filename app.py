@@ -7,9 +7,266 @@ import re
 
 app = Flask(__name__)
 
-# Environment configuration
-RENDER_ENDPOINT = os.getenv("RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onrender.com/api/bookings")
+# TaxiCaller API Configuration
+TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
 TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY", "")
+
+def get_taxicaller_jwt():
+    """Get JWT token for TaxiCaller API authentication"""
+    try:
+        response = requests.get(
+            f"{TAXICALLER_BASE_URL}/jwt/for-key",
+            params={
+                'key': TAXICALLER_API_KEY,
+                'sub': '*'  # All subjects
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            jwt_token = token_data.get('token')
+            print(f"✅ TaxiCaller JWT obtained: {jwt_token[:50]}...")
+            return jwt_token
+        else:
+            print(f"❌ Failed to get TaxiCaller JWT: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"💥 Error getting TaxiCaller JWT: {str(e)}")
+        return None
+
+def search_existing_booking_real(phone_number):
+    """Search for existing booking in real TaxiCaller system"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            print("❌ No JWT token - cannot search TaxiCaller")
+            return None
+        
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Search through recent orders by phone number
+        # Note: TaxiCaller doesn't have a direct phone search, so we'll need to use reports or customer accounts
+        print(f"🔍 SEARCHING TAXICALLER FOR BOOKING: Phone {phone_number}")
+        
+        # For now, return mock data since we need your company_id to make real calls
+        # TODO: Replace with real TaxiCaller search once we have your company_id
+        mock_booking = {
+            "booking_details": {
+                "order_id": f"TC{datetime.now().strftime('%Y%m%d')}001",
+                "customer_details": {
+                    "name": "John Smith",
+                    "phone": phone_number
+                },
+                "trip_details": {
+                    "pickup_address": "Queen Street, Wellington Central, Wellington",
+                    "destination_address": "Wellington Airport, Rongotai, Wellington",
+                    "pickup_date": "06/06/2025",
+                    "pickup_time": "8:00 AM"
+                },
+                "booking_info": {
+                    "status": "confirmed",
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+        }
+        
+        print(f"✅ MOCK BOOKING FOUND (Replace with real TaxiCaller search)")
+        return mock_booking['booking_details']
+        
+    except Exception as e:
+        print(f"💥 Error searching TaxiCaller: {str(e)}")
+        return None
+
+def create_taxicaller_booking(booking_data):
+    """Create new booking in TaxiCaller system"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            print("❌ No JWT token - cannot create TaxiCaller booking")
+            return False
+        
+        # Convert our booking format to TaxiCaller format
+        tc_format = booking_data['taxicaller_format']
+        
+        # Parse coordinates (TaxiCaller uses [longitude, latitude] * 1e6)
+        # For now using Wellington CBD coordinates as default
+        pickup_coords = [17465000, -41290000]  # Wellington CBD
+        dropoff_coords = [17465000, -41290000]  # Default to same
+        
+        # Convert pickup time to Unix timestamp
+        pickup_timestamp = int(datetime.now().timestamp())
+        if tc_format.get('booking_time') and tc_format.get('booking_date'):
+            try:
+                time_str = f"{tc_format['booking_date']} {tc_format['booking_time']}"
+                pickup_dt = datetime.strptime(time_str, '%d/%m/%Y %I:%M %p')
+                pickup_timestamp = int(pickup_dt.timestamp())
+            except:
+                pickup_timestamp = 0  # ASAP
+        
+        taxicaller_order = {
+            "order": {
+                "company_id": 1318,  # TODO: Replace with your actual company_id
+                "provider_id": 0,    # Any provider
+                "items": [
+                    {
+                        "@type": "passengers",
+                        "seq": 0,
+                        "passenger": {
+                            "name": tc_format['customer_name'],
+                            "phone": tc_format['phone_number'],
+                            "email": ""
+                        },
+                        "client_id": 0,
+                        "account": {
+                            "id": 0
+                        },
+                        "require": {
+                            "seats": 1,
+                            "wc": 0,
+                            "bags": 1
+                        },
+                        "pay_info": [
+                            {
+                                "@t": 0,  # CASH
+                                "data": None
+                            }
+                        ]
+                    }
+                ],
+                "route": {
+                    "nodes": [
+                        {
+                            "actions": [
+                                {
+                                    "@type": "client_action",
+                                    "item_seq": 0,
+                                    "action": "in"  # pickup
+                                }
+                            ],
+                            "location": {
+                                "name": tc_format['pickup_address'],
+                                "coords": pickup_coords
+                            },
+                            "times": {
+                                "arrive": {
+                                    "target": pickup_timestamp,
+                                    "latest": 0
+                                }
+                            },
+                            "info": {
+                                "all": tc_format.get('special_instructions', '')
+                            },
+                            "seq": 0
+                        },
+                        {
+                            "actions": [
+                                {
+                                    "@type": "client_action",
+                                    "item_seq": 0,
+                                    "action": "out"  # dropoff
+                                }
+                            ],
+                            "location": {
+                                "name": tc_format['destination_address'],
+                                "coords": dropoff_coords
+                            },
+                            "times": None,
+                            "info": {},
+                            "seq": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "meta": {
+                                "dist": 5000,  # Default distance
+                                "est_dur": 600  # Default duration
+                            },
+                            "pts": pickup_coords + dropoff_coords,  # Simple route
+                            "from_seq": 0,
+                            "to_seq": 1
+                        }
+                    ],
+                    "meta": {
+                        "dist": 5000,
+                        "est_dur": 600
+                    }
+                }
+            }
+        }
+        
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        print("📤 SENDING BOOKING TO TAXICALLER:")
+        print(f"👤 Customer: {tc_format['customer_name']}")
+        print(f"📞 Phone: {tc_format['phone_number']}")
+        print(f"📍 From: {tc_format['pickup_address']}")
+        print(f"🎯 To: {tc_format['destination_address']}")
+        print(f"⏰ Time: {tc_format['booking_time']} on {tc_format['booking_date']}")
+        
+        response = requests.post(
+            f"{TAXICALLER_BASE_URL}/booker/order",
+            json=taxicaller_order,
+            headers=headers,
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            order_response = response.json()
+            order_id = order_response.get('order', {}).get('order_id')
+            print(f"✅ TAXICALLER BOOKING CREATED: {order_id}")
+            return True
+        else:
+            print(f"❌ TaxiCaller booking failed: {response.status_code}")
+            print(f"📤 Response: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"💥 Error creating TaxiCaller booking: {str(e)}")
+        return False
+
+def update_taxicaller_booking(order_id, updated_booking):
+    """Update existing booking in TaxiCaller system"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            print("❌ No JWT token - cannot update TaxiCaller booking")
+            return False
+        
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Use the same order structure as create but with updates
+        # This would need the full TaxiCaller order format with changes
+        
+        print(f"🔄 UPDATING TAXICALLER BOOKING: {order_id}")
+        
+        response = requests.post(
+            f"{TAXICALLER_BASE_URL}/booker/order/{order_id}",
+            json=updated_booking,
+            headers=headers,
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            print("✅ TaxiCaller booking updated successfully")
+            return True
+        else:
+            print(f"❌ TaxiCaller update failed: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        print(f"💥 Error updating TaxiCaller booking: {str(e)}")
+        return False
 
 # Session memory stores
 user_sessions = {}
