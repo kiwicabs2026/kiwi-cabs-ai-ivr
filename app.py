@@ -703,6 +703,7 @@ def confirm_booking():
     caller_number = session_data.get('caller_number', '')
     
     if not booking_data:
+        print(f"❌ NO BOOKING DATA FOUND for call_sid: {call_sid}")
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
@@ -712,28 +713,37 @@ def confirm_booking():
 </Response>""", mimetype="text/xml")
     
     # Check for confirmation keywords
-    confirm_keywords = ["yes", "yeah", "yep", "true", "correct", "right", "agree", "confirm", "that's right", "sounds good"]
+    confirm_keywords = ["yes", "yeah", "yep", "true", "correct", "right", "agree", "confirm"]
     deny_keywords = ["no", "nope", "wrong", "incorrect", "change", "edit", "modify"]
     
     is_confirmed = any(keyword in confirmation_speech for keyword in confirm_keywords)
     is_denied = any(keyword in confirmation_speech for keyword in deny_keywords)
     
+    print(f"🔍 CONFIRMATION CHECK: confirmed={is_confirmed}, denied={is_denied}")
+    
     if is_confirmed:
         print(f"✅ BOOKING CONFIRMED by caller")
         
         # Send booking to API
-        api_success, api_response = send_booking_to_api(booking_data, caller_number)
-        
-        if api_success:
-            print(f"✅ BOOKING SUCCESSFULLY SENT TO API")
-            confirmation_message = "Booking confirmed! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
-        else:
-            print(f"❌ BOOKING API FAILED - Using fallback")
+        try:
+            api_success, api_response = send_booking_to_api(booking_data, caller_number)
+            
+            if api_success:
+                print(f"✅ BOOKING SUCCESSFULLY SENT TO API")
+                confirmation_message = "Booking confirmed! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
+            else:
+                print(f"❌ BOOKING API FAILED - Using fallback")
+                confirmation_message = "Booking received! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
+        except Exception as e:
+            print(f"❌ API ERROR: {str(e)}")
             confirmation_message = "Booking received! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
         
-        # Clean up session data
-        if call_sid in user_sessions:
-            user_sessions[call_sid].pop('pending_booking', None)
+        # Clean up session data safely
+        try:
+            if call_sid in user_sessions:
+                user_sessions[call_sid].pop('pending_booking', None)
+        except:
+            pass
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -749,16 +759,19 @@ def confirm_booking():
         print(f"❌ BOOKING DENIED by caller - asking for new details")
         
         # Clean up session data
-        if call_sid in user_sessions:
-            user_sessions[call_sid].pop('pending_booking', None)
+        try:
+            if call_sid in user_sessions:
+                user_sessions[call_sid].pop('pending_booking', None)
+        except Exception as e:
+            print(f"⚠️ ERROR CLEANING SESSION: {str(e)}")
         
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No problem! Let's try again.
-        Please tell me your name, pickup address, destination, date, and time you need the taxi.
+        Please tell me your name, pickup address, destination, date, and time.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="3" finishOnKey=""/>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
 </Response>"""
         
         return Response(response, mimetype="text/xml")
@@ -771,8 +784,7 @@ def confirm_booking():
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             Sorry, I didn't catch that clearly.
-            Are the booking details I mentioned correct?
-            Please say yes to confirm, or no to make changes.
+            Is the booking correct? Say yes to confirm or no to make changes.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
