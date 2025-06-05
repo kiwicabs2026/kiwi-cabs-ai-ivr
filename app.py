@@ -848,16 +848,41 @@ def confirm_booking():
         
         return Response(response, mimetype="text/xml")
 
+def format_phone_for_speech(phone_number):
+    """Format phone number for natural speech"""
+    # Remove + and spaces
+    clean = phone_number.replace('+', '').replace('-', '').replace(' ', '')
+    
+    # Format as groups of digits
+    if len(clean) >= 10:
+        # For NZ numbers like 64220881234
+        if clean.startswith('64'):
+            formatted = f"zero six four, {clean[2:3]} {clean[3:4]} {clean[4:5]}, {clean[5:6]} {clean[6:7]} {clean[7:8]}, {clean[8:9]} {clean[9:10]} {clean[10:11]} {clean[11:12] if len(clean) > 11 else ''}"
+        else:
+            # Group digits naturally
+            formatted = ' '.join(clean[i:i+3] for i in range(0, len(clean), 3))
+    else:
+        # For shorter numbers
+        formatted = ' '.join(clean)
+    
+    return formatted.strip()
+
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
     """Smart modification process - finds existing booking and shows details"""
     caller_number = request.form.get("From", "")
     clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
     
+    print(f"🔍 LOOKING FOR BOOKING: {clean_phone}")
+    print(f"📋 STORAGE CONTENTS: {list(booking_storage.keys())}")
+    
     # Look up existing booking
     if clean_phone in booking_storage:
         booking = booking_storage[clean_phone]
         print(f"✅ FOUND EXISTING BOOKING: {booking}")
+        
+        # Format phone for speech
+        readable_phone = format_phone_for_speech(caller_number)
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -869,10 +894,15 @@ def modify_booking():
 </Response>"""
     else:
         print(f"❌ NO BOOKING FOUND for {clean_phone}")
+        print(f"📋 Available bookings: {list(booking_storage.keys())}")
+        
+        # Format phone for speech  
+        readable_phone = format_phone_for_speech(caller_number)
+        
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find a booking for your number {caller_number}. 
+        I couldn't find a booking for your number {readable_phone}. 
         You can make a new booking or speak with our team.
         What would you like to do?
     </Say>
