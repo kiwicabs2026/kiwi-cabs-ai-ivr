@@ -478,7 +478,7 @@ def menu():
     if any(keyword in data for keyword in booking_keywords):
         return redirect_to("/book_with_location")
     elif any(keyword in data for keyword in modify_keywords):
-        return redirect_to("/modify")
+        return redirect_to("/modify_booking")
     elif any(keyword in data for keyword in team_keywords):
         return redirect_to("/team")
     else:
