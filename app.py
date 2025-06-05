@@ -862,6 +862,89 @@ def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Kiwi Cabs AI IVR", "version": "3.0"}
 
+@app.route("/api/bookings", methods=["POST"])
+def api_bookings():
+    """Receive AI booking data and process it"""
+    try:
+        # Get booking data from AI
+        booking_data = request.get_json()
+        
+        print(f"📥 RECEIVED BOOKING DATA:")
+        print(f"   👤 Customer: {booking_data.get('customer_name', 'Unknown')}")
+        print(f"   📞 Phone: {booking_data.get('phone', 'Unknown')}")
+        print(f"   📍 Pickup: {booking_data.get('pickup_address', 'Unknown')}")
+        print(f"   🎯 Destination: {booking_data.get('destination', 'Unknown')}")
+        print(f"   📅 Date: {booking_data.get('pickup_date', 'Unknown')}")
+        print(f"   🕐 Time: {booking_data.get('pickup_time', 'Unknown')}")
+        print(f"   🔗 Reference: {booking_data.get('booking_reference', 'Unknown')}")
+        
+        # Here you can:
+        # 1. Save to database
+        # 2. Send to TaxiCaller API
+        # 3. Process the booking
+        
+        # For now, let's try to send to TaxiCaller if API key exists
+        if TAXICALLER_API_KEY:
+            try:
+                # Format data for TaxiCaller API
+                taxicaller_data = {
+                    "customer": {
+                        "name": booking_data.get('customer_name', ''),
+                        "phone": booking_data.get('phone', '')
+                    },
+                    "pickup": {
+                        "address": booking_data.get('pickup_address', ''),
+                        "date": booking_data.get('pickup_date', ''),
+                        "time": booking_data.get('pickup_time', '')
+                    },
+                    "destination": {
+                        "address": booking_data.get('destination', '')
+                    },
+                    "reference": booking_data.get('booking_reference', ''),
+                    "source": "ai_ivr"
+                }
+                
+                headers = {
+                    "Authorization": f"Bearer {TAXICALLER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Send to TaxiCaller
+                response = requests.post(
+                    f"{TAXICALLER_BASE_URL}/bookings",
+                    json=taxicaller_data,
+                    headers=headers,
+                    timeout=10
+                )
+                
+                if response.status_code in [200, 201]:
+                    print(f"✅ BOOKING SENT TO TAXICALLER SUCCESSFULLY")
+                    return {
+                        "status": "success",
+                        "message": "Booking created in TaxiCaller",
+                        "taxicaller_response": response.json()
+                    }, 200
+                else:
+                    print(f"❌ TAXICALLER ERROR: {response.status_code}")
+                    
+            except Exception as e:
+                print(f"❌ TAXICALLER API ERROR: {str(e)}")
+        
+        # Fallback: Just log the booking
+        print(f"📝 BOOKING LOGGED SUCCESSFULLY")
+        return {
+            "status": "success", 
+            "message": "Booking received and logged",
+            "booking_id": booking_data.get('booking_reference', 'unknown')
+        }, 200
+        
+    except Exception as e:
+        print(f"❌ BOOKING ENDPOINT ERROR: {str(e)}")
+        return {
+            "status": "error",
+            "message": "Failed to process booking"
+        }, 500
+
 @app.route("/", methods=["GET"])
 def home():
     """Root endpoint with service info"""
