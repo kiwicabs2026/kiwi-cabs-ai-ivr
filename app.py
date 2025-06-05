@@ -630,20 +630,20 @@ def process_booking():
     
     print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
     
-    # Check speech confidence - be more lenient
+    # Check speech confidence - be very lenient  
     confidence_score = float(confidence) if confidence else 0.0
-    if confidence_score < 0.3:  # Lower threshold from 0.7 to 0.3
-        print(f"⚠️ VERY LOW CONFIDENCE ({confidence_score}) - asking caller to repeat")
+    if confidence_score < 0.1:  # Very low threshold - only reject completely empty speech
+        print(f"⚠️ NO SPEECH DETECTED ({confidence_score}) - asking caller to repeat")
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't hear that clearly. Please speak slowly.
+        Sorry, I didn't hear anything. Please speak clearly.
         Tell me your name, pickup address, destination, date, and time.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
 </Response>""", mimetype="text/xml")
     
-    print(f"✅ ACCEPTABLE CONFIDENCE ({confidence_score}) - processing speech")
+    print(f"✅ PROCESSING SPEECH ({confidence_score})")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
@@ -825,12 +825,35 @@ def process_modification():
     
     print(f"🔧 PROCESSING MODIFICATION: '{modification_data}' for booking {caller_number}")
     
+    # Try to update booking via API
+    try:
+        modification_request = {
+            "phone": caller_number,
+            "modification": modification_data,
+            "action": "modify_booking"
+        }
+        
+        # Send modification to our API endpoint
+        response = requests.post(
+            f"{RENDER_ENDPOINT.replace('/api/bookings', '/api/modify')}",
+            json=modification_request,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            print(f"✅ MODIFICATION SENT TO API")
+            message = f"Your booking has been updated. Your booking reference is {caller_number}. Thanks for calling Kiwi Cabs!"
+        else:
+            print(f"❌ MODIFICATION API FAILED")
+            message = f"I've noted your request to modify your booking. Our team will call you back shortly at {caller_number}. Thanks for calling Kiwi Cabs!"
+    except:
+        print(f"❌ MODIFICATION API ERROR")
+        message = f"I've noted your request to modify your booking. Our team will call you back shortly at {caller_number}. Thanks for calling Kiwi Cabs!"
+    
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I've noted your request to modify your booking.
-        Your booking reference is {caller_number}.
-        Thanks for calling Kiwi Cabs!
+        {message}
     </Say>
     <Hangup/>
 </Response>"""
@@ -862,8 +885,53 @@ def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "Kiwi Cabs AI IVR", "version": "3.0"}
 
-@app.route("/api/bookings", methods=["POST"])
-def api_bookings():
+@app.route("/api/modify", methods=["POST"])
+def api_modify():
+    """Handle booking modifications"""
+    try:
+        modification_data = request.get_json()
+        phone = modification_data.get('phone')
+        modification = modification_data.get('modification')
+        
+        print(f"🔧 MODIFICATION REQUEST:")
+        print(f"   📞 Phone: {phone}")
+        print(f"   📝 Change: {modification}")
+        
+        # Try to send modification to TaxiCaller
+        if TAXICALLER_API_KEY:
+            try:
+                modification_payload = {
+                    "customer_phone": phone,
+                    "modification_request": modification,
+                    "action": "update_booking"
+                }
+                
+                headers = {
+                    "Authorization": f"Bearer {TAXICALLER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                
+                response = requests.put(
+                    f"{TAXICALLER_BASE_URL}/bookings/modify",
+                    json=modification_payload,
+                    headers=headers,
+                    timeout=10
+                )
+                
+                if response.status_code in [200, 201]:
+                    print(f"✅ MODIFICATION SENT TO TAXICALLER")
+                    return {"status": "success", "message": "Booking modified"}, 200
+                    
+            except Exception as e:
+                print(f"❌ TAXICALLER MODIFICATION ERROR: {str(e)}")
+        
+        # Fallback: Log modification request
+        print(f"📝 MODIFICATION LOGGED")
+        return {"status": "logged", "message": "Modification request logged"}, 200
+        
+    except Exception as e:
+        print(f"❌ MODIFICATION ENDPOINT ERROR: {str(e)}")
+        return {"status": "error", "message": "Failed to process modification"}, 500
     """Receive AI booking data and process it"""
     try:
         # Get booking data from AI
