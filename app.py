@@ -16,6 +16,8 @@ RENDER_ENDPOINT = os.getenv("RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onr
 # Session memory stores
 user_sessions = {}
 modification_bookings = {}
+# Simple booking storage - stores all bookings by phone number
+booking_storage = {}
 
 def parse_booking_speech(speech_text):
     """Parse booking details from speech input including NZ date format"""
@@ -533,22 +535,60 @@ def voice():
 
 @app.route("/menu", methods=["POST"])
 def menu():
-    """Process menu selection"""
+    """Smart menu processing - understands natural language intent"""
     data = request.form.get("SpeechResult", "").lower()
     confidence = request.form.get("Confidence", "0")
-    print(f"DEBUG - Menu Selection: '{data}' (Confidence: {confidence})")
+    print(f"🧠 SMART INTENT DETECTION: '{data}' (Confidence: {confidence})")
 
-    booking_keywords = ["1", "one", "book", "taxi", "ride", "cab", "new booking", "need a taxi", "want a taxi"]
-    modify_keywords = ["2", "two", "change", "cancel", "modify", "existing", "alter", "update"]
-    team_keywords = ["3", "three", "team", "human", "person", "staff", "operator", "speak"]
+    # MODIFICATION/CHANGE INTENT - lots of ways people say this
+    modify_keywords = [
+        # Direct change requests
+        "change", "modify", "alter", "update", "adjust", "switch", "move", "shift",
+        # Existing booking references  
+        "i have a booking", "my booking", "existing booking", "current booking", "booked already",
+        "already booked", "previous booking", "earlier booking", "made a booking",
+        # Time/detail changes
+        "change the time", "different time", "new time", "wrong time", "make it",
+        "instead of", "not at", "change from", "change to", "move from", "move to",
+        # Cancel requests
+        "cancel", "delete", "remove", "don't want", "not needed", "won't need"
+    ]
 
-    if any(keyword in data for keyword in booking_keywords):
-        return redirect_to("/book_with_location")
-    elif any(keyword in data for keyword in modify_keywords):
+    # NEW BOOKING INTENT - ways people ask for new rides
+    booking_keywords = [
+        # Direct booking requests
+        "book", "need", "want", "get", "order", "arrange", "schedule", "reserve",
+        "i need a taxi", "need a ride", "want a cab", "get me a taxi", "book a taxi",
+        "need transport", "require transport", "pickup", "collect me", "take me",
+        # Time-based requests
+        "taxi for", "ride for", "cab for", "transport for", "going to", "travel to",
+        "tomorrow", "today", "tonight", "after tomorrow", "later", "morning", "evening",
+        # Location-based requests  
+        "from", "to the", "airport", "hospital", "station", "pick me up", "drop me"
+    ]
+
+    # HUMAN TRANSFER INTENT - want to talk to real person
+    human_keywords = [
+        # Direct requests
+        "human", "person", "operator", "staff", "team", "agent", "representative",
+        "speak with", "talk to", "connect me", "transfer me", "put me through",
+        # Complaints/problems
+        "complaint", "problem", "issue", "help", "assistance", "can't understand",
+        "not working", "difficult", "confused", "frustrated", "manager", "supervisor"
+    ]
+
+    # SMART INTENT DETECTION - check modification first (most specific)
+    if any(keyword in data for keyword in modify_keywords):
+        print(f"🔧 DETECTED: MODIFICATION REQUEST")
         return redirect_to("/modify_booking")
-    elif any(keyword in data for keyword in team_keywords):
+    elif any(keyword in data for keyword in human_keywords):
+        print(f"👤 DETECTED: HUMAN TRANSFER REQUEST") 
         return redirect_to("/team")
+    elif any(keyword in data for keyword in booking_keywords):
+        print(f"📞 DETECTED: NEW BOOKING REQUEST")
+        return redirect_to("/book_with_location")
     else:
+        print(f"❓ UNCLEAR INTENT - asking for clarification")
         return clarify_menu()
 
 def clarify_menu():
@@ -801,18 +841,35 @@ def confirm_booking():
 
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
-    """Start modification process using caller's phone number"""
+    """Smart modification process - finds existing booking and shows details"""
     caller_number = request.form.get("From", "")
+    clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
     
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+    # Look up existing booking
+    if clean_phone in booking_storage:
+        booking = booking_storage[clean_phone]
+        print(f"✅ FOUND EXISTING BOOKING: {booking}")
+        
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! I can help you change your booking.
-        Your booking reference is your phone number {caller_number}.
-        What would you like to change? You can say change time, change pickup address, change destination, or cancel booking.
+        I found your booking: {booking['customer_name']}, {booking['pickup_date']}, {booking['pickup_time']}, from {booking['pickup_address']}, to {booking['destination']}.
+        What would you like to change?
     </Say>
-    <Gather input="speech" action="/process_modification" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey=""/>
+    <Gather input="speech" action="/process_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="3" finishOnKey=""/>
 </Response>"""
+    else:
+        print(f"❌ NO BOOKING FOUND for {clean_phone}")
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I couldn't find a booking for your number {caller_number}. 
+        You can make a new booking or speak with our team.
+        What would you like to do?
+    </Say>
+    <Gather input="speech" action="/menu" method="POST" timeout="10" language="en-NZ" speechTimeout="2" finishOnKey=""/>
+</Response>"""
+    
     return Response(response, mimetype="text/xml")
 
 @app.route("/process_modification", methods=["POST"])
@@ -943,6 +1000,20 @@ def api_modify():
         print(f"   📅 Date: {booking_data.get('pickup_date', 'Unknown')}")
         print(f"   🕐 Time: {booking_data.get('pickup_time', 'Unknown')}")
         print(f"   🔗 Reference: {booking_data.get('booking_reference', 'Unknown')}")
+        
+        # Store booking data on Render for lookup later
+        clean_phone = booking_data.get('phone', '').replace('+', '').replace('-', '').replace(' ', '')
+        booking_storage[clean_phone] = {
+            'customer_name': booking_data.get('customer_name', ''),
+            'phone': booking_data.get('phone', ''),
+            'pickup_address': booking_data.get('pickup_address', ''),
+            'destination': booking_data.get('destination', ''),
+            'pickup_date': booking_data.get('pickup_date', ''),
+            'pickup_time': booking_data.get('pickup_time', ''),
+            'booking_reference': booking_data.get('booking_reference', ''),
+            'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        print(f"💾 BOOKING SAVED TO RENDER STORAGE: {clean_phone}")
         
         # Here you can:
         # 1. Save to database
