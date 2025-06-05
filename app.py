@@ -17,6 +17,119 @@ RENDER_ENDPOINT = os.getenv("RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onr
 user_sessions = {}
 modification_bookings = {}
 
+def parse_booking_speech(speech_text):
+    """Parse booking details from speech input"""
+    booking_data = {
+        'name': '',
+        'pickup_address': '',
+        'destination': '',
+        'pickup_time': '',
+        'raw_speech': speech_text
+    }
+    
+    # Extract name (usually first few words or after "I'm" or "this is")
+    name_patterns = [
+        r"(?:I'm|this is|my name is)\s+([A-Za-z\s]+?)(?:\s+I|\s+and|\s+need|\s+want)",
+        r"^([A-Za-z\s]+?)(?:\s+I|\s+and|\s+need|\s+want)",
+    ]
+    
+    for pattern in name_patterns:
+        match = re.search(pattern, speech_text, re.IGNORECASE)
+        if match:
+            booking_data['name'] = match.group(1).strip()
+            break
+    
+    # Extract pickup address (from/pickup keywords)
+    pickup_patterns = [
+        r"from\s+(.+?)(?:\s+(?:to|going|destination|I am going))",
+        r"pickup(?:\s+from)?\s+(.+?)(?:\s+(?:to|going|destination))",
+        r"at\s+(.+?)(?:\s+(?:to|going|destination))"
+    ]
+    
+    for pattern in pickup_patterns:
+        match = re.search(pattern, speech_text, re.IGNORECASE)
+        if match:
+            booking_data['pickup_address'] = match.group(1).strip()
+            break
+    
+    # Extract destination (to/going keywords)
+    destination_patterns = [
+        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|today|tomorrow|on))",
+        r"(?:to|going to|destination)\s+(.+?)$"
+    ]
+    
+    for pattern in destination_patterns:
+        match = re.search(pattern, speech_text, re.IGNORECASE)
+        if match:
+            booking_data['destination'] = match.group(1).strip()
+            break
+    
+    # Extract time
+    time_patterns = [
+        r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"(?:today|tomorrow)\s+at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))"
+    ]
+    
+    for pattern in time_patterns:
+        match = re.search(pattern, speech_text, re.IGNORECASE)
+        if match:
+            booking_data['pickup_time'] = match.group(1).strip()
+            break
+    
+    return booking_data
+
+def send_booking_to_api(booking_data, caller_number):
+    """Send booking to TaxiCaller API or Render endpoint"""
+    try:
+        api_data = {
+            "customer_name": booking_data['name'],
+            "phone": caller_number,
+            "pickup_address": booking_data['pickup_address'],
+            "destination": booking_data['destination'],
+            "pickup_time": booking_data['pickup_time'],
+            "booking_reference": caller_number.replace('+', '').replace('-', '').replace(' ', ''),
+            "service": "taxi",
+            "created_via": "ai_ivr",
+            "raw_speech": booking_data['raw_speech']
+        }
+        
+        # Try TaxiCaller API first
+        if TAXICALLER_API_KEY:
+            headers = {
+                "Authorization": f"Bearer {TAXICALLER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(
+                f"{TAXICALLER_BASE_URL}/bookings",
+                json=api_data,
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code in [200, 201]:
+                print(f"✅ BOOKING SENT TO TAXICALLER: {response.status_code}")
+                return True, response.json()
+        
+        # Fallback to Render endpoint
+        response = requests.post(
+            RENDER_ENDPOINT,
+            json=api_data,
+            timeout=10
+        )
+        
+        if response.status_code in [200, 201]:
+            print(f"✅ BOOKING SENT TO RENDER: {response.status_code}")
+            return True, response.json()
+        else:
+            print(f"❌ API ERROR: {response.status_code} - {response.text}")
+            return False, None
+            
+    except Exception as e:
+        print(f"❌ API SEND ERROR: {str(e)}")
+        return False, None
+
 def detect_landline_location(caller_number):
     """Detect location from New Zealand landline area codes"""
     try:
@@ -473,67 +586,68 @@ def redirect_to(path):
 
 @app.route("/process_booking", methods=["POST"])
 def process_booking():
-    """Process new booking details with Wellington service area validation"""
-    data = request.form.get("SpeechResult", "")
+    """Process new booking details with enhanced parsing and API integration"""
+    speech_data = request.form.get("SpeechResult", "")
     confidence = request.form.get("Confidence", "0")
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
     
-    print(f"🎯 PROCESSING BOOKING: '{data}' (Confidence: {confidence})")
+    print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
     
-    # Simple confirmation for now
-    current_time = datetime.now()
-    booking_ref = f"KC{current_time.strftime('%Y%m%d%H%M%S')}"
+    # Parse the speech into structured booking data
+    booking_data = parse_booking_speech(speech_data)
     
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Thank you for your booking details. 
-        Your booking reference is {booking_ref}.
-        We'll process your taxi request and call you back shortly with driver details.
-        Thanks for choosing Kiwi Cabs!
-    </Say>
-    <Hangup/>
-</Response>"""
+    print(f"📋 PARSED BOOKING DATA:")
+    print(f"   👤 Name: {booking_data['name']}")
+    print(f"   📍 Pickup: {booking_data['pickup_address']}")
+    print(f"   🎯 Destination: {booking_data['destination']}")
+    print(f"   🕐 Time: {booking_data['pickup_time']}")
     
-    print(f"✅ BOOKING PROCESSED: Reference {booking_ref}")
-    print(f"📋 Customer said: '{data}'")
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/get_phone_for_booking", methods=["POST"])
-def get_phone_for_booking():
-    """Handle phone number for booking modification"""
-    phone_speech = request.form.get("SpeechResult", "")
-    
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Thanks! I'm checking for your booking. 
-        Our team will call you back shortly to help with your booking changes.
-        Thanks for calling Kiwi Cabs!
-    </Say>
-    <Hangup/>
-</Response>"""
-    
-    print(f"📞 MODIFICATION REQUEST: Phone search '{phone_speech}'")
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/health", methods=["GET"])
-def health():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "Kiwi Cabs AI IVR", "version": "3.0"}
-
-@app.route("/", methods=["GET"])
-def home():
-    """Root endpoint with service info"""
-    return {
-        "message": "Kiwi Cabs AI IVR System", 
-        "version": "3.0",
-        "endpoints": ["/voice", "/health"],
-        "service_area": "Wellington Region Only"
+    # Validate Wellington addresses
+    session_data = user_sessions.get(call_sid, {})
+    booking_addresses = {
+        'pickup': booking_data['pickup_address'],
+        'destination': booking_data['destination']
     }
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    
+    validation_result = validate_wellington_service_area(
+        session_data.get('caller_location'), 
+        booking_addresses
+    )
+    
+    if not validation_result['in_service_area']:
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        {validation_result['message']}
+        Thanks for calling!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+    
+    # Use caller's phone number as booking reference
+    clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
+    last_four = clean_phone[-4:] if len(clean_phone) >= 4 else clean_phone
+    
+    # Send booking to API
+    api_success, api_response = send_booking_to_api(booking_data, caller_number)
+    
+    if api_success:
+        print(f"✅ BOOKING SUCCESSFULLY SENT TO API")
+        confirmation_message = f"""
+        Perfect! Your booking has been confirmed.
+        Customer: {booking_data['name'] or 'valued customer'}
+        From: {booking_data['pickup_address'] or 'your location'}
+        To: {booking_data['destination'] or 'your destination'}
+        Time: {booking_data['pickup_time'] or 'as soon as possible'}
+        Your booking reference is your phone number: {caller_number}.
+        For quick reference, just use the last four digits: {last_four}.
+        We'll call you back shortly with driver details.
+        Thanks for choosing Kiwi Cabs!
+        """
+    else:
+        print(f"❌ BOOKING API FAILED - Using fallback")
+        confirmation_message = f"""
+        Thank you for your booking details.
+        We've received your request for a taxi and our team will process it manually.
+        Your booking reference is your phone number
