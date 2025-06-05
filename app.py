@@ -198,9 +198,12 @@ def process_booking():
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Thanks for that information. Let me confirm your booking details.
-        You said: {data}.
-        Is this correct? Say yes to confirm your booking, or say no if you need to make changes.
+        Let me confirm your booking details.
+        Name: {booking_data['taxicaller_format']['customer_name']}.
+        Pickup: {booking_data['taxicaller_format']['pickup_address']}.
+        Drop-off: {booking_data['taxicaller_format']['destination_address']}.
+        Time: {booking_data['taxicaller_format']['booking_time']} on {booking_data['taxicaller_format']['booking_date']}.
+        Is this correct? Say yes to confirm or no to make changes.
     </Say>
     <Gather input="speech" action="/confirm_booking" method="POST" timeout="6" language="en-NZ" speechTimeout="2" finishOnKey=""/>
 </Response>"""
@@ -540,23 +543,8 @@ def confirm_booking():
         # Send booking information to TaxiCaller via render
         render_success = send_booking_to_render(booking_data)
         
-        # Create simplified confirmation message with phone as reference
-        tc_format = booking_data['taxicaller_format']
-        if render_success:
-            success_message = f"""Excellent! Your taxi has been successfully booked and sent to our dispatch system.
-            Your phone number is your booking reference.
-            Pickup from {tc_format['pickup_address']}.
-            Going to {tc_format['destination_address']}.
-            On {tc_format['booking_date']} at {tc_format['booking_time']}.
-            Our driver will call you shortly.
-            Thanks for choosing Kiwi Cabs. Have a great day!"""
-        else:
-            success_message = f"""Your taxi booking has been confirmed.
-            Your phone number is your booking reference.
-            From {tc_format['pickup_address']} to {tc_format['destination_address']}.
-            On {tc_format['booking_date']} at {tc_format['booking_time']}.
-            Our team will contact you shortly to confirm pickup.
-            Thanks for choosing Kiwi Cabs!"""
+        # Simple confirmation message
+        success_message = "Thank you. Your booking is confirmed. Goodbye."
         
         return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
