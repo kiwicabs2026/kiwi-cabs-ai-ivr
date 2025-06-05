@@ -71,9 +71,10 @@ def parse_booking_speech(speech_text):
         if match:
             destination = match.group(1).strip()
             # Common speech recognition corrections
-            destination = destination.replace("wellington hospital", "Wellington Hospital")  # Keep hospital if that's what they said
+            destination = destination.replace("railway station", "Wellington Railway Station")
+            destination = destination.replace("train station", "Wellington Railway Station") 
             destination = destination.replace("air port", "airport") 
-            destination = destination.replace("wellington train station", "wellington railway station")
+            destination = destination.replace("hospital", "Wellington Hospital")
             booking_data['destination'] = destination
             break
     
@@ -489,6 +490,7 @@ def voice():
     <Gather action="/menu" input="speech" method="POST" timeout="6" language="en-NZ" speechTimeout="2" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             Kia ora, and welcome to Kiwi Cabs.
+            Please listen carefully as we have upgraded our booking system.
             I'm your AI assistant, here to help you book your taxi.
             This call may be recorded for training and security purposes.
             How can I help you today? You can book a new taxi, change an existing booking, or speak with our team.
@@ -560,8 +562,7 @@ def book_with_location():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
-        Please speak clearly and tell me your name, pickup address, destination, date, and what time you need the taxi.
-        For example: John Smith, pickup from 123 Main Street Wellington, going to Wellington Airport, date 7th of August 2025, time 3 PM.
+        Please speak clearly and tell me your name, pickup address, destination, date, and time.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
 </Response>"""
@@ -598,19 +599,20 @@ def process_booking():
     
     print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
     
-    # Check speech confidence
+    # Check speech confidence - be more lenient
     confidence_score = float(confidence) if confidence else 0.0
-    if confidence_score < 0.7:
-        print(f"⚠️ LOW CONFIDENCE ({confidence_score}) - asking caller to repeat")
+    if confidence_score < 0.3:  # Lower threshold from 0.7 to 0.3
+        print(f"⚠️ VERY LOW CONFIDENCE ({confidence_score}) - asking caller to repeat")
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't hear that clearly. Please speak slowly and clearly.
+        Sorry, I didn't hear that clearly. Please speak slowly.
         Tell me your name, pickup address, destination, date, and time.
-        For example: John Smith, pickup from 123 Main Street, going to Wellington Airport, date 7th August, time 3 PM.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
 </Response>""", mimetype="text/xml")
+    
+    print(f"✅ ACCEPTABLE CONFIDENCE ({confidence_score}) - processing speech")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
