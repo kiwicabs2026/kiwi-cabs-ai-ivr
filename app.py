@@ -741,32 +741,14 @@ def confirm_booking():
     if is_confirmed:
         print(f"✅ BOOKING CONFIRMED by caller")
         
-        # Clean up session data first
-        try:
-            if call_sid in user_sessions:
-                user_sessions[call_sid].pop('pending_booking', None)
-                print(f"🧹 SESSION CLEANED")
-        except:
-            print(f"⚠️ SESSION CLEANUP SKIPPED")
-        
-        # Send booking to API (but don't let it block the response)
-        try:
-            api_success, api_response = send_booking_to_api(booking_data, caller_number)
-            print(f"📡 API RESULT: {api_success}")
-        except:
-            print(f"📡 API SKIPPED")
-        
-        # Always give final confirmation message
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+        # Immediate response - no delays
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Thank you for choosing Kiwi Cabs! Your phone number is your booking reference. Goodbye!
     </Say>
     <Hangup/>
-</Response>"""
-        
-        print(f"✅ SENDING FINAL GOODBYE MESSAGE")
-        return Response(response, mimetype="text/xml")
+</Response>""", mimetype="text/xml")
         
     elif is_denied:
         print(f"❌ BOOKING DENIED by caller - asking for new details")
