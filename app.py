@@ -542,16 +542,17 @@ def menu():
 
     # MODIFICATION/CHANGE INTENT - lots of ways people say this
     modify_keywords = [
-        # Direct change requests
-        "change", "modify", "alter", "update", "adjust", "switch", "move", "shift",
+        # Direct change requests - MOST COMMON
+        "change", "modify", "alter", "update", "adjust", "switch", "move", "shift", "edit",
+        "change booking", "modify booking", "change my booking", "modify my booking",
         # Existing booking references  
         "i have a booking", "my booking", "existing booking", "current booking", "booked already",
-        "already booked", "previous booking", "earlier booking", "made a booking",
+        "already booked", "previous booking", "earlier booking", "made a booking", "have booking",
         # Time/detail changes
-        "change the time", "different time", "new time", "wrong time", "make it",
+        "change the time", "different time", "new time", "wrong time", "make it", "change it",
         "instead of", "not at", "change from", "change to", "move from", "move to",
         # Cancel requests
-        "cancel", "delete", "remove", "don't want", "not needed", "won't need"
+        "cancel", "delete", "remove", "don't want", "not needed", "won't need", "cancel booking"
     ]
 
     # NEW BOOKING INTENT - ways people ask for new rides
@@ -577,19 +578,27 @@ def menu():
         "not working", "difficult", "confused", "frustrated", "manager", "supervisor"
     ]
 
-    # SMART INTENT DETECTION - check modification first (most specific)
-    if any(keyword in data for keyword in modify_keywords):
-        print(f"🔧 DETECTED: MODIFICATION REQUEST")
+    # SMART INTENT DETECTION - check modification FIRST (most specific)
+    print(f"🔍 CHECKING FOR MODIFICATION KEYWORDS...")
+    modification_detected = any(keyword in data for keyword in modify_keywords)
+    print(f"🔍 MODIFICATION DETECTED: {modification_detected}")
+    
+    if modification_detected:
+        print(f"🔧 ROUTING TO: MODIFICATION FLOW")
         return redirect_to("/modify_booking")
-    elif any(keyword in data for keyword in human_keywords):
-        print(f"👤 DETECTED: HUMAN TRANSFER REQUEST") 
+    
+    print(f"🔍 CHECKING FOR HUMAN TRANSFER...")
+    if any(keyword in data for keyword in human_keywords):
+        print(f"👤 ROUTING TO: HUMAN TRANSFER") 
         return redirect_to("/team")
-    elif any(keyword in data for keyword in booking_keywords):
-        print(f"📞 DETECTED: NEW BOOKING REQUEST")
+    
+    print(f"🔍 CHECKING FOR NEW BOOKING...")
+    if any(keyword in data for keyword in booking_keywords):
+        print(f"📞 ROUTING TO: NEW BOOKING")
         return redirect_to("/book_with_location")
-    else:
-        print(f"❓ UNCLEAR INTENT - asking for clarification")
-        return clarify_menu()
+    
+    print(f"❓ NO CLEAR INTENT - asking for clarification")
+    return clarify_menu()
 
 def clarify_menu():
     """Ask for menu clarification"""
