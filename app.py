@@ -630,20 +630,18 @@ def process_booking():
     
     print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
     
-    # Check speech confidence - be very lenient  
-    confidence_score = float(confidence) if confidence else 0.0
-    if confidence_score < 0.1:  # Very low threshold - only reject completely empty speech
-        print(f"⚠️ NO SPEECH DETECTED ({confidence_score}) - asking caller to repeat")
+    # Process speech regardless of confidence - Twilio speech recognition issues
+    if not speech_data or speech_data.strip() == "":
+        print(f"⚠️ EMPTY SPEECH - asking caller to repeat")
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't hear anything. Please speak clearly.
-        Tell me your name, pickup address, destination, date, and time.
+        I didn't hear anything. Please speak your booking details clearly.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="25" language="en-NZ" speechTimeout="5" finishOnKey=""/>
 </Response>""", mimetype="text/xml")
     
-    print(f"✅ PROCESSING SPEECH ({confidence_score})")
+    print(f"✅ PROCESSING SPEECH: '{speech_data}'")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
