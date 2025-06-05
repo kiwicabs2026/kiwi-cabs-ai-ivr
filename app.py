@@ -779,18 +779,19 @@ def confirm_booking():
 
 @app.route("/modify", methods=["POST"])
 def modify():
-    """Start modification process"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
+    """Start modification process using caller's phone number"""
+    caller_number = request.form.get("From", "")
+    
+    response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No worries! I can help you change your booking.
         Your booking reference is the same phone number you used to make the original booking.
-        I can see you're calling from this number now, so I'll search for your existing booking.
+        I can see you're calling from {caller_number} now, so I'll search for your existing booking.
         Please hold while I look up your booking details.
     </Say>
     <Gather input="speech" action="/find_existing_booking" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Found your phone number in our system.
             What would you like to change? You can say change time, change pickup address, change destination, or cancel booking.
         </Say>
     </Gather>
