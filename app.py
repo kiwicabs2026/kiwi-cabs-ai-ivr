@@ -60,9 +60,9 @@ def parse_booking_speech(speech_text):
             booking_data['pickup_address'] = pickup
             break
     
-    # Extract destination - improved with corrections
+    # Extract destination - improved with corrections and cleanup
     destination_patterns = [
-        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|date|time|today|tomorrow|on|\d{1,2}/\d{1,2}/\d{4}|and my name))",
+        r"(?:to|going to|destination)\s+(.+?)(?:\s+(?:at|date|time|today|tomorrow|tonight|on|\d{1,2}/\d{1,2}/\d{4}|and my name))",
         r"(?:to|going to|destination)\s+(.+?)$"
     ]
     
@@ -70,6 +70,9 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             destination = match.group(1).strip()
+            # Clean up destination - remove extra words
+            destination = destination.replace(". Thank you", "").replace(" Thank you", "")
+            destination = destination.replace("wellington wellington", "wellington")
             # Common speech recognition corrections
             destination = destination.replace("railway station", "Wellington Railway Station")
             destination = destination.replace("train station", "Wellington Railway Station") 
@@ -78,20 +81,34 @@ def parse_booking_speech(speech_text):
             booking_data['destination'] = destination
             break
     
-    # Extract date - improved patterns for "tomorrow"
-    date_patterns = [
-        r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{4})",
-        r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{2})",
-        r"(\d{1,2}/\d{1,2}/\d{4})",
-        r"(\d{1,2}/\d{1,2}/\d{2})"
-    ]
+    # Extract date - improved with real-time calculation
+    from datetime import datetime, timedelta
     
-    # Check for "tomorrow" keyword
-    if "tomorrow" in speech_text.lower():
-        from datetime import datetime, timedelta
+    # TODAY keywords = current date when caller calls
+    today_keywords = ["tonight", "today", "later today", "this afternoon", 
+                      "this evening", "this morning"]
+    
+    # TOMORROW keywords = next day from when caller calls  
+    tomorrow_keywords = ["tomorrow", "tomorrow morning", "tomorrow afternoon",
+                         "tomorrow evening", "tomorrow night"]
+    
+    # Check for today keywords
+    if any(keyword in speech_text.lower() for keyword in today_keywords):
+        today = datetime.now()
+        booking_data['pickup_date'] = today.strftime("%d/%m/%Y")
+    # Check for tomorrow keywords
+    elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
         tomorrow = datetime.now() + timedelta(days=1)
         booking_data['pickup_date'] = tomorrow.strftime("%d/%m/%Y")
     else:
+        # Try to find explicit date formats
+        date_patterns = [
+            r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{4})",
+            r"(?:date|on)\s+(\d{1,2}/\d{1,2}/\d{2})",
+            r"(\d{1,2}/\d{1,2}/\d{4})",
+            r"(\d{1,2}/\d{1,2}/\d{2})"
+        ]
+        
         for pattern in date_patterns:
             match = re.search(pattern, speech_text, re.IGNORECASE)
             if match:
@@ -724,35 +741,31 @@ def confirm_booking():
     if is_confirmed:
         print(f"✅ BOOKING CONFIRMED by caller")
         
-        # Send booking to API
-        try:
-            api_success, api_response = send_booking_to_api(booking_data, caller_number)
-            
-            if api_success:
-                print(f"✅ BOOKING SUCCESSFULLY SENT TO API")
-                confirmation_message = "Booking confirmed! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
-            else:
-                print(f"❌ BOOKING API FAILED - Using fallback")
-                confirmation_message = "Booking received! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
-        except Exception as e:
-            print(f"❌ API ERROR: {str(e)}")
-            confirmation_message = "Booking received! Your phone number is your booking reference. Thanks for choosing Kiwi Cabs!"
-        
-        # Clean up session data safely
+        # Clean up session data first
         try:
             if call_sid in user_sessions:
                 user_sessions[call_sid].pop('pending_booking', None)
+                print(f"🧹 SESSION CLEANED")
         except:
-            pass
+            print(f"⚠️ SESSION CLEANUP SKIPPED")
         
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # Send booking to API (but don't let it block the response)
+        try:
+            api_success, api_response = send_booking_to_api(booking_data, caller_number)
+            print(f"📡 API RESULT: {api_success}")
+        except:
+            print(f"📡 API SKIPPED")
+        
+        # Always give final confirmation message
+        response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        {confirmation_message}
+        Thank you for choosing Kiwi Cabs! Your phone number is your booking reference. Goodbye!
     </Say>
     <Hangup/>
 </Response>"""
         
+        print(f"✅ SENDING FINAL GOODBYE MESSAGE")
         return Response(response, mimetype="text/xml")
         
     elif is_denied:
