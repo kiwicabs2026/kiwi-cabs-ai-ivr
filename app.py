@@ -692,6 +692,21 @@ def process_booking():
     print(f"   🕐 Time: {booking_data['pickup_time']}")
     print(f"   📅 Date: {booking_data['pickup_date']}")
     
+    # Check if pickup is from airport - reject these bookings
+    pickup_address = booking_data.get('pickup_address', '').lower()
+    airport_pickup_keywords = ['airport', 'wellington airport', 'wlg airport', 'terminal']
+    
+    if any(keyword in pickup_address for keyword in airport_pickup_keywords):
+        print(f"✈️ AIRPORT PICKUP DETECTED - rejecting booking from: {pickup_address}")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
+        Thank you for calling Kiwi Cabs and goodbye!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+
     # Validate Wellington addresses
     session_data = user_sessions.get(call_sid, {})
     booking_addresses = {
@@ -792,7 +807,7 @@ def confirm_booking():
     if is_confirmed:
         print(f"✅ BOOKING CONFIRMED by caller")
         
-        # Immediate response - no delays
+        # Immediate hangup - no other processing
         return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
