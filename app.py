@@ -1320,4 +1320,6 @@ def modify_booking():
     
     return Response(response, mimetype="text/xml")
 
-@app.route("/process_modification",
+@app.route("/process_modification", methods=["POST"])
+def process_modification():
+    # Add your function code here
