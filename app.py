@@ -387,8 +387,8 @@ def parse_booking_speech(speech_text):
     
     # Extract destination - MUCH simpler and cleaner
     destination_patterns = [
-        r"(?:to|going to)\s+([^.]+?)(?:\s+(?:tomorrow|today|tonight|at|\d|on|date))",
-        r"(?:to|going to)\s+([^.]+)$"
+        r"(?:to|going to|going)\s+([^.]+?)(?:\s+(?:tomorrow|today|tonight|at|\d|on|date|right now|now))",
+        r"(?:to|going to|going)\s+([^.]+)$"
     ]
     
     for pattern in destination_patterns:
@@ -397,12 +397,22 @@ def parse_booking_speech(speech_text):
             destination = match.group(1).strip()
             # Simple cleanup - just fix obvious problems
             destination = destination.replace("wellington wellington", "wellington")
+            
+            # Smart destination mapping - comprehensive airport detection
             if "hospital" in destination.lower():
                 destination = "Wellington Hospital"
-            elif "airport" in destination.lower():
+            elif any(airport_word in destination.lower() for airport_word in [
+                "airport", "the airport", "domestic airport", "international airport", 
+                "steward duff", "stewart duff", "steward duff driver airport", 
+                "stewart duff driver airport", "wlg airport", "wellington airport"
+            ]):
                 destination = "Wellington Airport"
-            elif "station" in destination.lower():
+            elif "station" in destination.lower() or "railway" in destination.lower():
                 destination = "Wellington Railway Station"
+            elif "te papa" in destination.lower():
+                destination = "Te Papa Museum"
+            elif "cbd" in destination.lower() or "city" in destination.lower():
+                destination = "Wellington CBD"
             
             booking_data['destination'] = destination
             break
@@ -1032,28 +1042,29 @@ def process_booking():
     missing_items = []
     missing_prompts = []
     
-    # Check NAME
-    if not booking_data['name'].strip():
+    # Check NAME - be more lenient
+    if not booking_data['name'].strip() or len(booking_data['name'].strip()) < 2:
         missing_items.append("name")
         missing_prompts.append("your name")
     
-    # Check PICKUP ADDRESS
-    if not booking_data['pickup_address'].strip():
+    # Check PICKUP ADDRESS - be more lenient
+    if not booking_data['pickup_address'].strip() or len(booking_data['pickup_address'].strip()) < 5:
         missing_items.append("pickup address")
         missing_prompts.append("your pickup address")
     
-    # Check DESTINATION - MANDATORY
-    if not booking_data['destination'].strip():
+    # Check DESTINATION - be more lenient
+    if not booking_data['destination'].strip() or len(booking_data['destination'].strip()) < 3:
         missing_items.append("destination")
         missing_prompts.append("your destination or drop-off location")
     
-    # Check for vague destinations
-    vague_destinations = ['there', 'here', 'that place', 'you know', 'same place', 'usual', 'work', 'home']
+    # Check for vague destinations - be more lenient
+    vague_destinations = ['there', 'here', 'that place', 'you know', 'same place', 'usual']
     destination_lower = booking_data['destination'].lower().strip()
     
-    if booking_data['destination'].strip() and (any(vague in destination_lower for vague in vague_destinations) or len(destination_lower) < 3):
+    # Only flag as vague if it's REALLY vague (not common places like "work", "home")
+    if booking_data['destination'].strip() and any(vague == destination_lower for vague in vague_destinations):
         missing_items.append("specific destination")
-        missing_prompts.append("a specific destination address or location name")
+        missing_prompts.append("a more specific destination address or location name")
     
     # If ANY required field is missing, ask specifically for what's missing
     if missing_items:
@@ -1129,8 +1140,12 @@ def process_booking():
     <Hangup/>
 </Response>""", mimetype="text/xml")
 
-    # Check if pickup is from airport - reject these bookings
-    airport_pickup_keywords = ['airport', 'wellington airport', 'wlg airport', 'terminal']
+    # Check if pickup is from ANY airport variation - reject these bookings
+    airport_pickup_keywords = [
+        'airport', 'wellington airport', 'wlg airport', 'terminal', 
+        'domestic airport', 'international airport', 'steward duff', 
+        'stewart duff', 'steward duff driver airport', 'stewart duff driver airport'
+    ]
     
     if any(keyword in pickup_address for keyword in airport_pickup_keywords):
         print(f"✈️ AIRPORT PICKUP DETECTED - rejecting booking from: {pickup_address}")
