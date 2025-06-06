@@ -240,7 +240,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_url,
             json=taxicaller_payload,
             headers=headers,
-            timeout=5
+            timeout=2
         )
         
         print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
@@ -1261,31 +1261,63 @@ def confirm_booking():
 
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
-    """Handle booking modification requests"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
+    """REAL booking modification - finds and reads existing booking"""
+    caller_number = request.form.get("From", "")
+    call_sid = request.form.get("CallSid", "")
+    clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
+    
+    print(f"🔧 MODIFY REQUEST from: {caller_number}")
+    
+    # Check if booking exists
+    if clean_phone in booking_storage:
+        booking = booking_storage[clean_phone]
+        
+        # Store in session for modification
+        if call_sid not in user_sessions:
+            user_sessions[call_sid] = {}
+        user_sessions[call_sid]['modifying_booking'] = booking
+        user_sessions[call_sid]['caller_number'] = caller_number
+        
+        # Read back their booking
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        To modify your booking, please call our office on 0800 549 422.
-        Our team will be happy to help you change your booking.
-        Thank you!
+        I found your booking.
+        Name: {booking['customer_name']}.
+        From: {booking['pickup_address']}.
+        To: {booking['destination']}.
+        Date: {booking['pickup_date']}.
+        Time: {booking['pickup_time']}.
+        
+        What would you like to change?
+        <break time="0.5s"/>
+        I am listening.
     </Say>
-    <Hangup/>
+    <Gather input="speech" 
+            action="/process_modification" 
+            method="POST" 
+            timeout="20" 
+            language="en-NZ" 
+            speechTimeout="2" 
+            finishOnKey="">
+        <Say></Say>
+    </Gather>
 </Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/team", methods=["POST"])
-def team():
-    """Transfer to human team"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
+        
+        print(f"📋 FOUND BOOKING: {booking['customer_name']} - {booking['pickup_address']} to {booking['destination']}")
+        
+    else:
+        # No booking found
+        print(f"❌ NO BOOKING FOUND for: {clean_phone}")
+        response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'll transfer you to our team now. Please hold.
+        Sorry, I couldn't find a booking for your phone number.
+        Press 1 to make a new booking, or press 3 to speak with our team.
     </Say>
-    <Dial>+64800549422</Dial>
+    <Redirect>/voice</Redirect>
 </Response>"""
+    
     return Response(response, mimetype="text/xml")
 
-# Run the app (optional for local testing)
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+@app.route("/process_modification",
