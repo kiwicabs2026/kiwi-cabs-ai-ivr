@@ -7,8 +7,15 @@ import re
 import urllib.parse
 import time
 import base64
-from google.cloud import speech
-from google.oauth2 import service_account
+
+# Try to import Google Cloud Speech, but make it optional
+try:
+    from google.cloud import speech
+    from google.oauth2 import service_account
+    GOOGLE_SPEECH_AVAILABLE = True
+except ImportError:
+    print("⚠️ Google Cloud Speech not available - will use Twilio transcription only")
+    GOOGLE_SPEECH_AVAILABLE = False
 
 app = Flask(__name__)
 
@@ -34,6 +41,9 @@ booking_storage = {}
 # Initialize Google Speech client
 def init_google_speech():
     """Initialize Google Speech client with credentials"""
+    if not GOOGLE_SPEECH_AVAILABLE:
+        return None
+        
     try:
         if GOOGLE_CREDENTIALS:
             # Decode base64 credentials
@@ -54,7 +64,7 @@ google_speech_client = init_google_speech()
 
 def transcribe_with_google(audio_url):
     """Use Google Speech for better transcription"""
-    if not google_speech_client:
+    if not GOOGLE_SPEECH_AVAILABLE or not google_speech_client:
         print("❌ Google Speech client not available")
         return None, 0
         
@@ -912,8 +922,8 @@ def process_booking():
     
     print(f"🎯 TWILIO TRANSCRIPTION: '{speech_data}' (Confidence: {confidence})")
     
-    # If Twilio confidence is too low or no speech detected, record for Google
-    if confidence < 0.8 or not speech_data.strip():
+    # If Twilio confidence is too low or no speech detected, try recording if Google is available
+    if GOOGLE_SPEECH_AVAILABLE and (confidence < 0.8 or not speech_data.strip()):
         print(f"⚠️ Low confidence ({confidence}) - switching to recording for Google Speech")
         
         # Store what we have so far
@@ -938,8 +948,8 @@ def process_booking():
 </Response>"""
         return Response(response, mimetype="text/xml")
     
-    # If Twilio confidence is good, continue with normal processing
-    print(f"✅ Good confidence - processing with Twilio transcription")
+    # If Google is not available or Twilio confidence is good, continue with normal processing
+    print(f"✅ Processing with Twilio transcription")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
@@ -1245,94 +1255,4 @@ def confirm_booking():
             'pickup_date': booking_data['pickup_date'],
             'pickup_time': booking_data['pickup_time'],
             'booking_reference': clean_phone,
-            'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'api_success': success,
-            'api_response': api_response
-        }
-        
-        print(f"💾 BOOKING STORED LOCALLY: {clean_phone}")
-        
-        # Clean up session
-        if call_sid in user_sessions:
-            del user_sessions[call_sid]
-        
-        # Response to caller
-        if success:
-            message = "Your booking is confirmed. Goodbye!"
-        else:
-            message = "Your booking is confirmed. Goodbye!"
-        
-        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        {message}
-    </Say>
-    <Hangup/>
-</Response>""", mimetype="text/xml")
-        
-    elif is_denied:
-        print(f"❌ BOOKING DENIED by caller - asking for new details")
-        
-        # Clean up session data
-        try:
-            if call_sid in user_sessions:
-                user_sessions[call_sid].pop('pending_booking', None)
-        except Exception as e:
-            print(f"⚠️ ERROR CLEANING SESSION: {str(e)}")
-        
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No problem! Let's try again.
-        Please tell me your name, pickup address, destination, date, and time.
-    </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
-</Response>"""
-        
-        return Response(response, mimetype="text/xml")
-        
-    else:
-        print(f"❓ UNCLEAR CONFIRMATION - asking again")
-        
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="5" language="en-NZ" speechTimeout="2" finishOnKey="">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Sorry, I didn't catch that. Please say yes to confirm or no to change.
-        </Say>
-    </Gather>
-    <Redirect>/confirm_booking</Redirect>
-</Response>"""
-        
-        return Response(response, mimetype="text/xml")
-
-@app.route("/modify_booking", methods=["POST"])
-def modify_booking():
-    """Handle booking modification requests"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        To modify your booking, please call our office on 0800 549 422.
-        Our team will be happy to help you change your booking.
-        Thank you!
-    </Say>
-    <Hangup/>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/team", methods=["POST"])
-def team():
-    """Transfer to human team"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'll transfer you to our team now. Please hold.
-    </Say>
-    <Dial>+64800549422</Dial>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-# Run the app (optional for local testing)
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+            'created_time
