@@ -194,7 +194,51 @@ def get_taxicaller_jwt():
         print(f"❌ Error generating JWT: {str(e)}")
         return None
 
-def send_booking_to_taxicaller(booking_data, caller_number):
+def cancel_booking_in_taxicaller(booking_id, caller_number):
+    """Cancel existing booking in TaxiCaller before creating modified one"""
+    try:
+        # Get JWT token
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            print("❌ No JWT token available for cancellation")
+            return False
+        
+        # TaxiCaller cancel endpoint
+        cancel_url = f"https://api.taxicaller.net/Booking/v1/bookings/{booking_id}/cancel"
+        
+        headers = {
+            "Authorization": f"Bearer {jwt_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        cancel_payload = {
+            "reason": "Customer modification request",
+            "cancelledBy": "IVR_System"
+        }
+        
+        print(f"🗑️ CANCELLING OLD BOOKING: {booking_id}")
+        
+        response = requests.post(
+            cancel_url,
+            json=cancel_payload,
+            headers=headers,
+            timeout=5
+        )
+        
+        print(f"📥 CANCEL RESPONSE: {response.status_code}")
+        print(f"   Body: {response.text}")
+        
+        if response.status_code in [200, 201, 204]:
+            print(f"✅ OLD BOOKING CANCELLED: {booking_id}")
+            return True
+        else:
+            print(f"❌ CANCEL FAILED: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ CANCEL ERROR: {str(e)}")
+        return False
     """Send booking to TaxiCaller API using JWT authentication"""
     try:
         # Get JWT token
@@ -1200,7 +1244,8 @@ def confirm_booking():
             'booking_reference': clean_phone,
             'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'api_success': success,
-            'api_response': api_response
+            'api_response': api_response,
+            'booking_id': api_response.get('bookingId') if api_response else None  # Store booking ID for future cancellation
         }
         
         print(f"💾 BOOKING STORED LOCALLY: {clean_phone}")
@@ -1379,8 +1424,46 @@ def process_modification():
     clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
     booking_storage[clean_phone] = updated_booking
     
-    # Send updated booking to API
-    success, api_response = send_booking_to_api(updated_booking, caller_number)
+    # Fix: Convert updated_booking to proper format for API
+    api_booking_data = {
+        'name': updated_booking.get('customer_name', ''),
+        'pickup_address': updated_booking.get('pickup_address', ''),
+        'destination': updated_booking.get('destination', ''),
+        'pickup_time': updated_booking.get('pickup_time', ''),
+        'pickup_date': updated_booking.get('pickup_date', ''),
+        'raw_speech': f"Modified booking: {speech_data}"
+    }
+    
+    print(f"📤 SENDING UPDATED BOOKING TO API:")
+    print(f"   👤 Name: {api_booking_data['name']}")
+    print(f"   📍 From: {api_booking_data['pickup_address']}")
+    print(f"   🎯 To: {api_booking_data['destination']}")
+    print(f"   📅 Date: {api_booking_data['pickup_date']}")
+    print(f"   🕐 Time: {api_booking_data['pickup_time']}")
+    
+    # CRITICAL: Cancel old booking first to prevent double dispatch
+    old_booking_id = updated_booking.get('booking_id') or updated_booking.get('api_response', {}).get('bookingId')
+    
+    if old_booking_id and TAXICALLER_API_KEY:
+        print(f"🗑️ STEP 1: Cancelling old booking {old_booking_id}")
+        cancel_success = cancel_booking_in_taxicaller(old_booking_id, caller_number)
+        
+        if cancel_success:
+            print(f"✅ Old booking cancelled successfully")
+        else:
+            print(f"⚠️ Warning: Could not cancel old booking - continuing with new booking")
+    else:
+        print(f"⚠️ No old booking ID found - creating new booking without cancellation")
+    
+    # STEP 2: Create new booking with updated details
+    print(f"📝 STEP 2: Creating new booking with updated details")
+    success, api_response = send_booking_to_api(api_booking_data, caller_number)
+    
+    # Update local storage with new booking ID
+    if success and api_response:
+        updated_booking['booking_id'] = api_response.get('bookingId')
+        updated_booking['api_response'] = api_response
+        booking_storage[clean_phone] = updated_booking
     
     return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
