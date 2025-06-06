@@ -96,6 +96,7 @@ def transcribe_with_google(audio_url):
                         "Willis Street", "Cuba Street", "Lambton Quay", "Courtenay Place",
                         "Taranaki Street", "Victoria Street", "Manners Street", "Dixon Street",
                         "Wakefield Street", "Cable Street", "Oriental Parade", "Kent Terrace",
+                        "Hobart Street", "Molesworth Street", "The Terrace", "Featherston Street",
                         # Wellington suburbs
                         "Wellington", "Lower Hutt", "Upper Hutt", "Porirua", "Petone",
                         "Island Bay", "Newtown", "Kilbirnie", "Miramar", "Karori",
@@ -346,8 +347,15 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             pickup = match.group(1).strip()
-            # Simple cleanup
+            # Simple cleanup and common corrections
             pickup = pickup.replace("number ", "").replace(" I'm", "")
+            
+            # Fix common speech recognition errors for Wellington streets
+            pickup = pickup.replace("63rd Street Melbourne", "63 Hobart Street")
+            pickup = pickup.replace("Melbourne Street", "Hobart Street")  # Common mishear
+            pickup = pickup.replace("mill street", "Willis Street")
+            pickup = pickup.replace("labor key", "Lambton Quay")
+            
             booking_data['pickup_address'] = pickup
             break
     
@@ -761,7 +769,8 @@ def is_wellington_address(address):
         'auckland', 'christchurch', 'hamilton', 'tauranga', 'dunedin',
         'palmerston north', 'hastings', 'napier', 'rotorua', 'new plymouth',
         'whanganui', 'invercargill', 'nelson', 'timaru', 'whangarei',
-        'gisborne', 'blenheim', 'masterton', 'levin', 'feilding'
+        'gisborne', 'blenheim', 'masterton', 'levin', 'feilding',
+        'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide'  # Add Australian cities
     ]
     
     for city in outside_cities:
@@ -948,8 +957,24 @@ def process_booking():
     print(f"   🕐 Time: {booking_data['pickup_time']}")
     print(f"   📅 Date: {booking_data['pickup_date']}")
     
-    # Check if pickup is from airport - reject these bookings
+    # Check if pickup is from outside Wellington - reject these bookings
     pickup_address = booking_data.get('pickup_address', '').lower()
+    outside_pickup_keywords = ['melbourne', 'sydney', 'auckland', 'christchurch', 'hamilton']
+    
+    if any(keyword in pickup_address for keyword in outside_pickup_keywords):
+        outside_city = next(keyword for keyword in outside_pickup_keywords if keyword in pickup_address)
+        print(f"🚫 OUTSIDE PICKUP DETECTED - rejecting booking from: {pickup_address}")
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, Kiwi Cabs operates only in the Wellington region. 
+        I can see you're requesting pickup from {outside_city.title()}, which is outside our service area.
+        Thank you for calling!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+
+    # Check if pickup is from airport - reject these bookings
     airport_pickup_keywords = ['airport', 'wellington airport', 'wlg airport', 'terminal']
     
     if any(keyword in pickup_address for keyword in airport_pickup_keywords):
@@ -1217,17 +1242,24 @@ def confirm_booking():
     <Redirect>/book_with_location</Redirect>
 </Response>""", mimetype="text/xml")
     
-    # Check for confirmation keywords
-    confirm_keywords = ["yes", "yeah", "yep", "true", "correct", "right", "agree", "confirm"]
-    deny_keywords = ["no", "nope", "wrong", "incorrect", "change", "edit", "modify"]
+    # Check for confirmation keywords - be more flexible
+    confirm_keywords = ["yes", "yeah", "yep", "true", "correct", "right", "agree", "confirm", "that's right", "that's correct"]
+    deny_keywords = ["no", "nope", "wrong", "incorrect", "change", "edit", "modify", "not right", "not correct"]
     
     is_confirmed = any(keyword in confirmation_speech for keyword in confirm_keywords)
     is_denied = any(keyword in confirmation_speech for keyword in deny_keywords)
     
-    print(f"🔍 CONFIRMATION CHECK: confirmed={is_confirmed}, denied={is_denied}")
+    # If they repeat booking details instead of yes/no, treat as confirmation
+    booking_repeat_keywords = ["taxi", "from", "to", "tomorrow", "today", "time", "street", "hospital", "airport"]
+    is_booking_repeat = sum(1 for keyword in booking_repeat_keywords if keyword in confirmation_speech) >= 3
     
-    if is_confirmed:
-        print(f"✅ BOOKING CONFIRMED by caller")
+    print(f"🔍 CONFIRMATION CHECK: confirmed={is_confirmed}, denied={is_denied}, repeat={is_booking_repeat}")
+    
+    if is_confirmed or is_booking_repeat:
+        if is_booking_repeat:
+            print(f"✅ BOOKING CONFIRMED by detail repetition (treating as 'yes')")
+        else:
+            print(f"✅ BOOKING CONFIRMED by caller")
         
         # IMPORTANT: Actually send the booking to API
         success, api_response = send_booking_to_api(booking_data, caller_number)
