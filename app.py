@@ -1247,7 +1247,7 @@ def confirm_booking():
         
         # Store booking locally for reference
         clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
-        booking_storage[clean_phone] = {
+         booking_storage[clean_phone] = {
             'customer_name': booking_data['name'],
             'phone': caller_number,
             'pickup_address': booking_data['pickup_address'],
@@ -1255,4 +1255,7 @@ def confirm_booking():
             'pickup_date': booking_data['pickup_date'],
             'pickup_time': booking_data['pickup_time'],
             'booking_reference': clean_phone,
-            'created_time
+            'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'api_success': success,
+            'api_response': api_response
+        }
