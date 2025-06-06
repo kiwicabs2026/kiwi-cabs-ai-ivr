@@ -1322,8 +1322,6 @@ def modify_booking():
 
 @app.route("/process_modification", methods=["POST"])
 def process_modification():
-    @app.route("/process_modification", methods=["POST"])
-def process_modification():
     """Process booking modification requests"""
     speech_data = request.form.get("SpeechResult", "")
     call_sid = request.form.get("CallSid", "")
@@ -1355,13 +1353,56 @@ def process_modification():
     <Hangup/>
 </Response>""", mimetype="text/xml")
     
-    # For other modifications
+    # Parse the modification speech for new details
+    new_booking_data = parse_booking_speech(speech_data)
+    
+    # Update the existing booking with new details
+    updated_booking = existing_booking.copy()
+    
+    if new_booking_data['pickup_time']:
+        updated_booking['pickup_time'] = new_booking_data['pickup_time']
+        print(f"🕐 TIME CHANGED: {updated_booking['pickup_time']}")
+    
+    if new_booking_data['pickup_date']:
+        updated_booking['pickup_date'] = new_booking_data['pickup_date']
+        print(f"📅 DATE CHANGED: {updated_booking['pickup_date']}")
+    
+    if new_booking_data['pickup_address']:
+        updated_booking['pickup_address'] = new_booking_data['pickup_address']
+        print(f"📍 PICKUP CHANGED: {updated_booking['pickup_address']}")
+    
+    if new_booking_data['destination']:
+        updated_booking['destination'] = new_booking_data['destination']
+        print(f"🎯 DESTINATION CHANGED: {updated_booking['destination']}")
+    
+    # Save the updated booking
+    clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
+    booking_storage[clean_phone] = updated_booking
+    
+    # Send updated booking to API
+    success, api_response = send_booking_to_api(updated_booking, caller_number)
+    
     return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I understand you'd like to make changes. 
-        Please call our team for booking modifications.
-        Thank you for calling Kiwi Cabs!
+        Your booking has been updated. Goodbye!
     </Say>
     <Hangup/>
 </Response>""", mimetype="text/xml")
+
+@app.route("/team", methods=["POST"])
+def team():
+    """Transfer to human team"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Please hold while I transfer you to our team.
+    </Say>
+    <Dial>
+        <Number>+6449774000</Number>
+    </Dial>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+if __name__ == "__main__":
+    app.run(debug=True)
