@@ -5,6 +5,10 @@ from flask import Flask, request, Response
 from datetime import datetime, timedelta
 import re
 import urllib.parse
+import time
+import base64
+from google.cloud import speech
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
@@ -13,11 +17,243 @@ TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
 TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY", "")
 RENDER_ENDPOINT = os.getenv("RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onrender.com/api/bookings")
 
+# Google Cloud and Twilio Configuration
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CLOUD_CREDENTIALS", "")  # Base64 encoded JSON
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+
+# JWT Token Cache
+TAXICALLER_JWT_CACHE = {"token": None, "expires_at": 0}
+
 # Session memory stores
 user_sessions = {}
 modification_bookings = {}
 # Simple booking storage - stores all bookings by phone number
 booking_storage = {}
+
+# Initialize Google Speech client
+def init_google_speech():
+    """Initialize Google Speech client with credentials"""
+    try:
+        if GOOGLE_CREDENTIALS:
+            # Decode base64 credentials
+            creds_json = base64.b64decode(GOOGLE_CREDENTIALS).decode('utf-8')
+            credentials = service_account.Credentials.from_service_account_info(
+                json.loads(creds_json)
+            )
+            print("✅ Google Speech client initialized successfully")
+            return speech.SpeechClient(credentials=credentials)
+        print("❌ No Google credentials found")
+        return None
+    except Exception as e:
+        print(f"❌ Failed to initialize Google Speech: {str(e)}")
+        return None
+
+# Initialize client once at startup
+google_speech_client = init_google_speech()
+
+def transcribe_with_google(audio_url):
+    """Use Google Speech for better transcription"""
+    if not google_speech_client:
+        print("❌ Google Speech client not available")
+        return None, 0
+        
+    try:
+        print(f"🎤 Fetching audio from: {audio_url}")
+        
+        # Download audio from Twilio
+        response = requests.get(audio_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
+        if response.status_code != 200:
+            print(f"❌ Failed to download audio: {response.status_code}")
+            return None, 0
+            
+        audio_content = response.content
+        print(f"✅ Downloaded audio: {len(audio_content)} bytes")
+        
+        # Configure Google Speech for NZ English
+        audio = speech.RecognitionAudio(content=audio_content)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=8000,  # Phone audio rate
+            language_code="en-NZ",   # New Zealand English
+            enable_automatic_punctuation=True,
+            enable_word_confidence=True,
+            # Add speech context for better recognition of NZ places
+            speech_contexts=[
+                speech.SpeechContext(
+                    phrases=[
+                        # Common NZ streets
+                        "Willis Street", "Cuba Street", "Lambton Quay", "Courtenay Place",
+                        "Taranaki Street", "Victoria Street", "Manners Street", "Dixon Street",
+                        "Wakefield Street", "Cable Street", "Oriental Parade", "Kent Terrace",
+                        # Wellington suburbs
+                        "Wellington", "Lower Hutt", "Upper Hutt", "Porirua", "Petone",
+                        "Island Bay", "Newtown", "Kilbirnie", "Miramar", "Karori",
+                        "Kelburn", "Thorndon", "Te Aro", "Mount Victoria", "Oriental Bay",
+                        "Wadestown", "Khandallah", "Ngaio", "Johnsonville", "Tawa",
+                        # Common destinations
+                        "Airport", "Hospital", "Railway Station", "Train Station",
+                        "Te Papa", "Westpac Stadium", "Sky Stadium", "Wellington Zoo",
+                        # Numbers as words
+                        "one", "two", "three", "four", "five", "six", "seven",
+                        "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+                        "fourteen", "fifteen", "twenty", "thirty", "forty", "fifty",
+                        # Time words
+                        "quarter past", "half past", "o'clock", "midnight", "midday",
+                        "morning", "afternoon", "evening", "tonight", "tomorrow", "today"
+                    ],
+                    boost=20.0  # Strongly boost recognition of these phrases
+                )
+            ],
+            # Get alternatives for comparison
+            max_alternatives=3,
+            # Use enhanced model for better accuracy
+            model="phone_call",
+            use_enhanced=True
+        )
+        
+        print("🔄 Sending to Google Speech API...")
+        
+        # Perform the transcription
+        response = google_speech_client.recognize(config=config, audio=audio)
+        
+        # Get the best result
+        if response.results:
+            best_result = response.results[0].alternatives[0]
+            confidence = best_result.confidence
+            transcript = best_result.transcript
+            
+            print(f"✅ GOOGLE SPEECH RESULT:")
+            print(f"   Transcript: {transcript}")
+            print(f"   Confidence: {confidence:.2f}")
+            
+            # Show alternatives if available
+            if len(response.results[0].alternatives) > 1:
+                print(f"   Other possibilities:")
+                for i, alt in enumerate(response.results[0].alternatives[1:], 1):
+                    print(f"     {i}. {alt.transcript} (confidence: {alt.confidence:.2f})")
+            
+            return transcript, confidence
+        else:
+            print("❌ No speech detected by Google")
+            return None, 0
+        
+    except Exception as e:
+        print(f"❌ Google Speech Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, 0
+
+def get_taxicaller_jwt():
+    """Get or refresh JWT token for TaxiCaller API"""
+    # Check if we have a valid cached token
+    if TAXICALLER_JWT_CACHE["token"] and time.time() < TAXICALLER_JWT_CACHE["expires_at"]:
+        print("📌 Using cached JWT token")
+        return TAXICALLER_JWT_CACHE["token"]
+    
+    if not TAXICALLER_API_KEY:
+        print("❌ No TaxiCaller API key configured")
+        return None
+    
+    try:
+        # Generate new JWT token
+        jwt_url = f"https://api.taxicaller.net/AdminService/v1/jwt/for-key"
+        params = {
+            "key": TAXICALLER_API_KEY,
+            "sub": "*",  # All subjects
+            "ttl": "900"  # 15 minutes (max allowed)
+        }
+        
+        print(f"🔑 Generating new JWT token...")
+        response = requests.get(jwt_url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            jwt_token = response.text.strip()  # JWT is returned as plain text
+            
+            # Cache the token (expires in 14 minutes to be safe)
+            TAXICALLER_JWT_CACHE["token"] = jwt_token
+            TAXICALLER_JWT_CACHE["expires_at"] = time.time() + 840  # 14 minutes
+            
+            print(f"✅ JWT token generated successfully")
+            return jwt_token
+        else:
+            print(f"❌ Failed to generate JWT: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Error generating JWT: {str(e)}")
+        return None
+
+def send_booking_to_taxicaller(booking_data, caller_number):
+    """Send booking to TaxiCaller API using JWT authentication"""
+    try:
+        # Get JWT token
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            print("❌ No JWT token available")
+            return False, None
+        
+        # Prepare TaxiCaller booking payload
+        # Format date and time for TaxiCaller
+        # Convert DD/MM/YYYY to YYYY-MM-DD format if needed
+        date_parts = booking_data['pickup_date'].split('/')
+        formatted_date = f"{date_parts[2]}-{date_parts[1].zfill(2)}-{date_parts[0].zfill(2)}"
+        
+        taxicaller_payload = {
+            "bookingKey": f"IVR_{caller_number}_{int(time.time())}",
+            "passengerName": booking_data['name'],
+            "passengerPhone": caller_number,
+            "pickupAddress": booking_data['pickup_address'],
+            "destinationAddress": booking_data['destination'],
+            "pickupDate": formatted_date,
+            "pickupTime": booking_data['pickup_time'],
+            "numberOfPassengers": 1,
+            "paymentMethod": "CASH",
+            "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
+            "bookingSource": "IVR"
+        }
+        
+        # API endpoint for creating bookings
+        booking_url = "https://api.taxicaller.net/Booking/v1/bookings"
+        
+        headers = {
+            "Authorization": f"Bearer {jwt_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        print(f"📤 SENDING TO TAXICALLER:")
+        print(f"   URL: {booking_url}")
+        print(f"   Payload: {json.dumps(taxicaller_payload, indent=2)}")
+        
+        response = requests.post(
+            booking_url,
+            json=taxicaller_payload,
+            headers=headers,
+            timeout=15
+        )
+        
+        print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+        print(f"   Body: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            response_data = response.json()
+            booking_id = response_data.get('bookingId', 'Unknown')
+            
+            print(f"✅ BOOKING CREATED IN TAXICALLER")
+            print(f"   Booking ID: {booking_id}")
+            
+            return True, response_data
+        else:
+            print(f"❌ TAXICALLER API ERROR: {response.status_code}")
+            print(f"   Error: {response.text}")
+            return False, None
+            
+    except Exception as e:
+        print(f"❌ TAXICALLER API ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False, None
 
 def parse_booking_speech(speech_text):
     """Parse booking details from speech input including NZ date format"""
@@ -154,6 +390,15 @@ def parse_booking_speech(speech_text):
 
 def send_booking_to_api(booking_data, caller_number):
     """Send booking to TaxiCaller API or Render endpoint"""
+    # First try TaxiCaller if API key is configured
+    if TAXICALLER_API_KEY:
+        success, response = send_booking_to_taxicaller(booking_data, caller_number)
+        if success:
+            return success, response
+        else:
+            print("⚠️ TaxiCaller failed, falling back to Render endpoint")
+    
+    # Original fallback code to Render endpoint
     try:
         api_data = {
             "customer_name": booking_data['name'],
@@ -167,24 +412,6 @@ def send_booking_to_api(booking_data, caller_number):
             "created_via": "ai_ivr",
             "raw_speech": booking_data['raw_speech']
         }
-        
-        # Try TaxiCaller API first
-        if TAXICALLER_API_KEY:
-            headers = {
-                "Authorization": f"Bearer {TAXICALLER_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            response = requests.post(
-                f"{TAXICALLER_BASE_URL}/bookings",
-                json=api_data,
-                headers=headers,
-                timeout=10
-            )
-            
-            if response.status_code in [200, 201]:
-                print(f"✅ BOOKING SENT TO TAXICALLER: {response.status_code}")
-                return True, response.json()
         
         # Fallback to Render endpoint
         response = requests.post(
@@ -628,13 +855,21 @@ def book_with_location():
     
     print(f"✅ CALL WITHIN WELLINGTON SERVICE AREA - proceeding with booking")
     
+    # First try with Twilio speech recognition
     response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
         Please speak clearly and tell me your name, pickup address, destination, date, and time.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
+    <Gather input="speech" 
+            action="/process_booking" 
+            method="POST" 
+            timeout="20" 
+            language="en-NZ" 
+            speechTimeout="4" 
+            finishOnKey="" 
+            enhanced="true"/>
 </Response>"""
     return Response(response_xml, mimetype="text/xml")
 
@@ -661,26 +896,42 @@ def outside_service_area():
 
 @app.route("/process_booking", methods=["POST"])
 def process_booking():
-    """Process new booking details with enhanced parsing - confirmation step"""
+    """Process new booking details with Google Speech fallback"""
     speech_data = request.form.get("SpeechResult", "")
-    confidence = request.form.get("Confidence", "0")
+    confidence = float(request.form.get("Confidence", "0"))
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
     
-    print(f"🎯 PROCESSING BOOKING: '{speech_data}' (Confidence: {confidence})")
+    print(f"🎯 TWILIO TRANSCRIPTION: '{speech_data}' (Confidence: {confidence})")
     
-    # Process speech regardless of confidence - Twilio speech recognition issues
-    if not speech_data or speech_data.strip() == "":
-        print(f"⚠️ EMPTY SPEECH - asking caller to repeat")
-        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+    # If Twilio confidence is too low or no speech detected, record for Google
+    if confidence < 0.8 or not speech_data.strip():
+        print(f"⚠️ Low confidence ({confidence}) - switching to recording for Google Speech")
+        
+        # Store what we have so far
+        if call_sid not in user_sessions:
+            user_sessions[call_sid] = {}
+        user_sessions[call_sid]['low_confidence'] = True
+        user_sessions[call_sid]['caller_number'] = caller_number
+        
+        # Record the audio for Google Speech processing
+        response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I didn't hear anything. Please speak your booking details clearly.
+        Sorry, I didn't catch that clearly. Please repeat your booking details.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="25" language="en-NZ" speechTimeout="5" finishOnKey=""/>
-</Response>""", mimetype="text/xml")
+    <Record action="/process_booking_with_google" 
+            method="POST" 
+            maxLength="30" 
+            timeout="5"
+            speechTimeout="3"
+            finishOnKey="#"
+            playBeep="false"/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
     
-    print(f"✅ PROCESSING SPEECH: '{speech_data}'")
+    # If Twilio confidence is good, continue with normal processing
+    print(f"✅ Good confidence - processing with Twilio transcription")
     
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
@@ -792,6 +1043,151 @@ def process_booking():
     
     return Response(response, mimetype="text/xml")
 
+@app.route("/process_booking_with_google", methods=["POST"])
+def process_booking_with_google():
+    """Process booking using Google Speech transcription"""
+    recording_url = request.form.get("RecordingUrl", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+    
+    if not recording_url:
+        print("❌ No recording URL provided")
+        return redirect_to("/book_with_location")
+    
+    print(f"🎙️ Processing recording with Google Speech: {recording_url}")
+    
+    # Use Google Speech to transcribe
+    transcript, confidence = transcribe_with_google(recording_url)
+    
+    if not transcript:
+        print("❌ Google Speech failed - asking caller to try again")
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'm having trouble understanding. Let's try one more time.
+        Please speak slowly and clearly.
+    </Say>
+    <Gather input="speech" 
+            action="/process_booking" 
+            method="POST" 
+            timeout="20" 
+            language="en-NZ" 
+            speechTimeout="4" 
+            finishOnKey=""/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+    
+    print(f"✅ GOOGLE TRANSCRIPTION: '{transcript}' (Confidence: {confidence})")
+    
+    # Parse the speech into structured booking data
+    booking_data = parse_booking_speech(transcript)
+    
+    print(f"📋 PARSED BOOKING DATA (from Google):")
+    print(f"   👤 Name: {booking_data['name']}")
+    print(f"   📍 Pickup: {booking_data['pickup_address']}")
+    print(f"   🎯 Destination: {booking_data['destination']}")
+    print(f"   🕐 Time: {booking_data['pickup_time']}")
+    print(f"   📅 Date: {booking_data['pickup_date']}")
+    
+    # Check if pickup is from airport - reject these bookings
+    pickup_address = booking_data.get('pickup_address', '').lower()
+    airport_pickup_keywords = ['airport', 'wellington airport', 'wlg airport', 'terminal']
+    
+    if any(keyword in pickup_address for keyword in airport_pickup_keywords):
+        print(f"✈️ AIRPORT PICKUP DETECTED - rejecting booking from: {pickup_address}")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
+        Thank you for calling Kiwi Cabs and goodbye!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+
+    # Validate Wellington addresses
+    session_data = user_sessions.get(call_sid, {})
+    booking_addresses = {
+        'pickup': booking_data['pickup_address'],
+        'destination': booking_data['destination']
+    }
+    
+    validation_result = validate_wellington_service_area(
+        session_data.get('caller_location'), 
+        booking_addresses
+    )
+    
+    if not validation_result['in_service_area']:
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        {validation_result['message']}
+        Thanks for calling!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+    
+    # Check if we got enough booking details
+    missing_details = []
+    if not booking_data['name']:
+        missing_details.append("name")
+    if not booking_data['pickup_address']:
+        missing_details.append("pickup address")
+    if not booking_data['destination']:
+        missing_details.append("destination")
+    
+    if len(missing_details) >= 2:
+        print(f"❓ MISSING DETAILS: {missing_details} - asking caller to repeat")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I didn't get all your details clearly. 
+        Please repeat your name, pickup address, destination, date, and time.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey=""/>
+</Response>""", mimetype="text/xml")
+
+    # Store booking data in session for confirmation
+    if call_sid not in user_sessions:
+        user_sessions[call_sid] = {}
+    user_sessions[call_sid]['pending_booking'] = booking_data
+    user_sessions[call_sid]['caller_number'] = caller_number
+    user_sessions[call_sid]['used_google'] = True  # Track that we used Google
+    
+    # Create confirmation message
+    confirmation_parts = []
+    
+    if booking_data['name']:
+        confirmation_parts.append(booking_data['name'])
+    
+    if booking_data['pickup_address']:
+        confirmation_parts.append(f"from {booking_data['pickup_address']}")
+    
+    if booking_data['destination']:
+        confirmation_parts.append(f"to {booking_data['destination']}")
+    
+    if booking_data['pickup_date']:
+        confirmation_parts.append(booking_data['pickup_date'])
+    
+    if booking_data['pickup_time']:
+        confirmation_parts.append(booking_data['pickup_time'])
+    
+    confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
+    
+    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            {confirmation_text}.
+            Is this correct? Say yes to confirm or no to make changes.
+        </Say>
+    </Gather>
+    <Redirect>/process_booking</Redirect>
+</Response>"""
+    
+    print(f"❓ AWAITING CONFIRMATION for booking: {booking_data['name']} - {booking_data['pickup_address']} to {booking_data['destination']}")
+    
+    return Response(response, mimetype="text/xml")
+
 @app.route("/confirm_booking", methods=["POST"])
 def confirm_booking():
     """Handle booking confirmation from caller"""
@@ -828,11 +1224,40 @@ def confirm_booking():
     if is_confirmed:
         print(f"✅ BOOKING CONFIRMED by caller")
         
-        # Immediate hangup - no other processing
-        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+        # IMPORTANT: Actually send the booking to API
+        success, api_response = send_booking_to_api(booking_data, caller_number)
+        
+        # Store booking locally for reference
+        clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
+        booking_storage[clean_phone] = {
+            'customer_name': booking_data['name'],
+            'phone': caller_number,
+            'pickup_address': booking_data['pickup_address'],
+            'destination': booking_data['destination'],
+            'pickup_date': booking_data['pickup_date'],
+            'pickup_time': booking_data['pickup_time'],
+            'booking_reference': clean_phone,
+            'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'api_success': success,
+            'api_response': api_response
+        }
+        
+        print(f"💾 BOOKING STORED LOCALLY: {clean_phone}")
+        
+        # Clean up session
+        if call_sid in user_sessions:
+            del user_sessions[call_sid]
+        
+        # Response to caller
+        if success:
+            message = "Perfect! Your taxi has been booked. Your booking reference is your phone number. You'll receive a confirmation shortly."
+        else:
+            message = "Your booking has been received and our team will process it shortly. Your phone number is your booking reference."
+        
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Thank you for choosing Kiwi Cabs! Your phone number is your booking reference. Goodbye!
+        {message} Thank you for choosing Kiwi Cabs!
     </Say>
     <Hangup/>
 </Response>""", mimetype="text/xml")
@@ -862,300 +1287,3 @@ def confirm_booking():
         print(f"❓ UNCLEAR CONFIRMATION - asking again")
         
         response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Sorry, I didn't catch that clearly.
-            Is the booking correct? Say yes to confirm or no to make changes.
-        </Say>
-    </Gather>
-    <Redirect>/process_booking</Redirect>
-</Response>"""
-        
-        return Response(response, mimetype="text/xml")
-
-def format_phone_for_speech(phone_number):
-    """Format phone number for natural speech"""
-    # Remove + and spaces
-    clean = phone_number.replace('+', '').replace('-', '').replace(' ', '')
-    
-    # Format as groups of digits
-    if len(clean) >= 10:
-        # For NZ numbers like 64220881234
-        if clean.startswith('64'):
-            formatted = f"zero six four, {clean[2:3]} {clean[3:4]} {clean[4:5]}, {clean[5:6]} {clean[6:7]} {clean[7:8]}, {clean[8:9]} {clean[9:10]} {clean[10:11]} {clean[11:12] if len(clean) > 11 else ''}"
-        else:
-            # Group digits naturally
-            formatted = ' '.join(clean[i:i+3] for i in range(0, len(clean), 3))
-    else:
-        # For shorter numbers
-        formatted = ' '.join(clean)
-    
-    return formatted.strip()
-
-@app.route("/modify_booking", methods=["POST"])
-def modify_booking():
-    """Smart modification process - finds existing booking and shows details"""
-    caller_number = request.form.get("From", "")
-    clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
-    
-    print(f"🔍 LOOKING FOR BOOKING: {clean_phone}")
-    print(f"📋 STORAGE CONTENTS: {list(booking_storage.keys())}")
-    
-    # Look up existing booking
-    if clean_phone in booking_storage:
-        booking = booking_storage[clean_phone]
-        print(f"✅ FOUND EXISTING BOOKING: {booking}")
-        
-        # Format phone for speech
-        readable_phone = format_phone_for_speech(caller_number)
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I found your booking: {booking['customer_name']}, {booking['pickup_date']}, {booking['pickup_time']}, from {booking['pickup_address']}, to {booking['destination']}.
-        What would you like to change?
-    </Say>
-    <Gather input="speech" action="/process_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="3" finishOnKey=""/>
-</Response>"""
-    else:
-        print(f"❌ NO BOOKING FOUND for {clean_phone}")
-        print(f"📋 Available bookings: {list(booking_storage.keys())}")
-        
-        # Format phone for speech  
-        readable_phone = format_phone_for_speech(caller_number)
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find a booking for your number {readable_phone}. 
-        You can make a new booking or speak with our team.
-        What would you like to do?
-    </Say>
-    <Gather input="speech" action="/menu" method="POST" timeout="10" language="en-NZ" speechTimeout="2" finishOnKey=""/>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_modification", methods=["POST"])
-def process_modification():
-    """Process the booking modification"""
-    modification_data = request.form.get("SpeechResult", "")
-    caller_number = request.form.get("From", "")
-    
-    print(f"🔧 PROCESSING MODIFICATION: '{modification_data}' for booking {caller_number}")
-    
-    # Try to update booking via API
-    try:
-        modification_request = {
-            "phone": caller_number,
-            "modification": modification_data,
-            "action": "modify_booking"
-        }
-        
-        # Send modification to our API endpoint
-        response = requests.post(
-            f"{RENDER_ENDPOINT.replace('/api/bookings', '/api/modify')}",
-            json=modification_request,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            print(f"✅ MODIFICATION SENT TO API")
-            message = f"Your booking has been updated. Your booking reference is {caller_number}. Thanks for calling Kiwi Cabs!"
-        else:
-            print(f"❌ MODIFICATION API FAILED")
-            message = f"I've noted your request to modify your booking. Our team will call you back shortly at {caller_number}. Thanks for calling Kiwi Cabs!"
-    except:
-        print(f"❌ MODIFICATION API ERROR")
-        message = f"I've noted your request to modify your booking. Our team will call you back shortly at {caller_number}. Thanks for calling Kiwi Cabs!"
-    
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        {message}
-    </Say>
-    <Hangup/>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/team", methods=["POST"])
-def team():
-    """Transfer to human team member"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No problem! I'm connecting you with one of our friendly team members now.
-        Please hold the line.
-    </Say>
-    <Dial>+6448966156</Dial>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-def redirect_to(path):
-    """Helper function for XML redirects"""
-    return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Redirect>{path}</Redirect>
-</Response>""", mimetype="text/xml")
-
-@app.route("/health", methods=["GET"])
-def health():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "Kiwi Cabs AI IVR", "version": "3.0"}
-
-@app.route("/api/modify", methods=["POST"])
-def api_modify():
-    """Handle booking modifications"""
-    try:
-        modification_data = request.get_json()
-        phone = modification_data.get('phone')
-        modification = modification_data.get('modification')
-        
-        print(f"🔧 MODIFICATION REQUEST:")
-        print(f"   📞 Phone: {phone}")
-        print(f"   📝 Change: {modification}")
-        
-        # Try to send modification to TaxiCaller
-        if TAXICALLER_API_KEY:
-            try:
-                modification_payload = {
-                    "customer_phone": phone,
-                    "modification_request": modification,
-                    "action": "update_booking"
-                }
-                
-                headers = {
-                    "Authorization": f"Bearer {TAXICALLER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                
-                response = requests.put(
-                    f"{TAXICALLER_BASE_URL}/bookings/modify",
-                    json=modification_payload,
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code in [200, 201]:
-                    print(f"✅ MODIFICATION SENT TO TAXICALLER")
-                    return {"status": "success", "message": "Booking modified"}, 200
-                    
-            except Exception as e:
-                print(f"❌ TAXICALLER MODIFICATION ERROR: {str(e)}")
-        
-        # Fallback: Log modification request
-        print(f"📝 MODIFICATION LOGGED")
-        return {"status": "logged", "message": "Modification request logged"}, 200
-        
-    except Exception as e:
-        print(f"❌ MODIFICATION ENDPOINT ERROR: {str(e)}")
-        return {"status": "error", "message": "Failed to process modification"}, 500
-    """Receive AI booking data and process it"""
-    try:
-        # Get booking data from AI
-        booking_data = request.get_json()
-        
-        print(f"📥 RECEIVED BOOKING DATA:")
-        print(f"   👤 Customer: {booking_data.get('customer_name', 'Unknown')}")
-        print(f"   📞 Phone: {booking_data.get('phone', 'Unknown')}")
-        print(f"   📍 Pickup: {booking_data.get('pickup_address', 'Unknown')}")
-        print(f"   🎯 Destination: {booking_data.get('destination', 'Unknown')}")
-        print(f"   📅 Date: {booking_data.get('pickup_date', 'Unknown')}")
-        print(f"   🕐 Time: {booking_data.get('pickup_time', 'Unknown')}")
-        print(f"   🔗 Reference: {booking_data.get('booking_reference', 'Unknown')}")
-        
-        # Store booking data on Render for lookup later
-        clean_phone = booking_data.get('phone', '').replace('+', '').replace('-', '').replace(' ', '')
-        booking_storage[clean_phone] = {
-            'customer_name': booking_data.get('customer_name', ''),
-            'phone': booking_data.get('phone', ''),
-            'pickup_address': booking_data.get('pickup_address', ''),
-            'destination': booking_data.get('destination', ''),
-            'pickup_date': booking_data.get('pickup_date', ''),
-            'pickup_time': booking_data.get('pickup_time', ''),
-            'booking_reference': booking_data.get('booking_reference', ''),
-            'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        print(f"💾 BOOKING SAVED TO RENDER STORAGE: {clean_phone}")
-        
-        # Here you can:
-        # 1. Save to database
-        # 2. Send to TaxiCaller API
-        # 3. Process the booking
-        
-        # For now, let's try to send to TaxiCaller if API key exists
-        if TAXICALLER_API_KEY:
-            try:
-                # Format data for TaxiCaller API
-                taxicaller_data = {
-                    "customer": {
-                        "name": booking_data.get('customer_name', ''),
-                        "phone": booking_data.get('phone', '')
-                    },
-                    "pickup": {
-                        "address": booking_data.get('pickup_address', ''),
-                        "date": booking_data.get('pickup_date', ''),
-                        "time": booking_data.get('pickup_time', '')
-                    },
-                    "destination": {
-                        "address": booking_data.get('destination', '')
-                    },
-                    "reference": booking_data.get('booking_reference', ''),
-                    "source": "ai_ivr"
-                }
-                
-                headers = {
-                    "Authorization": f"Bearer {TAXICALLER_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                
-                # Send to TaxiCaller
-                response = requests.post(
-                    f"{TAXICALLER_BASE_URL}/bookings",
-                    json=taxicaller_data,
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code in [200, 201]:
-                    print(f"✅ BOOKING SENT TO TAXICALLER SUCCESSFULLY")
-                    return {
-                        "status": "success",
-                        "message": "Booking created in TaxiCaller",
-                        "taxicaller_response": response.json()
-                    }, 200
-                else:
-                    print(f"❌ TAXICALLER ERROR: {response.status_code}")
-                    
-            except Exception as e:
-                print(f"❌ TAXICALLER API ERROR: {str(e)}")
-        
-        # Fallback: Just log the booking
-        print(f"📝 BOOKING LOGGED SUCCESSFULLY")
-        return {
-            "status": "success", 
-            "message": "Booking received and logged",
-            "booking_id": booking_data.get('booking_reference', 'unknown')
-        }, 200
-        
-    except Exception as e:
-        print(f"❌ BOOKING ENDPOINT ERROR: {str(e)}")
-        return {
-            "status": "error",
-            "message": "Failed to process booking"
-        }, 500
-
-@app.route("/", methods=["GET"])
-def home():
-    """Root endpoint with service info"""
-    return {
-        "message": "Kiwi Cabs AI IVR System", 
-        "version": "3.0",
-        "endpoints": ["/voice", "/health"],
-        "service_area": "Wellington Region Only"
-    }
-
-if __name__ == "__main__":
-    app.run(debug=True)
