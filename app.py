@@ -195,7 +195,7 @@ def get_taxicaller_jwt():
         print(f"❌ Error generating JWT: {str(e)}")
         return None
 
-def cancel_booking_in_taxicaller(booking_id, caller_number):
+def send_booking_to_taxicaller(booking_data, caller_number):
     """Cancel existing booking in TaxiCaller before creating modified one"""
     try:
         # Get JWT token
@@ -871,6 +871,7 @@ def book_with_location():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
         Please tell me your name, pickup address, destination, date, and time.
+        Make sure to clearly state where you want to go.
         <break time="0.5s"/>
         I am listening.
     </Say>
@@ -957,6 +958,90 @@ def process_booking():
     print(f"   🕐 Time: {booking_data['pickup_time']}")
     print(f"   📅 Date: {booking_data['pickup_date']}")
     
+    # COMPREHENSIVE VALIDATION: Check ALL required fields individually
+    missing_items = []
+    missing_prompts = []
+    
+    # Check NAME
+    if not booking_data['name'].strip():
+        missing_items.append("name")
+        missing_prompts.append("your name")
+    
+    # Check PICKUP ADDRESS
+    if not booking_data['pickup_address'].strip():
+        missing_items.append("pickup address")
+        missing_prompts.append("your pickup address")
+    
+    # Check DESTINATION - MANDATORY
+    if not booking_data['destination'].strip():
+        missing_items.append("destination")
+        missing_prompts.append("your destination or drop-off location")
+    
+    # Check for vague destinations
+    vague_destinations = ['there', 'here', 'that place', 'you know', 'same place', 'usual', 'work', 'home']
+    destination_lower = booking_data['destination'].lower().strip()
+    
+    if booking_data['destination'].strip() and (any(vague in destination_lower for vague in vague_destinations) or len(destination_lower) < 3):
+        missing_items.append("specific destination")
+        missing_prompts.append("a specific destination address or location name")
+    
+    # If ANY required field is missing, ask specifically for what's missing
+    if missing_items:
+        missing_text = ", ".join(missing_prompts[:-1])
+        if len(missing_prompts) > 1:
+            missing_text += f" and {missing_prompts[-1]}"
+        else:
+            missing_text = missing_prompts[0]
+        
+        print(f"❌ MISSING REQUIRED FIELDS: {missing_items}")
+        print(f"📝 ASKING FOR: {missing_text}")
+        
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I need {missing_text} to complete your booking.
+        Please provide the missing information.
+        <break time="0.5s"/>
+        I am listening.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true">
+        <Say></Say>
+    </Gather>
+</Response>""", mimetype="text/xml")
+
+    # ADDITIONAL: Check for reasonable pickup address (not just numbers)
+    pickup_lower = booking_data['pickup_address'].lower().strip()
+    if len(pickup_lower) < 5 or pickup_lower.isdigit():
+        print(f"❌ INCOMPLETE PICKUP ADDRESS: '{booking_data['pickup_address']}'")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I need your complete pickup address including street name and suburb.
+        Please tell me your full pickup address.
+        <break time="0.5s"/>
+        I am listening.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true">
+        <Say></Say>
+    </Gather>
+</Response>""", mimetype="text/xml")
+
+    # FINAL VALIDATION: Ensure destination is specific enough
+    if len(booking_data['destination'].strip()) < 5:
+        print(f"❌ DESTINATION TOO SHORT: '{booking_data['destination']}'")
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I need a more specific destination.
+        Please tell me the full address or location name where you want to go.
+        <break time="0.5s"/>
+        I am listening.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true">
+        <Say></Say>
+    </Gather>
+</Response>""", mimetype="text/xml")
+
     # Check if pickup is from outside Wellington - reject these bookings
     pickup_address = booking_data.get('pickup_address', '').lower()
     outside_pickup_keywords = ['melbourne', 'sydney', 'auckland', 'christchurch', 'hamilton']
@@ -1010,26 +1095,8 @@ def process_booking():
     <Hangup/>
 </Response>""", mimetype="text/xml")
     
-    # Check if we got enough booking details before asking for confirmation
-    missing_details = []
-    if not booking_data['name']:
-        missing_details.append("name")
-    if not booking_data['pickup_address']:
-        missing_details.append("pickup address")
-    if not booking_data['destination']:
-        missing_details.append("destination")
-    
-    # If missing critical details, ask to repeat instead of confirming garbage
-    if len(missing_details) >= 2:  # Missing 2 or more critical details
-        print(f"❓ MISSING DETAILS: {missing_details} - asking caller to repeat")
-        return Response("""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't get all your details clearly. 
-        Please repeat your name, pickup address, destination, date, and time.
-    </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey=""/>
-</Response>""", mimetype="text/xml")
+    # REMOVE OLD VALIDATION - replaced with comprehensive validation above
+    # All validation is now handled by the comprehensive check above
 
     # Store booking data in session for confirmation
     if call_sid not in user_sessions:
