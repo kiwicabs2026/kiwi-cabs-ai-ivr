@@ -454,32 +454,35 @@ def send_booking_to_api(booking_data, caller_number):
     """Send booking to TaxiCaller API or Render endpoint"""
     # First try TaxiCaller if API key is configured
     if TAXICALLER_API_KEY:
-        success, response = send_booking_to_taxicaller(booking_data, caller_number)
-        if success:
-            return success, response
-        else:
-            print("⚠️ TaxiCaller failed, falling back to Render endpoint")
+        try:
+            success, response = send_booking_to_taxicaller(booking_data, caller_number)
+            if success:
+                return success, response
+            else:
+                print("⚠️ TaxiCaller failed, falling back to Render endpoint")
+        except Exception as e:
+            print(f"⚠️ TaxiCaller error: {str(e)}, falling back to Render endpoint")
     
     # Original fallback code to Render endpoint
     try:
         api_data = {
-            "customer_name": booking_data['name'],
+            "customer_name": booking_data.get('name', ''),
             "phone": caller_number,
-            "pickup_address": booking_data['pickup_address'],
-            "destination": booking_data['destination'],
-            "pickup_time": booking_data['pickup_time'],
-            "pickup_date": booking_data['pickup_date'],
+            "pickup_address": booking_data.get('pickup_address', ''),
+            "destination": booking_data.get('destination', ''),
+            "pickup_time": booking_data.get('pickup_time', ''),
+            "pickup_date": booking_data.get('pickup_date', ''),
             "booking_reference": caller_number.replace('+', '').replace('-', '').replace(' ', ''),
             "service": "taxi",
             "created_via": "ai_ivr",
-            "raw_speech": booking_data['raw_speech']
+            "raw_speech": booking_data.get('raw_speech', '')
         }
         
         # Fallback to Render endpoint with reduced timeout
         response = requests.post(
             RENDER_ENDPOINT,
             json=api_data,
-            timeout=2  # Reduced from 30 to 5 seconds
+            timeout=5
         )
         
         if response.status_code in [200, 201]:
