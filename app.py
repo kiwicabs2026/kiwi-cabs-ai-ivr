@@ -1322,4 +1322,46 @@ def modify_booking():
 
 @app.route("/process_modification", methods=["POST"])
 def process_modification():
-    # Add your function code here
+    @app.route("/process_modification", methods=["POST"])
+def process_modification():
+    """Process booking modification requests"""
+    speech_data = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    
+    # Get the existing booking from session
+    session_data = user_sessions.get(call_sid, {})
+    existing_booking = session_data.get('modifying_booking', {})
+    caller_number = session_data.get('caller_number', '')
+    
+    if not existing_booking:
+        return redirect_to("/modify_booking")
+    
+    print(f"🔧 MODIFICATION REQUEST: '{speech_data}'")
+    
+    # Parse what they want to change
+    speech_lower = speech_data.lower()
+    
+    if "cancel" in speech_lower:
+        # Handle cancellation
+        clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
+        if clean_phone in booking_storage:
+            del booking_storage[clean_phone]
+        
+        return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking has been cancelled. Goodbye!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+    
+    # For other modifications
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I understand you'd like to make changes. 
+        Please call our team for booking modifications.
+        Thank you for calling Kiwi Cabs!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
