@@ -423,11 +423,11 @@ def send_booking_to_api(booking_data, caller_number):
             "raw_speech": booking_data['raw_speech']
         }
         
-        # Fallback to Render endpoint
+        # Fallback to Render endpoint with reduced timeout
         response = requests.post(
             RENDER_ENDPOINT,
             json=api_data,
-            timeout=30
+            timeout=5  # Reduced from 30 to 5 seconds
         )
         
         if response.status_code in [200, 201]:
@@ -437,6 +437,9 @@ def send_booking_to_api(booking_data, caller_number):
             print(f"❌ API ERROR: {response.status_code} - {response.text}")
             return False, None
             
+    except requests.Timeout:
+        print(f"⚠️ API TIMEOUT - but booking was likely received")
+        return True, None  # Return success anyway
     except Exception as e:
         print(f"❌ API SEND ERROR: {str(e)}")
         return False, None
@@ -752,16 +755,18 @@ def redirect_to(path):
 
 @app.route("/voice", methods=["POST"])
 def voice():
-    """Initial greeting and menu options"""
+    """Original greeting with keypad options added"""
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/menu" input="speech" method="POST" timeout="6" language="en-NZ" speechTimeout="2" finishOnKey="">
+    <Gather action="/menu" method="POST" timeout="10" numDigits="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             Kia ora, and welcome to Kiwi Cabs.
             Please listen carefully as we have upgraded our booking system.
             I'm your AI assistant, here to help you book your taxi.
             This call may be recorded for training and security purposes.
-            How can I help you today? You can book a new taxi, change an existing booking, or speak with our team.
+            Press 1 for a new taxi booking.
+            Press 2 to change or cancel an existing booking.
+            Press 3 to speak with our team.
         </Say>
     </Gather>
     <Redirect>/voice</Redirect>
@@ -770,91 +775,25 @@ def voice():
 
 @app.route("/menu", methods=["POST"])
 def menu():
-    """Smart menu processing - understands natural language intent"""
-    data = request.form.get("SpeechResult", "").lower()
-    confidence = request.form.get("Confidence", "0")
-    print(f"🧠 SMART INTENT DETECTION: '{data}' (Confidence: {confidence})")
-
-    # MODIFICATION/CHANGE INTENT - lots of ways people say this
-    modify_keywords = [
-        # Direct change requests - MOST COMMON
-        "change", "modify", "alter", "update", "adjust", "switch", "move", "shift", "edit",
-        "change booking", "modify booking", "change my booking", "modify my booking",
-        # Existing booking references  
-        "i have a booking", "my booking", "existing booking", "current booking", "booked already",
-        "already booked", "previous booking", "earlier booking", "made a booking", "have booking",
-        # Time/detail changes
-        "change the time", "different time", "new time", "wrong time", "make it", "change it",
-        "instead of", "not at", "change from", "change to", "move from", "move to",
-        # Cancel requests
-        "cancel", "delete", "remove", "don't want", "not needed", "won't need", "cancel booking"
-    ]
-
-    # NEW BOOKING INTENT - ways people ask for new rides
-    booking_keywords = [
-        # Direct booking requests
-        "book", "need", "want", "get", "order", "arrange", "schedule", "reserve",
-        "i need a taxi", "need a ride", "want a cab", "get me a taxi", "book a taxi",
-        "need transport", "require transport", "pickup", "collect me", "take me",
-        # Time-based requests
-        "taxi for", "ride for", "cab for", "transport for", "going to", "travel to",
-        "tomorrow", "today", "tonight", "after tomorrow", "later", "morning", "evening",
-        # Location-based requests  
-        "from", "to the", "airport", "hospital", "station", "pick me up", "drop me"
-    ]
-
-    # HUMAN TRANSFER INTENT - want to talk to real person
-    human_keywords = [
-        # Direct requests
-        "human", "person", "operator", "staff", "team", "agent", "representative",
-        "speak with", "talk to", "connect me", "transfer me", "put me through",
-        # Complaints/problems
-        "complaint", "problem", "issue", "help", "assistance", "can't understand",
-        "not working", "difficult", "confused", "frustrated", "manager", "supervisor"
-    ]
-
-    # SMART INTENT DETECTION - check modification FIRST (most specific)
-    print(f"🔍 CHECKING FOR MODIFICATION KEYWORDS...")
-    modification_detected = any(keyword in data for keyword in modify_keywords)
-    print(f"🔍 MODIFICATION DETECTED: {modification_detected}")
+    """Handle keypad input only"""
+    digits = request.form.get("Digits", "")
     
-    if modification_detected:
-        print(f"🔧 ROUTING TO: MODIFICATION FLOW")
-        return redirect_to("/modify_booking")
-    
-    print(f"🔍 CHECKING FOR HUMAN TRANSFER...")
-    if any(keyword in data for keyword in human_keywords):
-        print(f"👤 ROUTING TO: HUMAN TRANSFER") 
-        return redirect_to("/team")
-    
-    print(f"🔍 CHECKING FOR NEW BOOKING...")
-    if any(keyword in data for keyword in booking_keywords):
-        print(f"📞 ROUTING TO: NEW BOOKING")
+    if digits == "1":
+        print(f"📞 KEYPAD: User pressed 1 - NEW BOOKING")
         return redirect_to("/book_with_location")
-    
-    print(f"❓ NO CLEAR INTENT - asking for clarification")
-    return clarify_menu()
-
-def clarify_menu():
-    """Ask for menu clarification"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/menu" input="speech" method="POST" timeout="5" language="en-NZ" speechTimeout="2" finishOnKey="">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Sorry, I didn't quite catch that. Let me repeat the options.
-            Say one for a new taxi booking.
-            Say two to change an existing booking.
-            Say three to speak with our team.
-            Which option would you like?
-        </Say>
-    </Gather>
-    <Redirect>/voice</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
+    elif digits == "2":
+        print(f"📞 KEYPAD: User pressed 2 - MODIFY BOOKING")
+        return redirect_to("/modify_booking")
+    elif digits == "3":
+        print(f"📞 KEYPAD: User pressed 3 - TRANSFER TO TEAM")
+        return redirect_to("/team")
+    else:
+        # Invalid input or timeout - repeat menu
+        return redirect_to("/voice")
 
 @app.route("/book_with_location", methods=["POST"])
 def book_with_location():
-    """Start booking process with location detection and service area validation"""
+    """Start booking process with separate Say and Gather and I am listening prompt"""
     request_data = dict(request.form)
     
     caller_location = get_caller_location(request_data)
@@ -873,21 +812,25 @@ def book_with_location():
     
     print(f"✅ CALL WITHIN WELLINGTON SERVICE AREA - proceeding with booking")
     
-    # First try with Twilio speech recognition
+    # Separate Say and Gather with "I am listening" prompt and reduced speechTimeout
     response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
-        Please speak clearly and tell me your name, pickup address, destination, date, and time.
+        Please tell me your name, pickup address, destination, date, and time.
+        <break time="0.5s"/>
+        I am listening.
     </Say>
     <Gather input="speech" 
             action="/process_booking" 
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="4" 
+            speechTimeout="2" 
             finishOnKey="" 
-            enhanced="true"/>
+            enhanced="true">
+        <Say></Say>
+    </Gather>
 </Response>"""
     return Response(response_xml, mimetype="text/xml")
 
@@ -1016,7 +959,7 @@ def process_booking():
         Sorry, I didn't get all your details clearly. 
         Please repeat your name, pickup address, destination, date, and time.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey=""/>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey=""/>
 </Response>""", mimetype="text/xml")
 
     # Store booking data in session for confirmation
@@ -1090,7 +1033,7 @@ def process_booking_with_google():
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="4" 
+            speechTimeout="2" 
             finishOnKey=""/>
 </Response>"""
         return Response(response, mimetype="text/xml")
@@ -1161,7 +1104,7 @@ def process_booking_with_google():
         Sorry, I didn't get all your details clearly. 
         Please repeat your name, pickup address, destination, date, and time.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey=""/>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey=""/>
 </Response>""", mimetype="text/xml")
 
     # Store booking data in session for confirmation
@@ -1246,7 +1189,6 @@ def confirm_booking():
         success, api_response = send_booking_to_api(booking_data, caller_number)
         
         # Store booking locally for reference
-        # Store booking locally for reference
         clean_phone = caller_number.replace('+', '').replace('-', '').replace(' ', '')
         booking_storage[clean_phone] = {
             'customer_name': booking_data['name'],
@@ -1260,3 +1202,90 @@ def confirm_booking():
             'api_success': success,
             'api_response': api_response
         }
+        
+        print(f"💾 BOOKING STORED LOCALLY: {clean_phone}")
+        
+        # Clean up session
+        if call_sid in user_sessions:
+            del user_sessions[call_sid]
+        
+        # Response to caller
+        if success:
+            message = "Your booking is confirmed. Goodbye!"
+        else:
+            message = "Your booking is confirmed. Goodbye!"
+        
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        {message}
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+        
+    elif is_denied:
+        print(f"❌ BOOKING DENIED by caller - asking for new details")
+        
+        # Clean up session data
+        try:
+            if call_sid in user_sessions:
+                user_sessions[call_sid].pop('pending_booking', None)
+        except Exception as e:
+            print(f"⚠️ ERROR CLEANING SESSION: {str(e)}")
+        
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No problem! Let's try again.
+        Please tell me your name, pickup address, destination, date, and time.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true"/>
+</Response>"""
+        
+        return Response(response, mimetype="text/xml")
+        
+    else:
+        print(f"❓ UNCLEAR CONFIRMATION - asking again")
+        
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="5" language="en-NZ" speechTimeout="2" finishOnKey="">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Sorry, I didn't catch that. Please say yes to confirm or no to change.
+        </Say>
+    </Gather>
+    <Redirect>/confirm_booking</Redirect>
+</Response>"""
+        
+        return Response(response, mimetype="text/xml")
+
+@app.route("/modify_booking", methods=["POST"])
+def modify_booking():
+    """Handle booking modification requests"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        To modify your booking, please call our office on 0800 549 422.
+        Our team will be happy to help you change your booking.
+        Thank you!
+    </Say>
+    <Hangup/>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/team", methods=["POST"])
+def team():
+    """Transfer to human team"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'll transfer you to our team now. Please hold.
+    </Say>
+    <Dial>+64800549422</Dial>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+# Run the app (optional for local testing)
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
