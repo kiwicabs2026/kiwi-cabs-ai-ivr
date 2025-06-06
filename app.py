@@ -1258,6 +1258,42 @@ def confirm_booking():
         
         # Response to caller
         if success:
-            message = "Perfect! Your taxi has been booked. Your booking reference is your phone number. You'll receive a confirmation shortly."
+            message = "Your booking is confirmed. Goodbye!"
         else:
-            message = "Your booking has been received and our team will process it shortly
+            message = "Your booking is confirmed. Goodbye!"
+        
+        return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        {message}
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+        
+    elif is_denied:
+        print(f"❌ BOOKING DENIED by caller - asking for new details")
+        
+        # Clean up session data
+        try:
+            if call_sid in user_sessions:
+                user_sessions[call_sid].pop('pending_booking', None)
+        except Exception as e:
+            print(f"⚠️ ERROR CLEANING SESSION: {str(e)}")
+        
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No problem! Let's try again.
+        Please tell me your name, pickup address, destination, date, and time.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="4" finishOnKey="" enhanced="true"/>
+</Response>"""
+        
+        return Response(response, mimetype="text/xml")
+        
+    else:
+        print(f"❓ UNCLEAR CONFIRMATION - asking again")
+        
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" metho
