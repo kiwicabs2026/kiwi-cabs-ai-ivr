@@ -1296,4 +1296,43 @@ def confirm_booking():
         
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" metho
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="5" language="en-NZ" speechTimeout="2" finishOnKey="">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Sorry, I didn't catch that. Please say yes to confirm or no to change.
+        </Say>
+    </Gather>
+    <Redirect>/confirm_booking</Redirect>
+</Response>"""
+        
+        return Response(response, mimetype="text/xml")
+
+@app.route("/modify_booking", methods=["POST"])
+def modify_booking():
+    """Handle booking modification requests"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        To modify your booking, please call our office on 0800 549 422.
+        Our team will be happy to help you change your booking.
+        Thank you!
+    </Say>
+    <Hangup/>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/team", methods=["POST"])
+def team():
+    """Transfer to human team"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'll transfer you to our team now. Please hold.
+    </Say>
+    <Dial>+64800549422</Dial>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+# Run the app (optional for local testing)
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
