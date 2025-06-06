@@ -883,7 +883,7 @@ def book_with_location():
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="2" 
+            speechTimeout="1" 
             finishOnKey="" 
             enhanced="true">
         <Say></Say>
@@ -1007,7 +1007,7 @@ def process_booking():
         <break time="0.5s"/>
         I am listening.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="1" finishOnKey="" enhanced="true">
         <Say></Say>
     </Gather>
 </Response>""", mimetype="text/xml")
@@ -1098,16 +1098,16 @@ def process_booking():
     <Hangup/>
 </Response>""", mimetype="text/xml")
     
-    # REMOVE OLD VALIDATION - replaced with comprehensive validation above
-    # All validation is now handled by the comprehensive check above
-
-    # Store booking data in session for confirmation
+    # Store booking data in session for confirmation - MOVED TO TOP
     if call_sid not in user_sessions:
         user_sessions[call_sid] = {}
     user_sessions[call_sid]['pending_booking'] = booking_data
     user_sessions[call_sid]['caller_number'] = caller_number
-    
-    # Create clean confirmation message
+
+    # REMOVE OLD VALIDATION - replaced with comprehensive validation above
+    # All validation is now handled by the comprehensive check above
+
+    # Create clean confirmation message - ALWAYS ask for confirmation
     confirmation_parts = []
     
     if booking_data['name']:
@@ -1128,18 +1128,18 @@ def process_booking():
     # Join all parts with commas
     confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
     
+    print(f"❓ ASKING FOR CONFIRMATION: {confirmation_text}")
+    
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            {confirmation_text}.
-            Is this correct? Say yes to confirm or no to make changes.
+            Let me confirm your booking: {confirmation_text}.
+            Please say YES to confirm this booking, or NO to make changes.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
 </Response>"""
-    
-    print(f"❓ AWAITING CONFIRMATION for booking: {booking_data['name']} - {booking_data['pickup_address']} to {booking_data['destination']}")
     
     return Response(response, mimetype="text/xml")
 
