@@ -240,7 +240,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_url,
             json=taxicaller_payload,
             headers=headers,
-            timeout=15
+            timeout=2
         )
         
         print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
@@ -427,7 +427,7 @@ def send_booking_to_api(booking_data, caller_number):
         response = requests.post(
             RENDER_ENDPOINT,
             json=api_data,
-            timeout=5  # Reduced from 30 to 5 seconds
+            timeout=2  # Reduced from 30 to 5 seconds
         )
         
         if response.status_code in [200, 201]:
