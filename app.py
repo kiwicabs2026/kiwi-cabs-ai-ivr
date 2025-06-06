@@ -249,10 +249,32 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             return False, None
         
         # Prepare TaxiCaller booking payload
-        # Format date and time for TaxiCaller
-        # Convert DD/MM/YYYY to YYYY-MM-DD format if needed
-        date_parts = booking_data['pickup_date'].split('/')
-        formatted_date = f"{date_parts[2]}-{date_parts[1].zfill(2)}-{date_parts[0].zfill(2)}"
+        # Determine if booking is "Now" or "Later"
+        is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
+        
+        if is_immediate:
+            # For immediate bookings - use current date/time
+            current_time = datetime.now()
+            formatted_date = current_time.strftime("%Y-%m-%d")
+            formatted_time = current_time.strftime("%H:%M")
+            booking_when = "NOW"
+        else:
+            # For scheduled bookings - format the provided date/time
+            if booking_data['pickup_date']:
+                date_parts = booking_data['pickup_date'].split('/')
+                formatted_date = f"{date_parts[2]}-{date_parts[1].zfill(2)}-{date_parts[0].zfill(2)}"
+            else:
+                # Default to today if no date provided
+                formatted_date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Format time for TaxiCaller (24-hour format)
+            formatted_time = booking_data.get('pickup_time', '').replace(' AM', '').replace(' PM', '')
+            if 'PM' in booking_data.get('pickup_time', '') and not formatted_time.startswith('12'):
+                # Convert PM to 24-hour format
+                hour_parts = formatted_time.split(':')
+                if len(hour_parts) == 2:
+                    formatted_time = f"{int(hour_parts[0]) + 12}:{hour_parts[1]}"
+            booking_when = "LATER"
         
         taxicaller_payload = {
             "bookingKey": f"IVR_{caller_number}_{int(time.time())}",
@@ -261,7 +283,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             "pickupAddress": booking_data['pickup_address'],
             "destinationAddress": booking_data['destination'],
             "pickupDate": formatted_date,
-            "pickupTime": booking_data['pickup_time'],
+            "pickupTime": formatted_time,
+            "when": booking_when,  # "NOW" or "LATER"
             "numberOfPassengers": 1,
             "paymentMethod": "CASH",
             "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
@@ -279,6 +302,9 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         
         print(f"📤 SENDING TO TAXICALLER:")
         print(f"   URL: {booking_url}")
+        print(f"   When: {booking_when}")
+        print(f"   Date: {formatted_date}")
+        print(f"   Time: {formatted_time}")
         print(f"   Payload: {json.dumps(taxicaller_payload, indent=2)}")
         
         response = requests.post(
@@ -384,6 +410,9 @@ def parse_booking_speech(speech_text):
     # Extract date - intelligent parsing for natural language
     from datetime import datetime, timedelta
     
+    # RIGHT NOW / ASAP keywords = current date and immediate time
+    immediate_keywords = ["right now", "now", "asap", "as soon as possible", "immediately", "straight away"]
+    
     # AFTER TOMORROW keywords = day after tomorrow (+2 days)
     after_tomorrow_keywords = ["after tomorrow", "day after tomorrow", "the day after tomorrow"]
     
@@ -394,8 +423,13 @@ def parse_booking_speech(speech_text):
     today_keywords = ["tonight", "today", "later today", "this afternoon", 
                       "this evening", "this morning"]
     
-    # Smart parsing - check longer phrases first
-    if any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
+    # Smart parsing - check for immediate requests first
+    if any(keyword in speech_text.lower() for keyword in immediate_keywords):
+        current_time = datetime.now()
+        booking_data['pickup_date'] = current_time.strftime("%d/%m/%Y")
+        booking_data['pickup_time'] = "ASAP"  # or current_time.strftime("%I:%M %p")
+        print(f"🚨 IMMEDIATE BOOKING DETECTED: Setting to TODAY ASAP")
+    elif any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
         day_after_tomorrow = datetime.now() + timedelta(days=2)
         booking_data['pickup_date'] = day_after_tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
@@ -419,7 +453,7 @@ def parse_booking_speech(speech_text):
                 booking_data['pickup_date'] = match.group(1).strip()
                 break
     
-    # Extract time - improved patterns
+    # Extract time - improved patterns including immediate requests
     time_patterns = [
         r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
@@ -429,24 +463,32 @@ def parse_booking_speech(speech_text):
         r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))"
     ]
     
-    for pattern in time_patterns:
-        match = re.search(pattern, speech_text, re.IGNORECASE)
-        if match:
-            time_str = match.group(1).strip()
-            # Convert quarter past, half past
-            if "quarter past" in time_str:
-                time_str = time_str.replace("quarter past ", "").replace("quarter past", "")
-                hour = time_str.split()[0]
-                ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
-                time_str = f"{hour}:15 {ampm}"
-            elif "half past" in time_str:
-                time_str = time_str.replace("half past ", "").replace("half past", "")
-                hour = time_str.split()[0]
-                ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
-                time_str = f"{hour}:30 {ampm}"
-            
-            booking_data['pickup_time'] = time_str
-            break
+    # Check for immediate time requests first (overrides specific times)
+    immediate_time_keywords = ["right now", "now", "asap", "as soon as possible", "immediately", "straight away"]
+    
+    if any(keyword in speech_text.lower() for keyword in immediate_time_keywords):
+        booking_data['pickup_time'] = "ASAP"
+        print(f"🚨 IMMEDIATE TIME DETECTED: Setting to ASAP")
+    else:
+        # Look for specific times
+        for pattern in time_patterns:
+            match = re.search(pattern, speech_text, re.IGNORECASE)
+            if match:
+                time_str = match.group(1).strip()
+                # Convert quarter past, half past
+                if "quarter past" in time_str:
+                    time_str = time_str.replace("quarter past ", "").replace("quarter past", "")
+                    hour = time_str.split()[0]
+                    ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
+                    time_str = f"{hour}:15 {ampm}"
+                elif "half past" in time_str:
+                    time_str = time_str.replace("half past ", "").replace("half past", "")
+                    hour = time_str.split()[0]
+                    ampm = time_str.split()[-1] if len(time_str.split()) > 1 else ""
+                    time_str = f"{hour}:30 {ampm}"
+                
+                booking_data['pickup_time'] = time_str
+                break
     
     return booking_data
 
@@ -951,15 +993,40 @@ def process_booking():
     # If Google is not available or Twilio confidence is good, continue with normal processing
     print(f"✅ Processing with Twilio transcription")
     
+    # GET EXISTING DATA from session if available
+    existing_data = {}
+    if call_sid in user_sessions:
+        existing_data = user_sessions[call_sid].get('partial_booking', {})
+        print(f"📝 EXISTING DATA: {existing_data}")
+    
     # Parse the speech into structured booking data
     booking_data = parse_booking_speech(speech_data)
     
-    print(f"📋 PARSED BOOKING DATA:")
-    print(f"   👤 Name: {booking_data['name']}")
-    print(f"   📍 Pickup: {booking_data['pickup_address']}")
-    print(f"   🎯 Destination: {booking_data['destination']}")
-    print(f"   🕐 Time: {booking_data['pickup_time']}")
-    print(f"   📅 Date: {booking_data['pickup_date']}")
+    # MERGE new data with existing data - keep existing if new is empty
+    merged_booking = {
+        'name': booking_data['name'] or existing_data.get('name', ''),
+        'pickup_address': booking_data['pickup_address'] or existing_data.get('pickup_address', ''),
+        'destination': booking_data['destination'] or existing_data.get('destination', ''),
+        'pickup_time': booking_data['pickup_time'] or existing_data.get('pickup_time', ''),
+        'pickup_date': booking_data['pickup_date'] or existing_data.get('pickup_date', ''),
+        'raw_speech': f"{existing_data.get('raw_speech', '')} {speech_data}".strip()
+    }
+    
+    # Store merged data back in session
+    if call_sid not in user_sessions:
+        user_sessions[call_sid] = {}
+    user_sessions[call_sid]['partial_booking'] = merged_booking
+    user_sessions[call_sid]['caller_number'] = caller_number
+    
+    print(f"📋 MERGED BOOKING DATA:")
+    print(f"   👤 Name: {merged_booking['name']}")
+    print(f"   📍 Pickup: {merged_booking['pickup_address']}")
+    print(f"   🎯 Destination: {merged_booking['destination']}")
+    print(f"   🕐 Time: {merged_booking['pickup_time']}")
+    print(f"   📅 Date: {merged_booking['pickup_date']}")
+    
+    # Use merged_booking for all further processing
+    booking_data = merged_booking
     
     # COMPREHENSIVE VALIDATION: Check ALL required fields individually
     missing_items = []
