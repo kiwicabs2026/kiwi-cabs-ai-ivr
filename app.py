@@ -195,7 +195,7 @@ def get_taxicaller_jwt():
         print(f"❌ Error generating JWT: {str(e)}")
         return None
 
-def send_booking_to_taxicaller(booking_data, caller_number):
+def cancel_booking_in_taxicaller(booking_id, caller_number):
     """Cancel existing booking in TaxiCaller before creating modified one"""
     try:
         # Get JWT token
@@ -207,8 +207,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # TaxiCaller cancel endpoint
         cancel_url = f"https://api.taxicaller.net/Booking/v1/bookings/{booking_id}/cancel"
         
+        # Simple headers as per guide (no JWT needed)
         headers = {
-            "Authorization": f"Bearer {jwt_token}",
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
@@ -240,24 +240,22 @@ def send_booking_to_taxicaller(booking_data, caller_number):
     except Exception as e:
         print(f"❌ CANCEL ERROR: {str(e)}")
         return False
-    """Send booking to TaxiCaller API using JWT authentication"""
+
+def send_booking_to_taxicaller(booking_data, caller_number):
+    """Send booking to TaxiCaller API using simple API key authentication"""
     try:
-        # Get JWT token
-        jwt_token = get_taxicaller_jwt()
-        if not jwt_token:
-            print("❌ No JWT token available")
+        # Check if API key is available
+        if not TAXICALLER_API_KEY:
+            print("❌ No TaxiCaller API key available")
             return False, None
         
         # Prepare TaxiCaller booking payload
-        # Determine if booking is "Now" or "Later"
-        is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
-        
+        # Format time for TaxiCaller v2 API (ISO format)
         if is_immediate:
             # For immediate bookings - use current date/time
             current_time = datetime.now()
             formatted_date = current_time.strftime("%Y-%m-%d")
             formatted_time = current_time.strftime("%H:%M")
-            booking_when = "NOW"
         else:
             # For scheduled bookings - format the provided date/time
             if booking_data['pickup_date']:
@@ -268,31 +266,26 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 formatted_date = datetime.now().strftime("%Y-%m-%d")
             
             # Format time for TaxiCaller (24-hour format)
-            formatted_time = booking_data.get('pickup_time', '').replace(' AM', '').replace(' PM', '')
-            if 'PM' in booking_data.get('pickup_time', '') and not formatted_time.startswith('12'):
-                # Convert PM to 24-hour format
-                hour_parts = formatted_time.split(':')
-                if len(hour_parts) == 2:
-                    formatted_time = f"{int(hour_parts[0]) + 12}:{hour_parts[1]}"
-            booking_when = "LATER"
+            pickup_time = booking_data.get('pickup_time', '')
+            if 'AM' in pickup_time or 'PM' in pickup_time:
+                # Convert 12-hour to 24-hour format
+                time_obj = datetime.strptime(pickup_time.replace('.', '').strip(), '%I:%M %p')
+                formatted_time = time_obj.strftime("%H:%M")
+            else:
+                formatted_time = pickup_time.replace(' AM', '').replace(' PM', '')
         
+        # Simple payload format as per guide
         taxicaller_payload = {
-            "bookingKey": f"IVR_{caller_number}_{int(time.time())}",
-            "passengerName": booking_data['name'],
-            "passengerPhone": caller_number,
-            "pickupAddress": booking_data['pickup_address'],
-            "destinationAddress": booking_data['destination'],
-            "pickupDate": formatted_date,
-            "pickupTime": formatted_time,
-            "when": booking_when,  # "NOW" or "LATER"
-            "numberOfPassengers": 1,
-            "paymentMethod": "CASH",
-            "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
-            "bookingSource": "IVR"
+            'apiKey': TAXICALLER_API_KEY,
+            'customerPhone': caller_number,
+            'customerName': booking_data['name'],
+            'pickup': booking_data['pickup_address'],
+            'dropoff': booking_data['destination'],
+            'time': f"{formatted_date}T{formatted_time}:00+12:00"  # ISO format with NZ timezone
         }
         
-        # API endpoint for creating bookings
-        booking_url = "https://api.taxicaller.net/Booking/v1/bookings"
+        # API endpoint for creating bookings - using v2 as per guide
+        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
         
         headers = {
             "Authorization": f"Bearer {jwt_token}",
