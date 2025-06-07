@@ -1759,6 +1759,14 @@ def api_bookings():
             "status": "error",
             "message": "Failed to process booking"
         }, 500
+    @app.route("/generate_jwt", methods=["GET"])
+def generate_jwt_endpoint():
+    """Public endpoint to manually get a fresh TaxiCaller JWT"""
+    token = get_taxicaller_jwt()
+    if token:
+        return {"token": token}, 200
+    else:
+        return {"error": "Failed to generate JWT"}, 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
