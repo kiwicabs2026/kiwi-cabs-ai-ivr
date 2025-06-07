@@ -168,7 +168,7 @@ def get_taxicaller_jwt():
     
     try:
         # Generate new JWT token
-        jwt_url = f"https://api.taxicaller.net/AdminService/v1/jwt/for-key"
+        jwt_url = f"https://api.taxicaller.net/v1/jwt/for-key"
         params = {
             "key": TAXICALLER_API_KEY,
             "sub": "*",  # All subjects
