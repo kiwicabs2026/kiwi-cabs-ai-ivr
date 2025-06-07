@@ -1296,7 +1296,7 @@ def process_booking_with_google():
     print(f"🎙️ Processing recording with Google Speech: {recording_url}")
     
     # Use Google Speech to transcribe
-    transcript, confidence = transcribe_with_google(recording_url)ribe_with_google(recording_url)
+    transcript, confidence = transcribe_with_google(recording_url)
     
     if not transcript:
         print("❌ Google Speech failed - asking caller to try again")
