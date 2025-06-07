@@ -1,7 +1,7 @@
 import os
 import requests
 import json
-from flask import Flask, request, Response
+from flask import Flask, request, Response, jsonify
 from datetime import datetime, timedelta
 import re
 import urllib.parse
@@ -1764,10 +1764,9 @@ def generate_jwt_endpoint():
     """Public endpoint to manually get a fresh TaxiCaller JWT"""
     token = get_taxicaller_jwt()
     if token:
-        return {"token": token}, 200
+        return jsonify({"token": token}), 200
     else:
-        return {"error": "Failed to generate JWT"}, 500
-
+        return jsonify({"error": "Failed to generate JWT"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
