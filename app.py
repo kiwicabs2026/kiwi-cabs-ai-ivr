@@ -1031,6 +1031,8 @@ def process_booking():
     caller_number = request.form.get("From", "")
     
     print(f"🎯 TWILIO TRANSCRIPTION: '{speech_data}' (Confidence: {confidence})")
+    print(f"🔍 DEBUG: Entering process_booking function")
+    print(f"🔍 DEBUG: Call SID: {call_sid}")
     
     # If Twilio confidence is too low or no speech detected, try recording if Google is available
     if GOOGLE_SPEECH_AVAILABLE and (confidence < 0.8 or not speech_data.strip()):
