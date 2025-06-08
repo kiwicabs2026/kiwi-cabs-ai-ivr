@@ -1287,7 +1287,7 @@ def process_booking():
     <Redirect>/process_booking</Redirect>
 </Response>"""
     
-    return Response(response, mimetype="text/xml")import os
+    return Response(response, mimetype="text/xml")
 import requests
 import json
 from flask import Flask, request, Response, jsonify
