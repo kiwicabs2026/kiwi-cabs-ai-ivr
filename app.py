@@ -1467,7 +1467,6 @@ def confirm_booking():
 if is_confirmed:
     print(f"✅ BOOKING CONFIRMED by caller")
     success, api_response = send_booking_to_api(booking_data, caller_number)
-    # (rest of your submit logic)
     return Response("""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
@@ -1475,6 +1474,44 @@ if is_confirmed:
     </Say>
     <Hangup/>
 </Response>""", mimetype="text/xml")
+
+elif is_denied:
+    print(f"❌ BOOKING DENIED by caller - asking for new details")
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No problem. Please tell me your name, pickup address, destination, date, and time.
+        <break time="0.5s"/>
+        I am listening.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true"/>
+</Response>""", mimetype="text/xml")
+
+else:
+    # Repeat the confirmation question
+    confirmation_parts = []
+    if booking_data['name']:
+        confirmation_parts.append(booking_data['name'])
+    if booking_data['pickup_address']:
+        confirmation_parts.append(f"from {booking_data['pickup_address']}")
+    if booking_data['destination']:
+        confirmation_parts.append(f"to {booking_data['destination']}")
+    if booking_data['pickup_date']:
+        confirmation_parts.append(booking_data['pickup_date'])
+    if booking_data['pickup_time']:
+        confirmation_parts.append(booking_data['pickup_time'])
+    confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
+
+    return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Let me confirm your booking: {confirmation_text}.
+        Please say YES to confirm this booking, or NO to make changes.
+    </Say>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey=""/>
+    <Redirect>/process_booking</Redirect>
+</Response>""", mimetype="text/xml")
+
 
 elif is_denied:
     print(f"❌ BOOKING DENIED by caller - asking for new details")
