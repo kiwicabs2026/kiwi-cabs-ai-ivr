@@ -1513,6 +1513,17 @@ else:
 </Response>""", mimetype="text/xml")
 
 
+if is_confirmed:
+    print(f"✅ BOOKING CONFIRMED by caller")
+    success, api_response = send_booking_to_api(booking_data, caller_number)
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking is confirmed. Goodbye!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+
 elif is_denied:
     print(f"❌ BOOKING DENIED by caller - asking for new details")
     return Response("""<?xml version="1.0" encoding="UTF-8"?>
@@ -1526,14 +1537,27 @@ elif is_denied:
 </Response>""", mimetype="text/xml")
 
 else:
-    print(f"❓ UNCLEAR CONFIRMATION - asking again")
-    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+    # Repeat confirmation question logic here
+    confirmation_parts = []
+    if booking_data['name']:
+        confirmation_parts.append(booking_data['name'])
+    if booking_data['pickup_address']:
+        confirmation_parts.append(f"from {booking_data['pickup_address']}")
+    if booking_data['destination']:
+        confirmation_parts.append(f"to {booking_data['destination']}")
+    if booking_data['pickup_date']:
+        confirmation_parts.append(booking_data['pickup_date'])
+    if booking_data['pickup_time']:
+        confirmation_parts.append(booking_data['pickup_time'])
+    confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
+
+    return Response(f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Sorry, I didn't catch that. Please say yes to confirm, or no to update your details.
-        </Say>
-    </Gather>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Let me confirm your booking: {confirmation_text}.
+        Please say YES to confirm this booking, or NO to make changes.
+    </Say>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey=""/>
     <Redirect>/process_booking</Redirect>
 </Response>""", mimetype="text/xml")
 
