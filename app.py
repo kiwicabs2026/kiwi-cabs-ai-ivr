@@ -1278,7 +1278,7 @@ def process_booking():
     
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1" finishOnKey="">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="3" finishOnKey="">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             Let me confirm your booking: {confirmation_text}.
             Please say YES to confirm this booking, or NO to make changes.
