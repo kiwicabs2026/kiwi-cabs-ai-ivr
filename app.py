@@ -1267,6 +1267,10 @@ def process_booking():
     # Join all parts with commas
     confirmation_text = ", ".join(confirmation_parts) if confirmation_parts else "incomplete booking details"
     
+    print(f"🔍 DEBUG: Creating confirmation response")
+    print(f"🔍 DEBUG: confirmation_parts = {confirmation_parts}")
+    print(f"🔍 DEBUG: confirmation_text = '{confirmation_text}'")
+    print(f"🔍 DEBUG: About to create TwiML response")
     print(f"❓ ASKING FOR CONFIRMATION: {confirmation_text}")
     
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
