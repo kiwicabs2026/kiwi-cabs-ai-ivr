@@ -1760,6 +1760,7 @@ def api_bookings():
             "message": "Failed to process booking"
         }, 500
 @app.route("/generate_jwt", methods=["GET"])
+
 def generate_jwt_endpoint():
     """Public endpoint to manually get a fresh TaxiCaller JWT"""
     token = get_taxicaller_jwt()
