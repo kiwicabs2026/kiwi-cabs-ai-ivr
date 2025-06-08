@@ -2577,3 +2577,61 @@ def process_booking():
 </Response>"""
     
     return Response(response, mimetype="text/xml")
+    @app.route("/team", methods=["POST"])
+def team():
+    """Transfer to human team"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Please hold while I transfer you to our team.
+    </Say>
+    <Dial>
+        <Number>+648966156</Number>
+    </Dial>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/api/bookings", methods=["POST"])
+def api_bookings():
+    """Handle booking API requests - fallback endpoint"""
+    try:
+        booking_data = request.get_json()
+        
+        # Log the booking
+        print(f"📥 API BOOKING RECEIVED:")
+        print(f"   Customer: {booking_data.get('customer_name')}")
+        print(f"   Phone: {booking_data.get('phone')}")
+        print(f"   From: {booking_data.get('pickup_address')}")
+        print(f"   To: {booking_data.get('destination')}")
+        print(f"   Time: {booking_data.get('pickup_time')}")
+        print(f"   Date: {booking_data.get('pickup_date')}")
+        
+        # In a real implementation, save to database here
+        # For now, just acknowledge receipt
+        
+        return {
+            "status": "success",
+            "message": "Booking received",
+            "booking_reference": booking_data.get('booking_reference', 'REF123'),
+            "estimated_arrival": "10-15 minutes"
+        }, 201
+        
+    except Exception as e:
+        print(f"❌ API Booking Error: {str(e)}")
+        return {
+            "status": "error",
+            "message": "Failed to process booking"
+        }, 500
+
+@app.route("/generate_jwt", methods=["GET"])
+def generate_jwt_endpoint():
+    """Public endpoint to manually get a fresh TaxiCaller JWT"""
+    token = get_taxicaller_jwt()
+    if token:
+        return jsonify({"token": token}), 200
+    else:
+        return jsonify({"error": "Failed to generate JWT"}), 500
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
