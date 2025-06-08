@@ -1462,8 +1462,44 @@ def confirm_booking():
     confirm_keywords = ["yes", "yeah", "yep", "true", "correct", "right", "agree", "confirm", "that's right", "that's correct"]
     deny_keywords = ["no", "nope", "wrong", "incorrect", "change", "edit", "modify", "not right", "not correct"]
     
-    is_confirmed = any(keyword in confirmation_speech for keyword in confirm_keywords)
-    is_denied = any(keyword in confirmation_speech for keyword in deny_keywords)
+    print(f"🔍 CONFIRMATION CHECK: confirmed={is_confirmed}, denied={is_denied}")
+
+if is_confirmed:
+    print(f"✅ BOOKING CONFIRMED by caller")
+    success, api_response = send_booking_to_api(booking_data, caller_number)
+    # (rest of your submit logic)
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking is confirmed. Goodbye!
+    </Say>
+    <Hangup/>
+</Response>""", mimetype="text/xml")
+
+elif is_denied:
+    print(f"❌ BOOKING DENIED by caller - asking for new details")
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No problem. Please tell me your name, pickup address, destination, date, and time.
+        <break time="0.5s"/>
+        I am listening.
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2" finishOnKey="" enhanced="true"/>
+</Response>""", mimetype="text/xml")
+
+else:
+    print(f"❓ UNCLEAR CONFIRMATION - asking again")
+    return Response("""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="8" language="en-NZ" speechTimeout="2" finishOnKey="">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Sorry, I didn't catch that. Please say yes to confirm, or no to update your details.
+        </Say>
+    </Gather>
+    <Redirect>/process_booking</Redirect>
+</Response>""", mimetype="text/xml")
+
     
     # If they repeat booking details instead of yes/no, treat as confirmation
     booking_repeat_keywords = ["taxi", "from", "to", "tomorrow", "today", "time", "street", "hospital", "airport"]
