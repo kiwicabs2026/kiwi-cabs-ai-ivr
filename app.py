@@ -983,7 +983,8 @@ def book_with_location():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
         Please tell me your name, pickup address, destination, date, and time.
-        Make sure to clearly state where you want to go.
+        For example, you can say:
+        My name is James Smith, from 63 Hobart Street to Wellington Airport, tomorrow at 9 AM.
         <break time="0.5s"/>
         I am listening.
     </Say>
