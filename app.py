@@ -1547,7 +1547,7 @@ def confirm_booking():
             Sorry, I didn't catch that. Please say yes to confirm or no to change.
         </Say>
     </Gather>
-    <Redirect>/confirm_booking</Redirect>
+    <Redirect>/process_booking</Redirect>
 </Response>"""
         
         return Response(response, mimetype="text/xml")
