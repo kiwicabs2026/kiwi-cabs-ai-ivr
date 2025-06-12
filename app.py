@@ -2581,14 +2581,14 @@ def process_booking():
 def team():
     """Transfer to human team"""
     response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Please hold while I transfer you to our team.
-    </Say>
-    <Dial>
-        <Number>+648966156</Number>
-    </Dial>
-</Response>"""
+        <Response>
+            <Say voice="Polly.Aria-Neural" language="en-NZ">
+                Please hold while I transfer you to our team.
+            </Say>
+            <Dial>
+                <Number>+648966156</Number>
+            </Dial>
+        </Response>"""
     return Response(response, mimetype="text/xml")
 
 @app.route("/api/bookings", methods=["POST"])
