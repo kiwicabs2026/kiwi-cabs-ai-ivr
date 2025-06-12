@@ -12,6 +12,41 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 if not openai.api_key:
     raise ValueError("OpenAI API key is not set in environment variable OPENAI_API_KEY")
 
+# def extract_booking_details(text):
+#     prompt = f"""
+# Extract the following details from the text:
+
+# - Name  
+# - Pickup location  
+# - Drop-off location  
+# - Date and time  
+
+# Return the result as a JSON object with keys: name, pickup, dropoff, datetime.
+
+# Text: "{text}"
+# """
+
+#     response = openai.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=[
+#             {"role": "system", "content": "You are a helpful assistant that extracts structured data."},
+#             {"role": "user", "content": prompt}
+#         ],
+#         temperature=0,
+#         max_tokens=150
+#     )
+
+#     extracted_text = response.choices[0].message.content.strip()
+#     # Remove markdown code blocks if present
+#     cleaned = re.sub(r"```json|```", "", extracted_text).strip()
+
+#     try:
+#         data = json.loads(cleaned)
+#         return data
+#     except Exception as e:
+#         print("Error parsing JSON:", e)
+#         print("Raw response:", extracted_text)
+#         return None
 def extract_booking_details(text):
     prompt = f"""
 Extract the following details from the text:
@@ -26,8 +61,8 @@ Return the result as a JSON object with keys: name, pickup, dropoff, datetime.
 Text: "{text}"
 """
 
-    response = openai.chat.completions.create(
-        model="gpt-4o-mini",
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a helpful assistant that extracts structured data."},
             {"role": "user", "content": prompt}
@@ -36,8 +71,7 @@ Text: "{text}"
         max_tokens=150
     )
 
-    extracted_text = response.choices[0].message.content.strip()
-    # Remove markdown code blocks if present
+    extracted_text = response['choices'][0]['message']['content'].strip()
     cleaned = re.sub(r"```json|```", "", extracted_text).strip()
 
     try:
