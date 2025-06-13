@@ -165,7 +165,11 @@ def get_taxicaller_jwt():
     if not TAXICALLER_API_KEY:
         print("❌ No TaxiCaller API key configured")
         return None
-    
+    except Exception as e:
+        print(f"❌ Google Speech Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, 0
     try:
         # Generate new JWT token
         jwt_url = f"https://api.taxicaller.net/v1/jwt/for-key"
