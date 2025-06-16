@@ -32,14 +32,14 @@ def extract_booking_details(speech_text):
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # or "gpt-4o" if you have access
+            model="gpt-3.5-turbo",  # or "gpt-4o" if available
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1
         )
 
         result = json.loads(response.choices[0].message.content)
 
-        # Ensure all fields are safe and trimmed
+        # Ensure all required fields are returned
         required = ["name", "pickup_location", "dropoff_location", "time"]
         return {k: str(result.get(k, "unknown"))[:100] for k in required}
 
@@ -60,11 +60,11 @@ def ask():
     details = extract_booking_details(speech_text)
     print(f"[Extracted Details] {json.dumps(details, indent=2)}")
 
-    # Build TwiML response
     response = VoiceResponse()
 
-    # Speak out booking details
-    response.say(
+    # Gather DTMF input for confirmation
+    gather = Gather(num_digits=1, action="/confirm", method="POST", timeout=10)
+    gather.say(
         f"Please confirm your booking. "
         f"Name: {details['name']}. "
         f"From: {details['pickup_location']}. "
@@ -74,10 +74,11 @@ def ask():
         voice='alice',
         language='en-IN'
     )
-
-    # Gather DTMF input
-    gather = Gather(num_digits=1, action="/confirm", method="POST", timeout=10)
     response.append(gather)
+
+    # Fallback if no input received
+    response.say("We did not receive your input. Please try again later.", voice='alice')
+    response.hangup()
 
     return Response(str(response), mimetype='application/xml')
 
