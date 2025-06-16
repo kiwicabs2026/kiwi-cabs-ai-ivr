@@ -13,7 +13,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 def extract_booking_details(speech_text):
     """Extracts structured booking info from speech using OpenAI"""
     prompt = f"""
-    Extract exactly these fields from the taxi request:
+    Extract exactly these fields fromsthe taxi request:
     - name (string): "unknown" if not provided
     - pickup_location (string): Must contain at least a landmark
     - dropoff_location (string): Must contain at least a landmark
