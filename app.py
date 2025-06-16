@@ -1,19 +1,22 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, Response
 import openai
 import json
 import os
 from datetime import datetime
+from twilio.twiml.voice_response import VoiceResponse, Gather
 
 app = Flask(__name__)
+
+# Load OpenAI key from env
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def extract_booking_details(speech_text):
-    """Robust extraction with fallback values"""
+    """Extracts structured booking info from speech using OpenAI"""
     prompt = f"""
     Extract exactly these fields from the taxi request:
     - name (string): "unknown" if not provided
     - pickup_location (string): Must contain at least a landmark
-    - dropoff_location (string): Must contain at least a landmark  
+    - dropoff_location (string): Must contain at least a landmark
     - time (string): In natural language like "today 3 PM"
 
     Input: "{speech_text}"
@@ -26,22 +29,22 @@ def extract_booking_details(speech_text):
       "time": "tomorrow at 8 PM"
     }}
     """
-    
+
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-3.5-turbo",  # or "gpt-4o" if you have access
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,  # More deterministic
-            response_format={"type": "json_object"}
+            temperature=0.1
         )
+
         result = json.loads(response.choices[0].message.content)
-        
-        # Validation
+
+        # Ensure all fields are safe and trimmed
         required = ["name", "pickup_location", "dropoff_location", "time"]
-        return {k: result.get(k, "unknown")[:100] for k in required}  # Truncate long values
-        
+        return {k: str(result.get(k, "unknown"))[:100] for k in required}
+
     except Exception as e:
-        print(f"OpenAI Error: {str(e)}")
+        print(f"[OpenAI ERROR] {str(e)}")
         return {
             "name": "unknown",
             "pickup_location": "unknown",
@@ -51,60 +54,45 @@ def extract_booking_details(speech_text):
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    try:
-        speech_text = request.form.get("SpeechResult", "")
-        print(f"Processing speech: {speech_text}")  # Debug logging
-        
-        details = extract_booking_details(speech_text)
-        
-        # Ensure we always return valid TwiML
-        return jsonify({
-            "actions": [
-                {
-                    "say": f"""
-                    Confirm your booking:
-                    Name: {details['name']}
-                    From: {details['pickup_location']}
-                    To: {details['dropoff_location']}
-                    At: {details['time']}
-                    Press 1 to confirm or hang up.
-                    """
-                },
-                {
-                    "gather": {
-                        "numDigits": 1,
-                        "action": "/confirm",
-                        "method": "POST",
-                        "timeout": 10
-                    }
-                }
-            ]
-        })
-        
-    except Exception as e:
-        print(f"Critical error: {str(e)}")
-        return jsonify({
-            "actions": [
-                {"say": "System error. Please call back later."},
-                {"hangup": True}
-            ]
-        })
+    speech_text = request.form.get("SpeechResult", "")
+    print(f"[Speech Input] {speech_text}")
+
+    details = extract_booking_details(speech_text)
+    print(f"[Extracted Details] {json.dumps(details, indent=2)}")
+
+    # Build TwiML response
+    response = VoiceResponse()
+
+    # Speak out booking details
+    response.say(
+        f"Please confirm your booking. "
+        f"Name: {details['name']}. "
+        f"From: {details['pickup_location']}. "
+        f"To: {details['dropoff_location']}. "
+        f"At: {details['time']}. "
+        f"Press 1 to confirm or hang up to cancel.",
+        voice='alice',
+        language='en-IN'
+    )
+
+    # Gather DTMF input
+    gather = Gather(num_digits=1, action="/confirm", method="POST", timeout=10)
+    response.append(gather)
+
+    return Response(str(response), mimetype='application/xml')
 
 @app.route("/confirm", methods=["POST"])
 def confirm():
-    if request.form.get("Digits") == "1":
-        return jsonify({
-            "actions": [
-                {"say": "Booking confirmed! Thank you."},
-                {"hangup": True}
-            ]
-        })
-    return jsonify({
-        "actions": [
-            {"say": "Booking cancelled."},
-            {"hangup": True}
-        ]
-    })
+    digit = request.form.get("Digits")
+    response = VoiceResponse()
+
+    if digit == "1":
+        response.say("Booking confirmed! Thank you.", voice='alice')
+    else:
+        response.say("Booking cancelled.", voice='alice')
+
+    response.hangup()
+    return Response(str(response), mimetype='application/xml')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
