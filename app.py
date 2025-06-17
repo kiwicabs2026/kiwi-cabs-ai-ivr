@@ -90,7 +90,7 @@ def confirm():
     if digit == "1":
         response.say("Booking confirmed! Thank you.", voice='alice')
     else:
-        response.say("Booking cancelled.", voice='alice')
+        response.say("Booking cancellsed.", voice='alice')
 
     response.hangup()
     return Response(str(response), mimetype='application/xml')
