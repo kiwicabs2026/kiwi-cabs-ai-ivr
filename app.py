@@ -88,7 +88,7 @@ def confirm():
     response = VoiceResponse()
 
     if digit == "1":
-        response.say("Booking confirmed! Thank you.", voice='alice')
+        response.say("Booking confirmedd! Thank you.", voice='alice')
     else:
         response.say("Booking cancellsed.", voice='alice')
 
