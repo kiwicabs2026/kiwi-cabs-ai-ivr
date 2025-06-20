@@ -1533,4 +1533,23 @@ def process_time_change():
         
         time_text = f"{new_date} at {new_time}" if new_date and new_time else new_time or "your requested time"
         
-        response = f"""
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Excellent! I've changed your pickup time to {time_text}.
+        Would you like to make any other changes?
+    </Say>
+    <Gather input="speech" action="/process_more_changes" method="POST" timeout="10" language="en-NZ">
+        <Say>Say yes to make another change, or no if you're all done.</Say>
+    </Gather>
+</Response>"""
+    else:
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't update your booking.
+    </Say>
+    <Hangup/>
+</Response>"""
+    
+    return Response(response, mimetype="text/xml")
