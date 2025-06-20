@@ -43,7 +43,7 @@ TAXICALLER_JWT_CACHE = {"token": None, "expires_at": 0}
 # Session memory stores
 user_sessions = {}
 modification_bookings = {}
-booking_storage = {}  # Uses phone number as key for easy retrieval
+booking_storage = {}
 
 print(f"🔑 TaxiCaller API Key: {'Configured (' + TAXICALLER_API_KEY[:8] + '...)' if TAXICALLER_API_KEY else 'Not configured'}")
 
@@ -310,45 +310,6 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         traceback.print_exc()
         return False, None
 
-def update_taxicaller_booking(booking_data, caller_number):
-    """Update existing booking in TaxiCaller system"""
-    try:
-        if not TAXICALLER_API_KEY:
-            print("❌ No TaxiCaller API key available for update")
-            return False
-        
-        # Format update payload
-        update_payload = {
-            'apiKey': TAXICALLER_API_KEY,
-            'customerPhone': caller_number,
-            'pickup': booking_data.get('pickup_address'),
-            'dropoff': booking_data.get('destination'),
-            'time': booking_data.get('pickup_time'),
-            'modifiedAt': datetime.now().isoformat()
-        }
-        
-        # Try to update via TaxiCaller API
-        # Note: You'll need the actual update endpoint from TaxiCaller docs
-        update_url = "https://api.taxicaller.net/v2/bookings/update"
-        
-        response = requests.put(
-            update_url,
-            json=update_payload,
-            timeout=5,
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        if response.status_code in [200, 201]:
-            print(f"✅ TaxiCaller booking updated successfully")
-            return True
-        else:
-            print(f"❌ TaxiCaller update failed: {response.status_code}")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Error updating TaxiCaller: {str(e)}")
-        return False
-
 def parse_booking_speech(speech_text):
     """STEP 3: Parse booking details from speech input"""
     booking_data = {
@@ -587,10 +548,10 @@ def index():
     return {
         "status": "running",
         "service": "Kiwi Cabs AI Service",
-        "version": "2.3-booking-modifications",
+        "version": "2.2-immediate-dispatch",
         "taxicaller_configured": bool(TAXICALLER_API_KEY),
         "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
-        "features": ["immediate_dispatch_for_urgent", "fast_confirmation", "clean_addresses", "modify_bookings_by_phone"]
+        "features": ["immediate_dispatch_for_urgent", "fast_confirmation", "clean_addresses"]
     }, 200
 
 @app.route("/health", methods=["GET"])
@@ -599,7 +560,7 @@ def health_check():
     return {
         "status": "healthy", 
         "service": "Kiwi Cabs Booking Service", 
-        "version": "2.3-booking-modifications",
+        "version": "2.2-immediate-dispatch",
         "google_speech": GOOGLE_SPEECH_AVAILABLE,
         "taxicaller_api": bool(TAXICALLER_API_KEY),
         "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None
@@ -873,7 +834,7 @@ def confirm_booking():
     if any(word in speech_result for word in ['yes', 'confirm', 'correct', 'right', 'ok', 'okay', 'yep', 'yeah']):
         print("✅ Booking confirmed - processing immediately")
         
-        # Store booking immediately using phone number as key
+        # Store booking immediately
         booking_storage[caller_number] = {
             **booking_data,
             'confirmed_at': datetime.now().isoformat(),
@@ -896,12 +857,10 @@ def confirm_booking():
                     print(f"✅ IMMEDIATE DISPATCH SUCCESS - booking sent to TaxiCaller")
                     immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Pause length="1"/>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! Your urgent booking has been dispatched to our nearest available driver.
-        A taxi will be with you shortly.
-        Thank you for choosing Kiwi Cabs.
-        Have a great day!
+        Your urgent booking has been dispatched immediately to our drivers.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
     </Say>
     <Hangup/>
 </Response>"""
@@ -909,12 +868,10 @@ def confirm_booking():
                     print(f"❌ IMMEDIATE DISPATCH FAILED - but booking recorded")
                     immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Pause length="1"/>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Your booking has been confirmed successfully.
-        A driver will be assigned to your booking.
-        Thank you for choosing Kiwi Cabs.
-        Have a great day!
+        Your booking has been created successfully.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
     </Say>
     <Hangup/>
 </Response>"""
@@ -922,11 +879,10 @@ def confirm_booking():
                 print(f"❌ IMMEDIATE DISPATCH ERROR: {str(e)}")
                 immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Pause length="1"/>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Your booking has been confirmed.
-        Thank you for choosing Kiwi Cabs.
-        Have a great day!
+        Your booking has been created successfully.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
     </Say>
     <Hangup/>
 </Response>"""
@@ -936,12 +892,10 @@ def confirm_booking():
             # IMMEDIATE response for scheduled bookings
             immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Pause length="1"/>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Excellent! Your taxi booking has been confirmed.
-        We'll send a driver to pick you up at your scheduled time.
-        Thank you for choosing Kiwi Cabs.
-        Have a wonderful day!
+        Your booking has been created successfully.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
     </Say>
     <Hangup/>
 </Response>"""
@@ -960,7 +914,7 @@ def confirm_booking():
         
         return Response(immediate_response, mimetype="text/xml")
         
-    elif any(word in speech_result for word in ['no', 'wrong', 'change', 'different', 'incorrect']):
+    elif any(word in speech_result for word in ['no', 'wrong', 'change', 'different']):
         print("❌ Booking rejected - starting over")
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -999,136 +953,37 @@ def confirm_booking():
 
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
-    """Handle booking modifications - automatically retrieve by caller phone number"""
+    """Handle booking modifications"""
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
     
-    print(f"📞 Checking bookings for: {caller_number}")
-    
-    # Check if caller has existing booking using their phone number
+    # Check if caller has a booking
     if caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
         booking = booking_storage[caller_number]
-        
-        # Store in session for modification
-        if call_sid not in user_sessions:
-            user_sessions[call_sid] = {}
-        user_sessions[call_sid]['modifying_booking'] = booking
-        user_sessions[call_sid]['caller_number'] = caller_number
-        
-        # Format booking details for reading
         name = booking.get('name', 'Customer')
-        pickup = booking.get('pickup_address', 'pickup location')
-        destination = booking.get('destination', 'destination')
-        pickup_date = booking.get('pickup_date', '')
-        pickup_time = booking.get('pickup_time', '')
-        
-        # Build time string
-        time_str = ""
-        if pickup_time == "ASAP":
-            time_str = "as soon as possible"
-        elif pickup_date and pickup_time:
-            time_str = f"on {pickup_date} at {pickup_time}"
-        elif pickup_time:
-            time_str = f"at {pickup_time}"
+        pickup = booking.get('pickup_address', '')
+        destination = booking.get('destination', '')
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Excellent! I've changed your pickup time to {time_text}.
-        Would you like to make any other changes?
+        Hello {name}, I found your booking from {pickup} to {destination}.
+        To make changes, I'll transfer you to our team.
     </Say>
-    <Gather input="speech" action="/process_more_changes" method="POST" timeout="10" language="en-NZ">
-        <Say>Say yes to make another change, or no if you're all done.</Say>
-    </Gather>
+    <Dial>
+        <Number>+6489661566</Number>
+    </Dial>
 </Response>"""
     else:
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't update your booking.
+        I couldn't find any booking for your phone number.
+        Let me transfer you to our team for assistance.
     </Say>
-    <Hangup/>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_more_changes", methods=["POST"])
-def process_more_changes():
-    """Handle request for additional changes"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-    call_sid = request.form.get("CallSid", "")
-    
-    if any(word in speech_result for word in ['yes', 'yeah', 'more', 'another']):
-        # Go back to modification request
-        return redirect_to("/modify_booking")
-    else:
-        # All done
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! Your booking has been updated. 
-        We'll see you at your pickup time. 
-        Thank you for choosing Kiwi Cabs!
-    </Say>
-    <Hangup/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-
-@app.route("/cancel_booking", methods=["POST"])
-def cancel_booking():
-    """Cancel booking confirmation"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Are you sure you want to cancel your booking? Say YES to cancel or NO to keep your booking.
-        </Say>
-    </Gather>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/confirm_cancellation", methods=["POST"])
-def confirm_cancellation():
-    """Process cancellation confirmation"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-    caller_number = request.form.get("From", "")
-    
-    if any(word in speech_result for word in ['yes', 'confirm', 'cancel']):
-        # Cancel booking
-        if caller_number in booking_storage:
-            booking_storage[caller_number]['status'] = 'cancelled'
-            booking_storage[caller_number]['cancelled_at'] = datetime.now().isoformat()
-            
-            # Here you would call TaxiCaller's cancellation API
-            # For now, just log it
-            print(f"❌ BOOKING CANCELLED for {caller_number}")
-            
-            # Remove from active bookings
-            del booking_storage[caller_number]
-            
-            response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Your booking has been cancelled. Thank you for calling Kiwi Cabs.
-    </Say>
-    <Hangup/>
-</Response>"""
-        else:
-            response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find your booking to cancel.
-    </Say>
-    <Hangup/>
-</Response>"""
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Your booking has not been cancelled. Thank you for using Kiwi Cabs.
-    </Say>
-    <Hangup/>
+    <Dial>
+        <Number>+6489661566</Number>
+    </Dial>
 </Response>"""
     
     return Response(response, mimetype="text/xml")
@@ -1202,8 +1057,7 @@ def test_taxicaller():
                 "https://api.taxicaller.net/booking/create",
                 "https://taxicaller.net/api/v2/bookings/create"
             ],
-            "immediate_dispatch": "enabled for urgent bookings",
-            "booking_modifications": "enabled using phone number as reference"
+            "immediate_dispatch": "enabled for urgent bookings"
         }, 200
         
     except Exception as e:
@@ -1228,309 +1082,4 @@ if __name__ == "__main__":
     print(f"🔑 TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}... (configured)" if TAXICALLER_API_KEY else "🔑 TaxiCaller API Key: Not configured")
     print(f"🚨 IMMEDIATE DISPATCH: Enabled for urgent bookings (right now, ASAP)")
     print(f"📅 SCHEDULED DISPATCH: Background processing for future bookings")
-    print(f"📱 BOOKING MODIFICATIONS: Enabled - using phone number as reference")
-    print(f"🤖 AI MODIFICATIONS: Full AI handling for booking changes and cancellations")
     app.run(host="0.0.0.0", port=port, debug=True)
-        Hello {name}, I found your booking.
-        You have a taxi booked from {pickup} to {destination} {time_str}.
-    </Say>
-    <Gather input="speech" 
-            action="/process_modification_request" 
-            method="POST" 
-            timeout="15" 
-            language="en-NZ" 
-            speechTimeout="3">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            What would you like to do? You can say:
-            Change pickup location,
-            Change destination,
-            Change time,
-            or Cancel booking.
-        </Say>
-    </Gather>
-    <Redirect>/modification_help</Redirect>
-</Response>"""
-    else:
-        # No booking found for this number
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find any active booking for your phone number.
-        Would you like to make a new booking instead?
-    </Say>
-    <Gather action="/no_booking_found" input="speech" method="POST" timeout="10" language="en-NZ">
-        <Say>Say yes to make a new booking, or no to end this call.</Say>
-    </Gather>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_modification_request", methods=["POST"])
-def process_modification_request():
-    """Process natural language modification request"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-    call_sid = request.form.get("CallSid", "")
-    
-    print(f"🎯 Modification request: '{speech_result}'")
-    
-    # Natural language processing for modification intent
-    if any(word in speech_result for word in ['pickup', 'pick up', 'collection', 'from']):
-        return redirect_to("/change_pickup")
-    elif any(word in speech_result for word in ['destination', 'drop off', 'dropoff', 'going', 'to']):
-        return redirect_to("/change_destination")
-    elif any(word in speech_result for word in ['time', 'when', 'date', 'reschedule']):
-        return redirect_to("/change_time")
-    elif any(word in speech_result for word in ['cancel', 'delete', 'remove']):
-        return redirect_to("/cancel_booking")
-    else:
-        # Didn't understand - provide menu
-        return redirect_to("/modification_help")
-
-@app.route("/modification_help", methods=["POST"])
-def modification_help():
-    """Provide modification menu with numbers"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/modify_menu" method="POST" timeout="10" numDigits="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Press 1 to change your pickup location.
-            Press 2 to change your destination.
-            Press 3 to change your pickup time.
-            Press 4 to cancel your booking.
-            Or press 5 to keep your booking as is.
-        </Say>
-    </Gather>
-    <Redirect>/modification_help</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/no_booking_found", methods=["POST"])
-def no_booking_found():
-    """Handle case when no booking found"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-    
-    if any(word in speech_result for word in ['yes', 'yeah', 'yep', 'book', 'new']):
-        return redirect_to("/book_taxi")
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Thank you for calling Kiwi Cabs. Goodbye!
-    </Say>
-    <Hangup/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-
-@app.route("/modify_menu", methods=["POST"])
-def modify_menu():
-    """Handle modification menu selection"""
-    digits = request.form.get("Digits", "")
-    call_sid = request.form.get("CallSid", "")
-    
-    print(f"📝 Modification menu selection: {digits}")
-    
-    if digits == "1":
-        return redirect_to("/change_pickup")
-    elif digits == "2":
-        return redirect_to("/change_destination")
-    elif digits == "3":
-        return redirect_to("/change_time")
-    elif digits == "4":
-        return redirect_to("/cancel_booking")
-    elif digits == "5":
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! Your booking remains unchanged.
-        Thank you for calling Kiwi Cabs.
-    </Say>
-    <Hangup/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-    else:
-        return redirect_to("/modify_booking")
-
-@app.route("/change_pickup", methods=["POST"])
-def change_pickup():
-    """Change pickup location"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Please tell me your new pickup address.
-    </Say>
-    <Gather input="speech" 
-            action="/process_pickup_change" 
-            method="POST" 
-            timeout="15" 
-            language="en-NZ" 
-            speechTimeout="2">
-        <Say>I am listening.</Say>
-    </Gather>
-    <Redirect>/change_pickup</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_pickup_change", methods=["POST"])
-def process_pickup_change():
-    """Process pickup location change"""
-    speech_result = request.form.get("SpeechResult", "")
-    call_sid = request.form.get("CallSid", "")
-    caller_number = request.form.get("From", "")
-    
-    print(f"📍 New pickup location: {speech_result}")
-    
-    # Extract new pickup address
-    new_pickup = speech_result.strip()
-    # Clean up common speech recognition issues
-    new_pickup = re.sub(r'\bnumber\s+', '', new_pickup, flags=re.IGNORECASE)
-    
-    # Update booking
-    if caller_number in booking_storage:
-        old_pickup = booking_storage[caller_number].get('pickup_address', '')
-        booking_storage[caller_number]['pickup_address'] = new_pickup
-        booking_storage[caller_number]['modified_at'] = datetime.now().isoformat()
-        
-        # Send update to TaxiCaller
-        update_success = update_taxicaller_booking(booking_storage[caller_number], caller_number)
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've changed your pickup location from {old_pickup} to {new_pickup}.
-        Your driver will now collect you from {new_pickup} 
-        and take you to {booking_storage[caller_number].get('destination')}.
-        Is there anything else you'd like to change?
-    </Say>
-    <Gather input="speech" action="/process_more_changes" method="POST" timeout="10" language="en-NZ">
-        <Say>Say yes to make another change, or no if you're all done.</Say>
-    </Gather>
-</Response>"""
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't update your booking. Please try again or speak to our team.
-    </Say>
-    <Dial>
-        <Number>+6489661566</Number>
-    </Dial>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/change_destination", methods=["POST"])
-def change_destination():
-    """Change destination"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Please tell me your new destination.
-    </Say>
-    <Gather input="speech" 
-            action="/process_destination_change" 
-            method="POST" 
-            timeout="15" 
-            language="en-NZ" 
-            speechTimeout="2">
-        <Say>I am listening.</Say>
-    </Gather>
-    <Redirect>/change_destination</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_destination_change", methods=["POST"])
-def process_destination_change():
-    """Process destination change"""
-    speech_result = request.form.get("SpeechResult", "")
-    caller_number = request.form.get("From", "")
-    
-    print(f"📍 New destination: {speech_result}")
-    
-    # Extract new destination
-    new_destination = speech_result.strip()
-    new_destination = re.sub(r'\bnumber\s+', '', new_destination, flags=re.IGNORECASE)
-    
-    # Update booking
-    if caller_number in booking_storage:
-        old_destination = booking_storage[caller_number].get('destination', '')
-        booking_storage[caller_number]['destination'] = new_destination
-        booking_storage[caller_number]['modified_at'] = datetime.now().isoformat()
-        
-        # Send update to TaxiCaller
-        update_success = update_taxicaller_booking(booking_storage[caller_number], caller_number)
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! I've changed your destination from {old_destination} to {new_destination}.
-        Your updated booking is from {booking_storage[caller_number].get('pickup_address')} 
-        to {new_destination}.
-        Would you like to make any other changes?
-    </Say>
-    <Gather input="speech" action="/process_more_changes" method="POST" timeout="10" language="en-NZ">
-        <Say>Say yes to make another change, or no if you're all done.</Say>
-    </Gather>
-</Response>"""
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't update your booking.
-    </Say>
-    <Hangup/>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/change_time", methods=["POST"])
-def change_time():
-    """Change pickup time"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Please tell me your new pickup time. For example, say "3:30 PM" or "tomorrow at 9 AM".
-    </Say>
-    <Gather input="speech" 
-            action="/process_time_change" 
-            method="POST" 
-            timeout="15" 
-            language="en-NZ" 
-            speechTimeout="2">
-        <Say>I am listening.</Say>
-    </Gather>
-    <Redirect>/change_time</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-@app.route("/process_time_change", methods=["POST"])
-def process_time_change():
-    """Process time change"""
-    speech_result = request.form.get("SpeechResult", "")
-    caller_number = request.form.get("From", "")
-    
-    print(f"⏰ New time: {speech_result}")
-    
-    # Parse new time using existing parsing logic
-    temp_booking = parse_booking_speech(f"pickup at {speech_result}")
-    new_time = temp_booking.get('pickup_time', '')
-    new_date = temp_booking.get('pickup_date', '')
-    
-    # Update booking
-    if caller_number in booking_storage:
-        old_time = booking_storage[caller_number].get('pickup_time', '')
-        old_date = booking_storage[caller_number].get('pickup_date', '')
-        
-        if new_time:
-            booking_storage[caller_number]['pickup_time'] = new_time
-        if new_date:
-            booking_storage[caller_number]['pickup_date'] = new_date
-        booking_storage[caller_number]['modified_at'] = datetime.now().isoformat()
-        
-        # Send update to TaxiCaller
-        update_success = update_taxicaller_booking(booking_storage[caller_number], caller_number)
-        
-        time_text = f"{new_date} at {new_time}" if new_date and new_time else new_time or "your requested time"
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
