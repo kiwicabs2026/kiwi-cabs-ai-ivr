@@ -738,7 +738,7 @@ def process_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
-        Thank you for calling Kiwi Cabs!
+        Thank you for using Kiwi Cabs. Goodbye
     </Say>
     <Hangup/>
 </Response>""", mimetype="text/xml")
