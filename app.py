@@ -26,9 +26,9 @@ except Exception as e:
 app = Flask(__name__)
 print("✅ Flask app created successfully")
 
-# Configuration
+# Configuration - STEP 1: Environment Variables (with fallback to your key)
 TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
-TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY", "")
+TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY", "c18afde179ec057037084b4daf10f01a")  # Your TaxiCaller key
 RENDER_ENDPOINT = os.getenv("RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onrender.com/api/bookings")
 
 # Google Cloud and Twilio Configuration
@@ -36,13 +36,15 @@ GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CLOUD_CREDENTIALS", "")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 
-# JWT Token Cache
+# JWT Token Cache (legacy - keeping for compatibility)
 TAXICALLER_JWT_CACHE = {"token": None, "expires_at": 0}
 
 # Session memory stores
 user_sessions = {}
 modification_bookings = {}
 booking_storage = {}
+
+print(f"🔑 TaxiCaller API Key: {'Configured (' + TAXICALLER_API_KEY[:8] + '...)' if TAXICALLER_API_KEY else 'Not configured'}")
 
 def init_google_speech():
     """Initialize Google Speech client with credentials"""
@@ -132,112 +134,171 @@ def transcribe_with_google(audio_url):
         return None, 0
 
 def get_taxicaller_jwt():
-    """Get or refresh JWT token for TaxiCaller API"""
+    """Legacy JWT function - kept for compatibility but not used in v2 API"""
     if TAXICALLER_JWT_CACHE["token"] and time.time() < TAXICALLER_JWT_CACHE["expires_at"]:
         print("📌 Using cached JWT token")
         return TAXICALLER_JWT_CACHE["token"]
     
     if not TAXICALLER_API_KEY:
-        print("❌ No TaxiCaller API key configured")
+        print("❌ No TaxiCaller API key configured - skipping JWT")
         return None
     
     try:
-        jwt_url = f"https://api.taxicaller.net/v1/jwt/for-key"
+        # Try multiple possible JWT endpoints
+        jwt_endpoints = [
+            "https://api.taxicaller.net/v1/jwt/for-key",
+            "https://api.taxicaller.net/jwt/for-key",
+            "https://api.taxicaller.net/api/v1/jwt/for-key"
+        ]
+        
         params = {
             "key": TAXICALLER_API_KEY,
             "sub": "*",
             "ttl": "900"
         }
         
-        print(f"🔑 Generating new JWT token...")
-        response = requests.get(jwt_url, params=params, timeout=10)
+        for jwt_url in jwt_endpoints:
+            print(f"🔑 Trying JWT endpoint: {jwt_url}")
+            try:
+                response = requests.get(jwt_url, params=params, timeout=5)
+                
+                if response.status_code == 200:
+                    jwt_token = response.text.strip()
+                    TAXICALLER_JWT_CACHE["token"] = jwt_token
+                    TAXICALLER_JWT_CACHE["expires_at"] = time.time() + 840
+                    print(f"✅ JWT token generated successfully from {jwt_url}")
+                    return jwt_token
+                else:
+                    print(f"❌ Failed JWT endpoint {jwt_url}: {response.status_code}")
+            except Exception as e:
+                print(f"❌ JWT endpoint {jwt_url} error: {str(e)}")
+                continue
         
-        if response.status_code == 200:
-            jwt_token = response.text.strip()
-            TAXICALLER_JWT_CACHE["token"] = jwt_token
-            TAXICALLER_JWT_CACHE["expires_at"] = time.time() + 840
-            print(f"✅ JWT token generated successfully")
-            return jwt_token
-        else:
-            print(f"❌ Failed to generate JWT: {response.status_code} - {response.text}")
-            return None
+        print(f"❌ All JWT endpoints failed - using v2 API instead")
+        return None
             
     except Exception as e:
         print(f"❌ Error generating JWT: {str(e)}")
         return None
 
 def send_booking_to_taxicaller(booking_data, caller_number):
-    """Send booking to TaxiCaller API using JWT authentication"""
+    """STEP 2: Send booking to TaxiCaller API using the correct v2 endpoint"""
     try:
-        jwt_token = get_taxicaller_jwt()
-        if not jwt_token:
-            print("❌ No JWT token available")
+        if not TAXICALLER_API_KEY:
+            print("❌ No TaxiCaller API key available")
             return False, None
         
+        print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+        
+        # Format time to ISO format with NZ timezone as per your instructions
         is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
         
         if is_immediate:
-            current_time = datetime.now()
-            formatted_date = current_time.strftime("%Y-%m-%d")
-            formatted_time = current_time.strftime("%H:%M")
-            booking_when = "NOW"
+            # For immediate bookings, use current time + 5 minutes
+            pickup_datetime = datetime.now() + timedelta(minutes=5)
         else:
-            if booking_data['pickup_date']:
-                date_parts = booking_data['pickup_date'].split('/')
-                formatted_date = f"{date_parts[2]}-{date_parts[1].zfill(2)}-{date_parts[0].zfill(2)}"
-            else:
-                formatted_date = datetime.now().strftime("%Y-%m-%d")
-            
-            formatted_time = booking_data.get('pickup_time', '').replace(' AM', '').replace(' PM', '')
-            if 'PM' in booking_data.get('pickup_time', '') and not formatted_time.startswith('12'):
-                hour_parts = formatted_time.split(':')
-                if len(hour_parts) == 2:
-                    formatted_time = f"{int(hour_parts[0]) + 12}:{hour_parts[1]}"
-            booking_when = "LATER"
+            # Parse date and time from booking data
+            try:
+                if booking_data.get('pickup_date'):
+                    # Parse date in DD/MM/YYYY format
+                    date_parts = booking_data['pickup_date'].split('/')
+                    year = int(date_parts[2])
+                    month = int(date_parts[1])
+                    day = int(date_parts[0])
+                else:
+                    # Default to today
+                    today = datetime.now()
+                    year, month, day = today.year, today.month, today.day
+                
+                # Parse time
+                time_str = booking_data.get('pickup_time', '9:00 AM')
+                if 'AM' in time_str or 'PM' in time_str:
+                    pickup_time = datetime.strptime(time_str, '%I:%M %p').time()
+                else:
+                    pickup_time = datetime.strptime(time_str, '%H:%M').time()
+                
+                pickup_datetime = datetime.combine(
+                    datetime(year, month, day).date(),
+                    pickup_time
+                )
+            except Exception as e:
+                print(f"❌ Error parsing date/time: {e}, using current time + 1 hour")
+                pickup_datetime = datetime.now() + timedelta(hours=1)
         
-        taxicaller_payload = {
-            "bookingKey": f"IVR_{caller_number}_{int(time.time())}",
-            "passengerName": booking_data['name'],
-            "passengerPhone": caller_number,
-            "pickupAddress": booking_data['pickup_address'],
-            "destinationAddress": booking_data['destination'],
-            "pickupDate": formatted_date,
-            "pickupTime": formatted_time,
-            "when": booking_when,
-            "numberOfPassengers": 1,
-            "paymentMethod": "CASH",
-            "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
-            "bookingSource": "IVR"
+        # Format to ISO with NZ timezone as per your instructions
+        pickup_time_iso = pickup_datetime.strftime('%Y-%m-%dT%H:%M:%S+12:00')
+        
+        # Create payload according to your step-by-step instructions
+        booking_payload = {
+            'apiKey': TAXICALLER_API_KEY,
+            'customerPhone': caller_number,
+            'customerName': booking_data['name'],
+            'pickup': booking_data['pickup_address'],
+            'dropoff': booking_data['destination'],
+            'time': pickup_time_iso,  # Format: '2025-05-29T15:30:00+12:00'
+            'notes': f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
+            'source': 'AI_IVR'
         }
         
-        booking_url = "https://api.taxicaller.net/Booking/v1/bookings"
-        headers = {
-            "Authorization": f"Bearer {jwt_token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+        # Use the correct TaxiCaller v2 endpoint from your instructions
+        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
         
-        print(f"📤 SENDING TO TAXICALLER: {booking_when} - {formatted_date} {formatted_time}")
+        print(f"📤 SENDING TO TAXICALLER V2:")
+        print(f"   URL: {booking_url}")
+        print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
+        print(f"   Customer: {booking_payload['customerName']}")
+        print(f"   Phone: {booking_payload['customerPhone']}")
+        print(f"   Pickup: {booking_payload['pickup']}")
+        print(f"   Dropoff: {booking_payload['dropoff']}")
+        print(f"   Time: {booking_payload['time']}")
+        print(f"   Payload: {json.dumps(booking_payload, indent=2)}")
         
-        response = requests.post(booking_url, json=taxicaller_payload, headers=headers, timeout=10)
+        response = requests.post(
+            booking_url, 
+            json=booking_payload, 
+            timeout=15,
+            headers={
+                'Content-Type': 'application/json',
+                'User-Agent': 'KiwiCabs-AI-IVR/2.1'
+            }
+        )
         
-        print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+        print(f"📥 TAXICALLER V2 RESPONSE: {response.status_code}")
+        print(f"📥 RESPONSE HEADERS: {dict(response.headers)}")
+        print(f"📥 RESPONSE BODY: {response.text}")
         
-        if response.status_code in [200, 201]:
-            response_data = response.json()
-            booking_id = response_data.get('bookingId', 'Unknown')
-            print(f"✅ BOOKING CREATED: {booking_id}")
-            return True, response_data
+        # STEP 4: Log the API response and handle errors
+        if response.status_code == 200:
+            try:
+                response_data = response.json()
+                booking_id = response_data.get('bookingId', response_data.get('id', 'Unknown'))
+                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
+                return True, response_data
+            except:
+                print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                return True, {"status": "created", "response": response.text}
+        elif response.status_code == 201:
+            try:
+                response_data = response.json()
+                booking_id = response_data.get('bookingId', response_data.get('id', 'Unknown'))
+                print(f"✅ TAXICALLER BOOKING CREATED (201): {booking_id}")
+                return True, response_data
+            except:
+                print(f"✅ TAXICALLER BOOKING CREATED (201, no JSON)")
+                return True, {"status": "created", "response": response.text}
         else:
-            print(f"❌ TAXICALLER ERROR: {response.status_code} - {response.text}")
+            # Handle error as per step 4 of your instructions
+            print(f"❌ TAXICALLER API ERROR: {response.status_code} - {response.text}")
             return False, None
             
     except Exception as e:
         print(f"❌ TAXICALLER API ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False, None
 
 def parse_booking_speech(speech_text):
-    """Parse booking details from speech input"""
+    """STEP 3: Parse booking details from speech input"""
     booking_data = {
         'name': '',
         'pickup_address': '',
@@ -355,45 +416,81 @@ def parse_booking_speech(speech_text):
     return booking_data
 
 def send_booking_to_api(booking_data, caller_number):
-    """Send booking to API with fallback"""
+    """STEP 2 & 3: Send booking to TaxiCaller dispatch system with formatted data"""
+    
+    # STEP 3: Format the input data - ensure we extract name, pickup, dropoff, time/date
+    enhanced_booking_data = {
+        "customer_name": booking_data.get('name', ''),
+        "phone": caller_number,
+        "pickup_address": booking_data.get('pickup_address', ''),
+        "destination": booking_data.get('destination', ''),
+        "pickup_time": booking_data.get('pickup_time', ''),
+        "pickup_date": booking_data.get('pickup_date', ''),
+        "booking_reference": f"AI_{caller_number.replace('+', '').replace('-', '').replace(' ', '')}_{int(time.time())}",
+        "service": "taxi",
+        "created_via": "ai_ivr",
+        "raw_speech": booking_data.get('raw_speech', ''),
+        "booking_status": "confirmed",
+        "payment_method": "cash",
+        "number_of_passengers": 1,
+        "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
+        "created_at": datetime.now().isoformat(),
+        "is_immediate": booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
+    }
+    
+    print(f"📤 STEP 3 - FORMATTED BOOKING DATA:")
+    print(f"   Name: {enhanced_booking_data['customer_name']}")
+    print(f"   Phone: {enhanced_booking_data['phone']}")
+    print(f"   Pickup: {enhanced_booking_data['pickup_address']}")
+    print(f"   Dropoff: {enhanced_booking_data['destination']}")
+    print(f"   Date: {enhanced_booking_data['pickup_date']}")
+    print(f"   Time: {enhanced_booking_data['pickup_time']}")
+    print(f"   Reference: {enhanced_booking_data['booking_reference']}")
+    
+    # STEP 2: Send to TaxiCaller first (primary dispatch system)
     if TAXICALLER_API_KEY:
+        print(f"🚖 STEP 2 - SENDING TO TAXICALLER DISPATCH SYSTEM")
         try:
             success, response = send_booking_to_taxicaller(booking_data, caller_number)
             if success:
+                print(f"✅ STEP 4 - TAXICALLER SUCCESS: Job sent to dispatch system")
                 return success, response
             else:
-                print("⚠️ TaxiCaller failed, falling back to Render endpoint")
+                print("❌ STEP 4 - TAXICALLER FAILED: Error logged, falling back to Render")
         except Exception as e:
-            print(f"⚠️ TaxiCaller error: {str(e)}, falling back to Render endpoint")
+            print(f"❌ STEP 4 - TAXICALLER EXCEPTION: {str(e)}, falling back to Render")
+    else:
+        print("⚠️ STEP 1 - NO TAXICALLER_API_KEY: Check environment variables in Render")
     
+    # Fallback to Render endpoint (backup system)
     try:
-        api_data = {
-            "customer_name": booking_data.get('name', ''),
-            "phone": caller_number,
-            "pickup_address": booking_data.get('pickup_address', ''),
-            "destination": booking_data.get('destination', ''),
-            "pickup_time": booking_data.get('pickup_time', ''),
-            "pickup_date": booking_data.get('pickup_date', ''),
-            "booking_reference": caller_number.replace('+', '').replace('-', '').replace(' ', ''),
-            "service": "taxi",
-            "created_via": "ai_ivr",
-            "raw_speech": booking_data.get('raw_speech', '')
-        }
+        print(f"📡 FALLBACK - SENDING TO RENDER ENDPOINT: {RENDER_ENDPOINT}")
         
-        response = requests.post(RENDER_ENDPOINT, json=api_data, timeout=5)
+        response = requests.post(
+            RENDER_ENDPOINT,
+            json=enhanced_booking_data,
+            timeout=10,
+            headers={
+                'Content-Type': 'application/json',
+                'User-Agent': 'KiwiCabs-AI-IVR/2.1'
+            }
+        )
+        
+        print(f"📥 RENDER RESPONSE: {response.status_code}")
+        print(f"📥 RENDER BODY: {response.text}")
         
         if response.status_code in [200, 201]:
-            print(f"✅ BOOKING SENT TO RENDER: {response.status_code}")
+            print(f"✅ BACKUP BOOKING SENT TO RENDER SUCCESSFULLY")
             return True, response.json()
         else:
-            print(f"❌ API ERROR: {response.status_code} - {response.text}")
+            print(f"❌ RENDER API ERROR: {response.status_code} - {response.text}")
             return False, None
             
     except requests.Timeout:
-        print(f"⚠️ API TIMEOUT - but booking was likely received")
-        return True, None
+        print(f"⚠️ RENDER API TIMEOUT - booking was likely received")
+        return True, {"status": "timeout_but_likely_received"}
     except Exception as e:
-        print(f"❌ API SEND ERROR: {str(e)}")
+        print(f"❌ RENDER API SEND ERROR: {str(e)}")
         return False, None
 
 def validate_wellington_service_area(caller_location, booking_addresses=None):
@@ -428,7 +525,10 @@ def index():
     return {
         "status": "running",
         "service": "Kiwi Cabs AI Service",
-        "version": "2.1-fixed"
+        "version": "2.1-taxicaller-integrated",
+        "taxicaller_configured": bool(TAXICALLER_API_KEY),
+        "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
+        "taxicaller_endpoint": "https://apiv2.taxicaller.net/v2/bookings/create"
     }, 200
 
 @app.route("/health", methods=["GET"])
@@ -437,8 +537,10 @@ def health_check():
     return {
         "status": "healthy", 
         "service": "Kiwi Cabs Booking Service", 
-        "version": "2.1-fixed",
-        "google_speech": GOOGLE_SPEECH_AVAILABLE
+        "version": "2.1-taxicaller-integrated",
+        "google_speech": GOOGLE_SPEECH_AVAILABLE,
+        "taxicaller_api": bool(TAXICALLER_API_KEY),
+        "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None
     }, 200
 
 @app.route("/voice", methods=["POST"])
@@ -707,7 +809,7 @@ def confirm_booking():
     
     # Check for yes/confirm
     if any(word in speech_result for word in ['yes', 'confirm', 'correct', 'right', 'ok', 'okay']):
-        print("✅ Booking confirmed - sending to API")
+        print("✅ Booking confirmed - sending to TaxiCaller dispatch system")
         
         success, api_response = send_booking_to_api(booking_data, caller_number)
         
@@ -808,7 +910,7 @@ def team():
 
 @app.route("/api/bookings", methods=["POST"])
 def api_bookings():
-    """Handle booking API requests"""
+    """Handle booking API requests - STEP 5: Test end-to-end"""
     try:
         booking_data = request.get_json()
         print(f"📥 API Booking: {booking_data.get('customer_name')} - {booking_data.get('pickup_address')} to {booking_data.get('destination')}")
@@ -826,19 +928,47 @@ def api_bookings():
 
 @app.route("/generate_jwt", methods=["GET"])
 def generate_jwt_endpoint():
-    """Generate TaxiCaller JWT token"""
+    """Generate TaxiCaller JWT token (legacy)"""
     token = get_taxicaller_jwt()
     if token:
         return jsonify({"token": token}), 200
     else:
-        return jsonify({"error": "Failed to generate JWT"}), 500
+        return jsonify({"error": "Failed to generate JWT", "note": "Using v2 API instead"}), 500
+
+# STEP 5: Test endpoints
+@app.route("/test_taxicaller", methods=["GET", "POST"])
+def test_taxicaller():
+    """Test endpoint to simulate booking for TaxiCaller integration"""
+    try:
+        test_booking = {
+            'name': 'Test User',
+            'pickup_address': '123 Test Street, Wellington',
+            'destination': 'Wellington Airport',
+            'pickup_time': '2:00 PM',
+            'pickup_date': '21/06/2025',
+            'raw_speech': 'Test booking from API'
+        }
+        
+        print(f"🧪 TESTING TAXICALLER INTEGRATION")
+        success, response = send_booking_to_taxicaller(test_booking, '+6412345678')
+        
+        return {
+            "test_result": "success" if success else "failed",
+            "taxicaller_response": response,
+            "api_configured": bool(TAXICALLER_API_KEY),
+            "api_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
+            "endpoint": "https://apiv2.taxicaller.net/v2/bookings/create"
+        }, 200
+        
+    except Exception as e:
+        return {"error": str(e), "api_configured": bool(TAXICALLER_API_KEY)}, 500
 
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint not found", "available_endpoints": [
         "/", "/health", "/voice", "/menu", "/book_taxi", "/process_booking", 
-        "/confirm_booking", "/modify_booking", "/team", "/api/bookings"
+        "/confirm_booking", "/modify_booking", "/team", "/api/bookings", "/test_taxicaller"
     ]}), 404
 
 @app.errorhandler(500)
@@ -849,5 +979,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"🚀 Starting Kiwi Cabs AI Service on port {port}")
     print(f"📊 Google Speech Available: {GOOGLE_SPEECH_AVAILABLE}")
-    print(f"🔑 TaxiCaller API: {'Configured' if TAXICALLER_API_KEY else 'Not configured'}")
+    print(f"🔑 TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}... (configured)" if TAXICALLER_API_KEY else "🔑 TaxiCaller API Key: Not configured")
+    print(f"🚖 TaxiCaller V2 Endpoint: https://apiv2.taxicaller.net/v2/bookings/create")
     app.run(host="0.0.0.0", port=port, debug=True)
