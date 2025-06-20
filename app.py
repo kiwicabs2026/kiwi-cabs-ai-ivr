@@ -8,6 +8,7 @@ import re
 import urllib.parse
 import time
 import base64
+import threading
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -338,7 +339,7 @@ def parse_booking_speech(speech_text):
                 booking_data['name'] = potential_name
                 break
     
-    # Extract pickup address - FIXED to remove "number" word
+    # Extract pickup address - FIXED to completely remove "number" and clean addresses
     pickup_patterns = [
         # Match number + street name + street type (remove "number" word)
         r"from\s+(?:number\s+)?(\d+\s+[A-Za-z]+(?:\s+(?:Street|Road|Avenue|Lane|Drive|Crescent|Way|Boulevard|Terrace)))",
@@ -353,8 +354,9 @@ def parse_booking_speech(speech_text):
             pickup = match.group(1).strip()
             pickup = pickup.replace(" I'm", "").replace(" I am", "").replace(" and", "")
             
-            # Remove "number" word if it got captured
-            pickup = re.sub(r'^number\s+', '', pickup, flags=re.IGNORECASE)
+            # AGGRESSIVE cleaning to remove "number" word completely
+            pickup = re.sub(r'\bnumber\s+', '', pickup, flags=re.IGNORECASE)
+            pickup = re.sub(r'\bright\s+now\b', '', pickup, flags=re.IGNORECASE).strip()
             
             # Fix common speech recognition errors
             pickup = pickup.replace("63rd Street Melbourne", "63 Hobart Street")
@@ -364,14 +366,14 @@ def parse_booking_speech(speech_text):
             booking_data['pickup_address'] = pickup
             break
     
-    # Extract destination - FIXED to remove "number" word
+    # Extract destination - FIXED to completely remove "number" and clean up addresses
     destination_patterns = [
         # Handle "going to number X" pattern - capture without "number"
-        r"(?:to|going to|going)\s+number\s+(\d+\s+[^,]+?)(?:\s+(?:tomorrow|today|tonight|at|\d{1,2}:|on|date|right now|now))",
+        r"(?:to|going to|going)\s+(?:number\s+)?(\d+\s+[^,]+?)(?:\s+(?:tomorrow|today|tonight|at|\d{1,2}:|on|date|right now|now))",
         # Standard patterns without "number"
         r"(?:to|going to|going)\s+([^,]+?)(?:\s+(?:tomorrow|today|tonight|at|\d{1,2}:|on|date|right now|now))",
         # End of line patterns - capture without "number"
-        r"(?:to|going to|going)\s+number\s+(\d+\s+.+)$",
+        r"(?:to|going to|going)\s+(?:number\s+)?(\d+\s+.+)$",
         r"(?:to|going to|going)\s+(.+)$"
     ]
     
@@ -380,8 +382,15 @@ def parse_booking_speech(speech_text):
         if match:
             destination = match.group(1).strip()
             
-            # Remove "number" word if it got captured
-            destination = re.sub(r'^number\s+', '', destination, flags=re.IGNORECASE)
+            # AGGRESSIVE cleaning to remove "number" and fix order
+            destination = re.sub(r'\bnumber\s+', '', destination, flags=re.IGNORECASE)
+            
+            # Fix address order: "Miramar number 63 Hobart Street" → "63 Hobart Street, Miramar"
+            miramar_fix = re.search(r'(miramar)\s+(?:number\s+)?(\d+\s+\w+\s+street)', destination, re.IGNORECASE)
+            if miramar_fix:
+                destination = f"{miramar_fix.group(2)}, {miramar_fix.group(1)}"
+            
+            # Other area fixes
             destination = destination.replace("wellington wellington", "wellington")
             destination = re.sub(r'\s+(at|around|by)\s+\d+', '', destination)
             
@@ -539,10 +548,10 @@ def index():
     return {
         "status": "running",
         "service": "Kiwi Cabs AI Service",
-        "version": "2.1-optimized",
+        "version": "2.2-immediate-dispatch",
         "taxicaller_configured": bool(TAXICALLER_API_KEY),
         "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
-        "improvements": ["removed_number_word", "fast_confirmation", "simplified_message"]
+        "features": ["immediate_dispatch_for_urgent", "fast_confirmation", "clean_addresses"]
     }, 200
 
 @app.route("/health", methods=["GET"])
@@ -551,7 +560,7 @@ def health_check():
     return {
         "status": "healthy", 
         "service": "Kiwi Cabs Booking Service", 
-        "version": "2.1-optimized",
+        "version": "2.2-immediate-dispatch",
         "google_speech": GOOGLE_SPEECH_AVAILABLE,
         "taxicaller_api": bool(TAXICALLER_API_KEY),
         "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None
@@ -807,7 +816,7 @@ def process_booking_with_google():
 
 @app.route("/confirm_booking", methods=["POST"])
 def confirm_booking():
-    """Handle booking confirmation with fast response"""
+    """Handle booking confirmation with immediate dispatch for urgent bookings"""
     speech_result = request.form.get("SpeechResult", "").lower()
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
@@ -821,27 +830,43 @@ def confirm_booking():
         print("❌ No pending booking found")
         return redirect_to("/book_taxi")
     
-    # Check for yes/confirm
-    if any(word in speech_result for word in ['yes', 'confirm', 'correct', 'right', 'ok', 'okay']):
-        print("✅ Booking confirmed - sending to TaxiCaller dispatch system")
+    # Check for yes/confirm - FIXED: Look for "yes" anywhere in the response
+    if any(word in speech_result for word in ['yes', 'confirm', 'correct', 'right', 'ok', 'okay', 'yep', 'yeah']):
+        print("✅ Booking confirmed - processing immediately")
         
-        # Store booking immediately (don't wait for API)
+        # Store booking immediately
         booking_storage[caller_number] = {
             **booking_data,
             'confirmed_at': datetime.now().isoformat(),
             'status': 'confirmed'
         }
         
-        # Send to API in background (async) - don't wait for response
-        try:
-            # Quick timeout to avoid long waits
-            success, api_response = send_booking_to_api(booking_data, caller_number)
-            print(f"📤 Background API call: {'Success' if success else 'Failed'}")
-        except Exception as e:
-            print(f"⚠️ Background API error: {str(e)} - but booking still recorded")
+        # Check if this is an IMMEDIATE booking (right now, ASAP, now)
+        is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
+        has_immediate_words = any(word in booking_data.get('raw_speech', '').lower() for word in [
+            'right now', 'now', 'asap', 'immediately', 'straight away', 'as soon as possible'
+        ])
         
-        # Immediate response - don't wait for API
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+        if is_immediate or has_immediate_words:
+            print("🚨 IMMEDIATE BOOKING - Dispatching to TaxiCaller NOW before responding to customer")
+            
+            try:
+                # IMMEDIATE dispatch - don't use background thread for urgent bookings
+                success, api_response = send_booking_to_api(booking_data, caller_number)
+                if success:
+                    print(f"✅ IMMEDIATE DISPATCH SUCCESS - booking sent to TaxiCaller")
+                    immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your urgent booking has been dispatched immediately to our drivers.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
+    </Say>
+    <Hangup/>
+</Response>"""
+                else:
+                    print(f"❌ IMMEDIATE DISPATCH FAILED - but booking recorded")
+                    immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been created successfully.
@@ -850,6 +875,45 @@ def confirm_booking():
     </Say>
     <Hangup/>
 </Response>"""
+            except Exception as e:
+                print(f"❌ IMMEDIATE DISPATCH ERROR: {str(e)}")
+                immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking has been created successfully.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
+    </Say>
+    <Hangup/>
+</Response>"""
+        else:
+            print("📅 SCHEDULED BOOKING - Using background processing")
+            
+            # IMMEDIATE response for scheduled bookings
+            immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking has been created successfully.
+        Thank you for contacting Kiwi Cabs.
+        Goodbye!
+    </Say>
+    <Hangup/>
+</Response>"""
+            
+            # Send scheduled bookings in background
+            def background_api():
+                try:
+                    print(f"📤 Background processing for scheduled booking...")
+                    send_booking_to_api(booking_data, caller_number)
+                    print(f"✅ Background processing completed")
+                except Exception as e:
+                    print(f"⚠️ Background processing error: {str(e)}")
+            
+            # Start background thread for non-urgent bookings
+            threading.Thread(target=background_api, daemon=True).start()
+        
+        return Response(immediate_response, mimetype="text/xml")
+        
     elif any(word in speech_result for word in ['no', 'wrong', 'change', 'different']):
         print("❌ Booking rejected - starting over")
         response = """<?xml version="1.0" encoding="UTF-8"?>
@@ -863,7 +927,7 @@ def confirm_booking():
     </Gather>
 </Response>"""
     else:
-        print("❓ Unclear response - asking again")
+        print("❓ Unclear response - asking again with simpler question")
         confirmation_parts = []
         if booking_data.get('name'):
             confirmation_parts.append(booking_data['name'])
@@ -876,11 +940,10 @@ def confirm_booking():
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="3">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            I didn't understand your response.
-            To confirm your booking: {confirmation_text}, please say YES.
-            To make changes, please say NO.
+            Is this booking correct: {confirmation_text}?
+            Say YES or NO.
         </Say>
     </Gather>
     <Redirect>/confirm_booking</Redirect>
@@ -970,7 +1033,8 @@ def test_taxicaller():
                 "https://api.taxicaller.net/api/v2/bookings/create", 
                 "https://api.taxicaller.net/booking/create",
                 "https://taxicaller.net/api/v2/bookings/create"
-            ]
+            ],
+            "immediate_dispatch": "enabled for urgent bookings"
         }, 200
         
     except Exception as e:
@@ -993,5 +1057,6 @@ if __name__ == "__main__":
     print(f"🚀 Starting Kiwi Cabs AI Service on port {port}")
     print(f"📊 Google Speech Available: {GOOGLE_SPEECH_AVAILABLE}")
     print(f"🔑 TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}... (configured)" if TAXICALLER_API_KEY else "🔑 TaxiCaller API Key: Not configured")
-    print(f"🚖 Optimizations: Fast confirmation, no 'number' word, simplified message")
+    print(f"🚨 IMMEDIATE DISPATCH: Enabled for urgent bookings (right now, ASAP)")
+    print(f"📅 SCHEDULED DISPATCH: Background processing for future bookings")
     app.run(host="0.0.0.0", port=port, debug=True)
