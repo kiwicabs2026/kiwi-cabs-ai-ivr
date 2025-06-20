@@ -973,37 +973,279 @@ def confirm_booking():
 
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
-    """Handle booking modifications"""
+    """Handle booking modifications - Smart AI that extracts everything at once"""
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
+    
+    print(f"📞 Checking bookings for: {caller_number}")
     
     # Check if caller has a booking
     if caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
         booking = booking_storage[caller_number]
+        
+        # Store in session for modification
+        if call_sid not in user_sessions:
+            user_sessions[call_sid] = {}
+        user_sessions[call_sid]['modifying_booking'] = booking.copy()  # Keep original
+        user_sessions[call_sid]['caller_number'] = caller_number
+        
+        # Format booking details
         name = booking.get('name', 'Customer')
         pickup = booking.get('pickup_address', '')
         destination = booking.get('destination', '')
+        pickup_date = booking.get('pickup_date', '')
+        pickup_time = booking.get('pickup_time', '')
+        
+        # Build time string
+        time_str = ""
+        if pickup_time == "ASAP":
+            time_str = "as soon as possible"
+        elif pickup_date and pickup_time:
+            time_str = f"on {pickup_date} at {pickup_time}"
+        elif pickup_time:
+            time_str = f"at {pickup_time}"
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Hello {name}, I found your booking from {pickup} to {destination}.
-        To make changes, I'll transfer you to our team.
+        Hello {name}, I found your booking.
+        You have a taxi from {pickup} to {destination} {time_str}.
+        Tell me anything you want to change - the pickup address, destination, time, or if you want to cancel.
     </Say>
-    <Dial>
-        <Number>+6489661566</Number>
-    </Dial>
+    <Gather input="speech" 
+            action="/process_modification_smart" 
+            method="POST" 
+            timeout="20" 
+            language="en-NZ" 
+            speechTimeout="3">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
 </Response>"""
     else:
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find any booking for your phone number.
-        Let me transfer you to our team for assistance.
+        I couldn't find any active booking for your phone number.
+        Would you like to make a new booking?
     </Say>
-    <Dial>
-        <Number>+6489661566</Number>
-    </Dial>
+    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    return Response(response, mimetype="text/xml")
+
+@app.route("/process_modification_smart", methods=["POST"])
+def process_modification_smart():
+    """Smart processing - extract all changes from one speech input"""
+    speech_result = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+    
+    print(f"🎯 Modification request: '{speech_result}'")
+    
+    # Get original booking
+    if caller_number not in booking_storage:
+        return redirect_to("/modify_booking")
+    
+    original_booking = booking_storage[caller_number].copy()
+    updated_booking = original_booking.copy()
+    changes_made = []
+    
+    # Check for cancellation first
+    if any(word in speech_result.lower() for word in ['cancel', 'delete', 'don\'t need', 'not going']):
+        return redirect_to("/cancel_booking")
+    
+    # Check if they want no changes
+    if any(word in speech_result.lower() for word in ['nothing', 'no change', 'keep it', 'fine', 'good', 'same']):
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! Your booking remains unchanged.
+        We'll see you at your scheduled pickup time.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+    
+    # Extract new pickup address if mentioned
+    pickup_patterns = [
+        r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
+        r"from\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
+        r"change.*?pickup.*?to\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
+        r"new.*?address.*?is\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))"
+    ]
+    
+    for pattern in pickup_patterns:
+        match = re.search(pattern, speech_result, re.IGNORECASE)
+        if match:
+            new_pickup = match.group(1).strip()
+            new_pickup = re.sub(r'\bnumber\s+', '', new_pickup, flags=re.IGNORECASE)
+            if new_pickup and new_pickup != original_booking['pickup_address']:
+                updated_booking['pickup_address'] = new_pickup
+                changes_made.append(f"pickup to {new_pickup}")
+            break
+    
+    # Extract new destination if mentioned
+    destination_patterns = [
+        r"(?:to|going to|destination)\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
+        r"take.*?me.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
+        r"change.*?destination.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at|on|and|$))"
+    ]
+    
+    for pattern in destination_patterns:
+        match = re.search(pattern, speech_result, re.IGNORECASE)
+        if match:
+            new_dest = match.group(1).strip()
+            # Smart destination mapping
+            if "hospital" in new_dest.lower():
+                new_dest = "Wellington Hospital"
+            elif "airport" in new_dest.lower():
+                new_dest = "Wellington Airport"
+            elif "station" in new_dest.lower():
+                new_dest = "Wellington Railway Station"
+            
+            if new_dest and new_dest != original_booking['destination']:
+                updated_booking['destination'] = new_dest
+                changes_made.append(f"destination to {new_dest}")
+            break
+    
+    # Extract new time if mentioned
+    time_keywords = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'am', 'pm', 'o\'clock']
+    if any(keyword in speech_result.lower() for keyword in time_keywords):
+        # Use existing parse_booking_speech to extract time
+        temp_booking = parse_booking_speech(speech_result)
+        if temp_booking.get('pickup_time'):
+            updated_booking['pickup_time'] = temp_booking['pickup_time']
+            if temp_booking.get('pickup_date'):
+                updated_booking['pickup_date'] = temp_booking['pickup_date']
+            time_str = f"{temp_booking.get('pickup_date', '')} at {temp_booking['pickup_time']}".strip()
+            changes_made.append(f"time to {time_str}")
+    
+    # If changes were made, update the booking
+    if changes_made:
+        # Mark old booking as modified/cancelled
+        booking_storage[caller_number]['status'] = 'modified'
+        booking_storage[caller_number]['modified_at'] = datetime.now().isoformat()
+        
+        # Create new booking with updates
+        updated_booking['modified_from_original'] = True
+        updated_booking['original_booking_ref'] = original_booking.get('booking_reference', '')
+        updated_booking['confirmed_at'] = datetime.now().isoformat()
+        updated_booking['status'] = 'confirmed'
+        
+        # Replace the booking
+        booking_storage[caller_number] = updated_booking
+        
+        # Send the updated booking to API (this creates a new booking, old one is marked as modified)
+        send_booking_to_api(updated_booking, caller_number)
+        
+        changes_text = " and ".join(changes_made)
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your {changes_text}.
+        Your taxi will now pick you up from {updated_booking['pickup_address']} 
+        and take you to {updated_booking['destination']} 
+        {f"on {updated_booking['pickup_date']}" if updated_booking.get('pickup_date') else ""} 
+        {f"at {updated_booking['pickup_time']}" if updated_booking.get('pickup_time') else ""}.
+        Your previous booking has been cancelled.
+    </Say>
+    <Hangup/>
+</Response>"""
+    else:
+        # Couldn't understand the changes
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't understand what you wanted to change.
+        Please tell me clearly what you'd like to update - for example:
+        "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
+    </Say>
+    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
+    </Gather>
+</Response>"""
+    
+    return Response(response, mimetype="text/xml")
+
+@app.route("/no_booking_found", methods=["POST"])
+def no_booking_found():
+    """Handle case when no booking found"""
+    speech_result = request.form.get("SpeechResult", "").lower()
+    
+    if any(word in speech_result for word in ['yes', 'yeah', 'yep', 'book', 'new', 'make']):
+        return redirect_to("/book_taxi")
+    else:
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No worries! Thank you for calling Kiwi Cabs. Have a great day!
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+
+@app.route("/cancel_booking", methods=["POST"])
+def cancel_booking():
+    """Cancel booking confirmation"""
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Just to confirm - you want to cancel your taxi booking?
+    </Say>
+    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Say yes to cancel, or no to keep it.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+@app.route("/confirm_cancellation", methods=["POST"])
+def confirm_cancellation():
+    """Process cancellation confirmation"""
+    speech_result = request.form.get("SpeechResult", "").lower()
+    caller_number = request.form.get("From", "")
+    
+    if any(word in speech_result for word in ['yes', 'confirm', 'cancel', 'yeah']):
+        # Cancel booking
+        if caller_number in booking_storage:
+            booking_storage[caller_number]['status'] = 'cancelled'
+            booking_storage[caller_number]['cancelled_at'] = datetime.now().isoformat()
+            
+            # Send cancellation to API
+            cancelled_booking = booking_storage[caller_number].copy()
+            cancelled_booking['status'] = 'cancelled'
+            send_booking_to_api(cancelled_booking, caller_number)
+            
+            # Remove from active bookings
+            del booking_storage[caller_number]
+            
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        No worries! I've cancelled your booking. 
+        Thanks for letting us know!
+    </Say>
+    <Hangup/>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I couldn't find your booking to cancel.
+    </Say>
+    <Hangup/>
+</Response>"""
+    else:
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! Your booking is still active. 
+        See you at pickup time!
+    </Say>
+    <Hangup/>
 </Response>"""
     
     return Response(response, mimetype="text/xml")
