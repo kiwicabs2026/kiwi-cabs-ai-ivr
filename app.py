@@ -986,6 +986,53 @@ def confirm_booking():
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Is this booking correct: {confirmation_text}?
+            Say YES or NO.
+        </Say>
+    </Gather>
+    <Redirect>/confirm_booking</Redirect>
+</Response>"""
+    
+    return Response(response, mimetype="text/xml")
+
+@app.route("/modify_booking", methods=["POST"])
+def modify_booking():
+    """Handle booking modifications - automatically retrieve by caller phone number"""
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+    
+    print(f"📞 Checking bookings for: {caller_number}")
+    
+    # Check if caller has existing booking using their phone number
+    if caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
+        booking = booking_storage[caller_number]
+        
+        # Store in session for modification
+        if call_sid not in user_sessions:
+            user_sessions[call_sid] = {}
+        user_sessions[call_sid]['modifying_booking'] = booking
+        user_sessions[call_sid]['caller_number'] = caller_number
+        
+        # Format booking details for reading
+        name = booking.get('name', 'Customer')
+        pickup = booking.get('pickup_address', 'pickup location')
+        destination = booking.get('destination', 'destination')
+        pickup_date = booking.get('pickup_date', '')
+        pickup_time = booking.get('pickup_time', '')
+        
+        # Build time string
+        time_str = ""
+        if pickup_time == "ASAP":
+            time_str = "as soon as possible"
+        elif pickup_date and pickup_time:
+            time_str = f"on {pickup_date} at {pickup_time}"
+        elif pickup_time:
+            time_str = f"at {pickup_time}"
+        
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Excellent! I've changed your pickup time to {time_text}.
         Would you like to make any other changes?
@@ -1183,56 +1230,7 @@ if __name__ == "__main__":
     print(f"📅 SCHEDULED DISPATCH: Background processing for future bookings")
     print(f"📱 BOOKING MODIFICATIONS: Enabled - using phone number as reference")
     print(f"🤖 AI MODIFICATIONS: Full AI handling for booking changes and cancellations")
-    app.run(host="0.0.0.0", port=port, debug=True)<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Is this booking correct: {confirmation_text}?
-            Say YES or NO.
-        </Say>
-    </Gather>
-    <Redirect>/confirm_booking</Redirect>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
-
-@app.route("/modify_booking", methods=["POST"])
-def modify_booking():
-    """Handle booking modifications - automatically retrieve by caller's phone number"""
-    call_sid = request.form.get("CallSid", "")
-    caller_number = request.form.get("From", "")
-    
-    print(f"📞 Checking bookings for: {caller_number}")
-    
-    # Check if caller has existing booking using their phone number
-    if caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
-        booking = booking_storage[caller_number]
-        
-        # Store in session for modification
-        if call_sid not in user_sessions:
-            user_sessions[call_sid] = {}
-        user_sessions[call_sid]['modifying_booking'] = booking
-        user_sessions[call_sid]['caller_number'] = caller_number
-        
-        # Format booking details for reading
-        name = booking.get('name', 'Customer')
-        pickup = booking.get('pickup_address', 'pickup location')
-        destination = booking.get('destination', 'destination')
-        pickup_date = booking.get('pickup_date', '')
-        pickup_time = booking.get('pickup_time', '')
-        
-        # Build time string
-        time_str = ""
-        if pickup_time == "ASAP":
-            time_str = "as soon as possible"
-        elif pickup_date and pickup_time:
-            time_str = f"on {pickup_date} at {pickup_time}"
-        elif pickup_time:
-            time_str = f"at {pickup_time}"
-        
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
+    app.run(host="0.0.0.0", port=port, debug=True)
         Hello {name}, I found your booking.
         You have a taxi booked from {pickup} to {destination} {time_str}.
     </Say>
@@ -1536,20 +1534,3 @@ def process_time_change():
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Excellent! I've changed your pickup time to {time_text}.
-        Would you like to make any other changes?
-    </Say>
-    <Gather input="speech" action="/process_more_changes" method="POST" timeout="10" language="en-NZ">
-        <Say>Say yes to make another change, or no if you're all done.</Say>
-    </Gather>
-</Response>"""
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't update your booking.
-    </Say>
-    <Hangup/>
-</Response>"""
-    
-    return Response(response, mimetype="text/xml")
