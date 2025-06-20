@@ -940,10 +940,13 @@ def confirm_booking():
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="08" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Is this booking correct: {confirmation_text}?
-            Say YES or NO.
+            Lovely! Let me just double-check that for you: {confirmation_text}.
+            Does that sound right? Just say yes to confirm, or no if you'd like to make any changes.
+        </Say>
+    </Gather>
+</Response>
         </Say>
     </Gather>
     <Redirect>/confirm_booking</Redirect>
