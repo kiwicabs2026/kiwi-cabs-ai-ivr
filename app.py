@@ -973,7 +973,7 @@ def confirm_booking():
 
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
-    """Handle booking modifications - Smart AI that extracts everything at once"""
+    """Handle booking modifications - AI powered with natural language"""
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
     
@@ -986,7 +986,7 @@ def modify_booking():
         # Store in session for modification
         if call_sid not in user_sessions:
             user_sessions[call_sid] = {}
-        user_sessions[call_sid]['modifying_booking'] = booking.copy()  # Keep original
+        user_sessions[call_sid]['modifying_booking'] = booking.copy()
         user_sessions[call_sid]['caller_number'] = caller_number
         
         # Format booking details
@@ -1010,7 +1010,7 @@ def modify_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Hello {name}, I found your booking.
         You have a taxi from {pickup} to {destination} {time_str}.
-        Tell me anything you want to change - the pickup address, destination, time, or if you want to cancel.
+        Go ahead, I am listening.
     </Say>
     <Gather input="speech" 
             action="/process_modification_smart" 
