@@ -1342,7 +1342,7 @@ def no_booking_found():
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! Thank you for calling Kiwi Cabs. Have a great day!
+        No worries! Thank you for Using Kiwi Cabs. Have a great day!
     </Say>
     <Hangup/>
 </Response>"""
