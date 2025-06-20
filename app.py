@@ -1050,8 +1050,6 @@ def process_modification_smart():
         return redirect_to("/modify_booking")
     
     original_booking = booking_storage[caller_number].copy()
-    updated_booking = original_booking.copy()
-    changes_made = []
     
     # Check for cancellation first
     if any(word in speech_result.lower() for word in ['cancel', 'delete', 'don\'t need', 'not going']):
@@ -1068,6 +1066,169 @@ def process_modification_smart():
     <Hangup/>
 </Response>"""
         return Response(response, mimetype="text/xml")
+    
+    # Create updated booking starting with original data
+    updated_booking = original_booking.copy()
+    changes_made = []
+    
+    # Check if speech mentions address/location keywords
+    has_pickup_keywords = any(word in speech_result.lower() for word in ['pickup', 'pick up', 'from', 'address', 'pick me'])
+    has_destination_keywords = any(word in speech_result.lower() for word in ['destination', 'drop', 'take me to', 'going to'])
+    
+    # Only parse for full booking details if they're changing addresses
+    if has_pickup_keywords or has_destination_keywords:
+        modification_data = parse_booking_speech(speech_result)
+        
+        # Update pickup if provided and different
+        if has_pickup_keywords and modification_data['pickup_address']:
+            # CHECK FOR AIRPORT PICKUP
+            if any(keyword in modification_data['pickup_address'].lower() for keyword in ['airport', 'terminal']):
+                print(f"✈️ Airport pickup modification rejected")
+                response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, you don't need to book a taxi from the airport as we have taxis queuing at the airport rank.
+        Just walk to the rank and catch any Kiwi Cabs in the rank.
+    </Say>
+    <Hangup/>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+            
+            updated_booking['pickup_address'] = modification_data['pickup_address']
+            changes_made.append(f"pickup address to {modification_data['pickup_address']}")
+        
+        # Update destination if provided and different
+        if has_destination_keywords and modification_data['destination']:
+            updated_booking['destination'] = modification_data['destination']
+            changes_made.append(f"destination to {modification_data['destination']}")
+    
+    # IMPROVED TIME PARSING - More flexible patterns
+    time_patterns = [
+        r"(\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)",  # Matches "11 am", "11am", "11 a.m."
+        r"make it (\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)",  # "make it 11 am"
+        r"change.*?to (\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)",  # "change to 11 am"
+        r"at (\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)",  # "at 11 am"
+        r"(\d{1,2}):(\d{2})\s*(?:am|pm|a\.m\.|p\.m\.)?",  # "11:30 am"
+    ]
+    
+    time_found = False
+    for pattern in time_patterns:
+        match = re.search(pattern, speech_result, re.IGNORECASE)
+        if match:
+            if ":" in pattern:  # Handle HH:MM format
+                hour = match.group(1)
+                minute = match.group(2)
+                time_str = f"{hour}:{minute}"
+            else:  # Handle hour only
+                hour = match.group(1)
+                time_str = f"{hour}:00"
+            
+            # Add AM/PM
+            if 'pm' in speech_result.lower() or 'p.m.' in speech_result.lower():
+                time_str += " PM"
+            elif 'am' in speech_result.lower() or 'a.m.' in speech_result.lower():
+                time_str += " AM"
+            
+            updated_booking['pickup_time'] = time_str
+            time_found = True
+            
+            # Check for date keywords
+            if 'tomorrow' in speech_result.lower():
+                tomorrow = datetime.now() + timedelta(days=1)
+                updated_booking['pickup_date'] = tomorrow.strftime("%d/%m/%Y")
+                changes_made.append(f"time to tomorrow at {time_str}")
+            elif 'today' in speech_result.lower():
+                today = datetime.now()
+                updated_booking['pickup_date'] = today.strftime("%d/%m/%Y")
+                changes_made.append(f"time to today at {time_str}")
+            else:
+                # Just time change, keep original date
+                changes_made.append(f"time to {time_str}")
+            break
+    
+    # If changes were made, update the booking
+    if changes_made:
+        # STEP 1: Cancel the old booking first
+        print("❌ CANCELLING OLD BOOKING FIRST")
+        
+        # Create cancellation payload
+        cancel_booking = original_booking.copy()
+        cancel_booking['status'] = 'cancelled'
+        cancel_booking['cancelled_at'] = datetime.now().isoformat()
+        cancel_booking['cancellation_reason'] = 'Customer modified booking'
+        
+        # Send cancellation to TaxiCaller/API
+        print(f"📤 Sending CANCELLATION for old booking")
+        cancel_success, cancel_response = send_booking_to_api(cancel_booking, caller_number)
+        
+        if cancel_success:
+            print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
+        else:
+            print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
+        
+        # STEP 2: Create new booking with modifications
+        updated_booking['modified_at'] = datetime.now().isoformat()
+        updated_booking['raw_speech'] = f"Modified booking (replaces cancelled): {speech_result}"
+        updated_booking['previous_booking_cancelled'] = True
+        updated_booking['replaces_booking'] = original_booking.get('booking_reference', '')
+        
+        # Replace the booking in storage
+        booking_storage[caller_number] = updated_booking
+        
+        # Send the NEW booking to API
+        print("📝 SENDING NEW MODIFIED BOOKING")
+        print(f"   Name: {updated_booking['name']}")
+        print(f"   From: {updated_booking['pickup_address']}")
+        print(f"   To: {updated_booking['destination']}")
+        print(f"   Time: {updated_booking.get('pickup_time', '')}")
+        print(f"   Date: {updated_booking.get('pickup_date', '')}")
+        print(f"   Note: This REPLACES the cancelled booking")
+        
+        success, api_response = send_booking_to_api(updated_booking, caller_number)
+        
+        if success:
+            print("✅ NEW BOOKING SENT SUCCESSFULLY")
+        else:
+            print("❌ FAILED TO SEND NEW BOOKING")
+        
+        # Create confirmation message
+        changes_text = " and ".join(changes_made)
+        
+        # Build complete booking details for confirmation
+        pickup_str = updated_booking['pickup_address']
+        dest_str = updated_booking['destination']
+        time_str = ""
+        
+        if updated_booking.get('pickup_time') == "ASAP":
+            time_str = "as soon as possible"
+        elif updated_booking.get('pickup_date') and updated_booking.get('pickup_time'):
+            time_str = f"on {updated_booking['pickup_date']} at {updated_booking['pickup_time']}"
+        elif updated_booking.get('pickup_time'):
+            time_str = f"at {updated_booking['pickup_time']}"
+        
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Your booking has been updated.
+        Your taxi will pick you up from {pickup_str} and take you to {dest_str} {time_str}.
+    </Say>
+    <Hangup/>
+</Response>"""
+    else:
+        # Couldn't understand the changes
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't understand what you wanted to change.
+        Please tell me clearly what you'd like to update - for example:
+        "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
+    </Say>
+    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
+    </Gather>
+</Response>"""
+    
+    return Response(response, mimetype="text/xml")
     
     # Extract new pickup address if mentioned
     pickup_patterns = [
