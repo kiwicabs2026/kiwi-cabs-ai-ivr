@@ -410,15 +410,35 @@ def parse_booking_speech(speech_text):
             booking_data['destination'] = destination
             break
     
-    # Extract date
+    # Extract date - IMPROVED TO HANDLE SPECIFIC DATES LIKE 22nd, 23rd
     immediate_keywords = ["right now", "now", "asap", "as soon as possible", "immediately", "straight away"]
     tomorrow_keywords = ["tomorrow morning", "tomorrow afternoon", "tomorrow evening", "tomorrow night", "tomorrow"]
     today_keywords = ["tonight", "today", "later today", "this afternoon", "this evening", "this morning"]
+    
+    # First check for specific date mentions (22nd, 23rd, etc.)
+    date_pattern = r"(\d{1,2})(?:st|nd|rd|th)"
+    date_match = re.search(date_pattern, speech_text)
     
     if any(keyword in speech_text.lower() for keyword in immediate_keywords):
         current_time = datetime.now()
         booking_data['pickup_date'] = current_time.strftime("%d/%m/%Y")
         booking_data['pickup_time'] = "ASAP"
+    elif date_match:
+        # Customer specified a specific date number
+        day = int(date_match.group(1))
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+        
+        # If the day has already passed this month, assume next month
+        if day < current_date.day:
+            if current_month == 12:
+                current_month = 1
+                current_year += 1
+            else:
+                current_month += 1
+        
+        booking_data['pickup_date'] = f"{day:02d}/{current_month:02d}/{current_year}"
     elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
         tomorrow = datetime.now() + timedelta(days=1)
         booking_data['pickup_date'] = tomorrow.strftime("%d/%m/%Y")
@@ -624,7 +644,7 @@ def book_taxi():
             speechTimeout="2" 
             finishOnKey="" 
             enhanced="true">
-        <Say>I am listening.</Say>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
     <Redirect>/book_taxi</Redirect>
 </Response>"""
@@ -706,7 +726,7 @@ def process_booking():
         I need {missing_text} to complete your booking. Please provide the missing information.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
-        <Say>I am listening.</Say>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>""", mimetype="text/xml")
     
@@ -757,10 +777,10 @@ def process_booking():
     
     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="3">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Let me confirm your booking: {confirmation_text}.
-            Please say YES to confirm this booking, or NO to make changes.
+            Lovely! Let me just double-check that for you: {confirmation_text}.
+            Does that sound right? Just say yes to confirm, or no if you'd like to make any changes.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
@@ -923,7 +943,7 @@ def confirm_booking():
         Please tell me your corrected booking details.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
-        <Say>I am listening.</Say>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
     else:
@@ -940,13 +960,10 @@ def confirm_booking():
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="08" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Lovely! Let me just double-check that for you: {confirmation_text}.
-            Does that sound right? Just say yes to confirm, or no if you'd like to make any changes.
-        </Say>
-    </Gather>
-</Response>
+            Is this booking correct: {confirmation_text}?
+            Say YES or NO.
         </Say>
     </Gather>
     <Redirect>/confirm_booking</Redirect>
