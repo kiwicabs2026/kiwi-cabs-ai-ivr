@@ -1552,42 +1552,44 @@ else:
 break
 
 # If changes were made, update the booking
-    if changes_made:
-        # Update database first
-        conn = get_db_connection()
-        if conn:
-            try:
-                cur = conn.cursor()
-                # Update the booking status to 'modified'
-                cur.execute(
-                    "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
-                    (caller_number,),
-                )
-                conn.commit()
-                cur.close()
-                conn.close()
-            except Exception as e:
-                print(f"❌ Database update error: {e}")
+# If changes were made, update the booking
+# If changes were made, update the booking
+if changes_made:
+    # Update database first
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            # Update the booking status to 'modified'
+            cur.execute(
+                "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
+                (caller_number,),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Database update error: {e}")
 
-        # STEP 1: Cancel the old booking first
-        print("❌ CANCELLING OLD BOOKING FIRST")
+    # STEP 1: Cancel the old booking first
+    print("❌ CANCELLING OLD BOOKING FIRST")
 
-        # Create cancellation payload
-        cancel_booking = original_booking.copy()
-        cancel_booking["status"] = "cancelled"
-        cancel_booking["cancelled_at"] = datetime.now().isoformat()
-        cancel_booking["cancellation_reason"] = "Customer modified booking"
+    # Create cancellation payload
+    cancel_booking = original_booking.copy()
+    cancel_booking["status"] = "cancelled"
+    cancel_booking["cancelled_at"] = datetime.now().isoformat()
+    cancel_booking["cancellation_reason"] = "Customer modified booking"
 
-        # Send cancellation to TaxiCaller/API
-        print(f"📤 Sending CANCELLATION for old booking")
-        cancel_success, cancel_response = send_booking_to_api(
-            cancel_booking, caller_number
-        )
+    # Send cancellation to TaxiCaller/API
+    print(f"📤 Sending CANCELLATION for old booking")
+    cancel_success, cancel_response = send_booking_to_api(
+        cancel_booking, caller_number
+    )
 
-        if cancel_success:
-            print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
-        else:
-            print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
+    if cancel_success:
+        print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
+    else:
+        print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
 
         # STEP 2: Create new booking with modifications
         updated_booking["modified_at"] = datetime.now().isoformat()
