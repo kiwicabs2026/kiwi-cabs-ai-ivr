@@ -1534,7 +1534,7 @@ for pattern in time_patterns:
 
         updated_booking["pickup_time"] = time_str
         time_found = True
-        break
+        break  # exits the for loop
 
 # Check for date keywords
 if "tomorrow" in speech_result.lower():
@@ -1548,10 +1548,10 @@ elif "today" in speech_result.lower():
 else:
     # Just time change, keep original date
     changes_made.append(f"time to {time_str}")
+
 break
 
-
-    # If changes were made, update the booking
+# If changes were made, update the booking
     if changes_made:
         # Update database first
         conn = get_db_connection()
