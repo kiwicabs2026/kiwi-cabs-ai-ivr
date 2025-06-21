@@ -9,6 +9,8 @@ import urllib.parse
 import time
 import base64
 import threading
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -46,6 +48,82 @@ modification_bookings = {}
 booking_storage = {}
 
 print(f"🔑 TaxiCaller API Key: {'Configured (' + TAXICALLER_API_KEY[:8] + '...)' if TAXICALLER_API_KEY else 'Not configured'}")
+
+# Database connection function
+def get_db_connection():
+    """Get PostgreSQL connection from DATABASE_URL"""
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    if DATABASE_URL:
+        # Render uses postgresql:// but psycopg2 needs postgres://
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        try:
+            return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        except Exception as e:
+            print(f"❌ Database connection error: {e}")
+            return None
+    return None
+
+# Initialize database tables
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            
+            # Customers table
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS customers (
+                    id SERIAL PRIMARY KEY,
+                    phone_number VARCHAR(20) UNIQUE NOT NULL,
+                    name VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    total_bookings INTEGER DEFAULT 0
+                )
+            ''')
+            
+            # Bookings table
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS bookings (
+                    id SERIAL PRIMARY KEY,
+                    customer_phone VARCHAR(20) NOT NULL,
+                    customer_name VARCHAR(100),
+                    pickup_location TEXT NOT NULL,
+                    dropoff_location TEXT,
+                    booking_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    scheduled_time TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    booking_reference VARCHAR(100),
+                    raw_speech TEXT,
+                    pickup_date VARCHAR(20),
+                    pickup_time VARCHAR(20),
+                    created_via VARCHAR(20) DEFAULT 'ai_ivr'
+                )
+            ''')
+            
+            # Conversation history table
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id SERIAL PRIMARY KEY,
+                    phone_number VARCHAR(20) NOT NULL,
+                    message TEXT,
+                    role VARCHAR(10),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            print("✅ Database tables initialized")
+        except Exception as e:
+            print(f"❌ Database initialization error: {e}")
+            if conn:
+                conn.close()
+
+# Run this once when app starts
+init_db()
 
 def init_google_speech():
     """Initialize Google Speech client with credentials"""
@@ -571,7 +649,8 @@ def index():
         "version": "2.2-immediate-dispatch",
         "taxicaller_configured": bool(TAXICALLER_API_KEY),
         "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
-        "features": ["immediate_dispatch_for_urgent", "fast_confirmation", "clean_addresses"]
+        "database_connected": get_db_connection() is not None,
+        "features": ["immediate_dispatch_for_urgent", "fast_confirmation", "clean_addresses", "database_storage"]
     }, 200
 
 @app.route("/health", methods=["GET"])
@@ -583,7 +662,8 @@ def health_check():
         "version": "2.2-immediate-dispatch",
         "google_speech": GOOGLE_SPEECH_AVAILABLE,
         "taxicaller_api": bool(TAXICALLER_API_KEY),
-        "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None
+        "taxicaller_key_preview": TAXICALLER_API_KEY[:8] + "..." if TAXICALLER_API_KEY else None,
+        "database": get_db_connection() is not None
     }, 200
 
 @app.route("/voice", methods=["POST"])
@@ -659,6 +739,21 @@ def process_booking():
     caller_number = request.form.get("From", "")
     
     print(f"🎯 SPEECH: '{speech_data}' (Confidence: {confidence:.2f})")
+    
+    # Save conversation to database
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO conversations (phone_number, message, role) VALUES (%s, %s, %s)",
+                (caller_number, speech_data, 'user')
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Error saving conversation: {e}")
     
     # If low confidence and Google available, try recording
     if GOOGLE_SPEECH_AVAILABLE and confidence < 0.7 and speech_data.strip():
@@ -861,6 +956,62 @@ def confirm_booking():
             'status': 'confirmed'
         }
         
+        # Save to database
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                
+                # Update or insert customer
+                cur.execute(
+                    """INSERT INTO customers (phone_number, name) 
+                       VALUES (%s, %s) 
+                       ON CONFLICT (phone_number) 
+                       DO UPDATE SET name = EXCLUDED.name, total_bookings = customers.total_bookings + 1""",
+                    (caller_number, booking_data['name'])
+                )
+                
+                # Insert booking
+                is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
+                scheduled_time = None
+                
+                if not is_immediate and booking_data.get('pickup_date') and booking_data.get('pickup_time'):
+                    try:
+                        # Parse date and time for scheduled bookings
+                        date_parts = booking_data['pickup_date'].split('/')
+                        time_str = booking_data['pickup_time']
+                        if 'AM' in time_str or 'PM' in time_str:
+                            pickup_time = datetime.strptime(time_str, '%I:%M %p').time()
+                        else:
+                            pickup_time = datetime.strptime(time_str, '%H:%M').time()
+                        
+                        scheduled_time = datetime.combine(
+                            datetime(int(date_parts[2]), int(date_parts[1]), int(date_parts[0])).date(),
+                            pickup_time
+                        )
+                    except:
+                        pass
+                
+                cur.execute(
+                    """INSERT INTO bookings 
+                       (customer_phone, customer_name, pickup_location, dropoff_location, 
+                        scheduled_time, status, booking_reference, raw_speech, 
+                        pickup_date, pickup_time, created_via) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (caller_number, booking_data['name'], booking_data['pickup_address'], 
+                     booking_data['destination'], scheduled_time, 'confirmed',
+                     f"AI_{caller_number.replace('+', '')}_{int(time.time())}",
+                     booking_data.get('raw_speech', ''), booking_data.get('pickup_date', ''),
+                     booking_data.get('pickup_time', ''), 'ai_ivr')
+                )
+                
+                conn.commit()
+                cur.close()
+                conn.close()
+                print("✅ Booking saved to database")
+            except Exception as e:
+                print(f"❌ Database error: {e}")
+        
         # Check if this is an IMMEDIATE booking (right now, ASAP, now)
         is_immediate = booking_data.get('pickup_time', '').upper() in ['ASAP', 'NOW', 'IMMEDIATELY']
         has_immediate_words = any(word in booking_data.get('raw_speech', '').lower() for word in [
@@ -979,10 +1130,42 @@ def modify_booking():
     
     print(f"📞 Checking bookings for: {caller_number}")
     
-    # Check if caller has a booking
-    if caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
+    # Check database first
+    conn = get_db_connection()
+    booking = None
+    
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT * FROM bookings 
+                   WHERE customer_phone = %s AND status = 'confirmed' 
+                   ORDER BY booking_time DESC LIMIT 1""",
+                (caller_number,)
+            )
+            db_booking = cur.fetchone()
+            
+            if db_booking:
+                booking = {
+                    'name': db_booking['customer_name'],
+                    'pickup_address': db_booking['pickup_location'],
+                    'destination': db_booking['dropoff_location'],
+                    'pickup_date': db_booking['pickup_date'],
+                    'pickup_time': db_booking['pickup_time'],
+                    'status': db_booking['status'],
+                    'booking_reference': db_booking['booking_reference']
+                }
+                
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Database error: {e}")
+    
+    # Fallback to memory storage
+    if not booking and caller_number in booking_storage and booking_storage[caller_number].get('status') == 'confirmed':
         booking = booking_storage[caller_number]
-        
+    
+    if booking:
         # Store in session for modification
         if call_sid not in user_sessions:
             user_sessions[call_sid] = {}
@@ -1148,6 +1331,22 @@ def process_modification_smart():
     
     # If changes were made, update the booking
     if changes_made:
+        # Update database first
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                # Update the booking status to 'modified'
+                cur.execute(
+                    "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
+                    (caller_number,)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f"❌ Database update error: {e}")
+        
         # STEP 1: Cancel the old booking first
         print("❌ CANCELLING OLD BOOKING FIRST")
         
@@ -1486,12 +1685,45 @@ def test_taxicaller():
     except Exception as e:
         return {"error": str(e), "api_configured": bool(TAXICALLER_API_KEY)}, 500
 
+@app.route("/test_db", methods=["GET"])
+def test_db():
+    """Test database connection"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            
+            # Get counts
+            cur.execute("SELECT COUNT(*) as count FROM bookings")
+            bookings_count = cur.fetchone()['count']
+            
+            cur.execute("SELECT COUNT(*) as count FROM customers")
+            customers_count = cur.fetchone()['count']
+            
+            cur.execute("SELECT COUNT(*) as count FROM conversations")
+            conversations_count = cur.fetchone()['count']
+            
+            cur.close()
+            conn.close()
+            
+            return {
+                "database": "connected",
+                "tables": {
+                    "bookings": bookings_count,
+                    "customers": customers_count,
+                    "conversations": conversations_count
+                }
+            }, 200
+        except Exception as e:
+            return {"database": "error", "message": str(e)}, 500
+    return {"database": "not connected"}, 500
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint not found", "available_endpoints": [
         "/", "/health", "/voice", "/menu", "/book_taxi", "/process_booking", 
-        "/confirm_booking", "/modify_booking", "/team", "/api/bookings", "/test_taxicaller"
+        "/confirm_booking", "/modify_booking", "/team", "/api/bookings", "/test_taxicaller", "/test_db"
     ]}), 404
 
 @app.errorhandler(500)
