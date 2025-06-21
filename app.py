@@ -397,7 +397,31 @@ def parse_booking_speech(speech_text):
         'pickup_time': '',
         'pickup_date': '',
         'raw_speech': speech_text
-    }
+        # Extract weekdays (Monday, Tuesday, ...)
+from datetime import datetime, timedelta
+
+weekdays = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6
+}
+
+# Check for weekday mentioned explicitly
+# Check for weekday mentioned explicitly
+for day_name, day_index in weekdays.items():
+    if day_name in speech_text.lower():
+        today_weekday = datetime.now().weekday()
+        days_ahead = day_index - today_weekday
+        if days_ahead <= 0:  # if mentioned day is today or passed, move to next week
+            days_ahead += 7
+        pickup_date = datetime.now() + timedelta(days=days_ahead)
+        booking_data['pickup_date'] = pickup_date.strftime("%d/%m/%Y")
+        break
+
     
     # Extract name
     name_patterns = [
