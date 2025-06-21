@@ -459,31 +459,28 @@ def parse_booking_speech(speech_text):
         "raw_speech": speech_text,
     }
     # Extract weekdays (Monday, Tuesday, ...)
+    from datetime import datetime, timedelta
 
+    weekdays = {
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
+    }
 
-from datetime import datetime, timedelta
-
-weekdays = {
-    "monday": 0,
-    "tuesday": 1,
-    "wednesday": 2,
-    "thursday": 3,
-    "friday": 4,
-    "saturday": 5,
-    "sunday": 6,
-}
-
-# Check for weekday mentioned explicitly
-# Check for weekday mentioned explicitly
-for day_name, day_index in weekdays.items():
-    if day_name in speech_text.lower():
-        today_weekday = datetime.now().weekday()
-        days_ahead = day_index - today_weekday
-        if days_ahead <= 0:  # if mentioned day is today or passed, move to next week
-            days_ahead += 7
-        pickup_date = datetime.now() + timedelta(days=days_ahead)
-        booking_data["pickup_date"] = pickup_date.strftime("%d/%m/%Y")
-        break
+    # Check for weekday mentioned explicitly
+    for day_name, day_index in weekdays.items():
+        if day_name in speech_text.lower():
+            today_weekday = datetime.now().weekday()
+            days_ahead = day_index - today_weekday
+            if days_ahead <= 0:  # if mentioned day is today or passed, move to next week
+                days_ahead += 7
+            pickup_date = datetime.now() + timedelta(days=days_ahead)
+            booking_data["pickup_date"] = pickup_date.strftime("%d/%m/%Y")
+            break
 
     # Extract name
     name_patterns = [
@@ -492,6 +489,7 @@ for day_name, day_index in weekdays.items():
         r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b(?!\s+(?:Street|Road|Avenue|Lane|Drive))\s+from",
     ]
 
+    import re
     for pattern in name_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
@@ -499,17 +497,8 @@ for day_name, day_index in weekdays.items():
             if not any(
                 word in potential_name.lower()
                 for word in [
-                    "need",
-                    "want",
-                    "going",
-                    "from",
-                    "taxi",
-                    "booking",
-                    "street",
-                    "road",
-                    "avenue",
-                    "lane",
-                    "drive",
+                    "need", "want", "going", "from", "taxi", "booking",
+                    "street", "road", "avenue", "lane", "drive"
                 ]
             ):
                 booking_data["name"] = potential_name
@@ -580,14 +569,8 @@ for day_name, day_index in weekdays.items():
             elif any(
                 airport_word in destination.lower()
                 for airport_word in [
-                    "airport",
-                    "the airport",
-                    "domestic airport",
-                    "international airport",
-                    "steward duff",
-                    "stewart duff",
-                    "wlg airport",
-                    "wellington airport",
+                    "airport", "the airport", "domestic airport", "international airport",
+                    "steward duff", "stewart duff", "wlg airport", "wellington airport"
                 ]
             ):
                 destination = "Wellington Airport"
@@ -601,27 +584,13 @@ for day_name, day_index in weekdays.items():
 
     # Extract date - IMPROVED TO HANDLE SPECIFIC DATES LIKE 22nd, 23rd
     immediate_keywords = [
-        "right now",
-        "now",
-        "asap",
-        "as soon as possible",
-        "immediately",
-        "straight away",
+        "right now", "now", "asap", "as soon as possible", "immediately", "straight away",
     ]
     tomorrow_keywords = [
-        "tomorrow morning",
-        "tomorrow afternoon",
-        "tomorrow evening",
-        "tomorrow night",
-        "tomorrow",
+        "tomorrow morning", "tomorrow afternoon", "tomorrow evening", "tomorrow night", "tomorrow",
     ]
     today_keywords = [
-        "tonight",
-        "today",
-        "later today",
-        "this afternoon",
-        "this evening",
-        "this morning",
+        "tonight", "today", "later today", "this afternoon", "this evening", "this morning",
     ]
 
     # First check for specific date mentions (22nd, 23rd, etc.)
@@ -674,7 +643,9 @@ for day_name, day_index in weekdays.items():
                     )
                 booking_data["pickup_time"] = time_str
                 break
+
     return booking_data
+
 
 
 def send_booking_to_api(booking_data, caller_number):
