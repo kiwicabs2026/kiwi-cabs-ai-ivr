@@ -674,7 +674,6 @@ for day_name, day_index in weekdays.items():
                     )
                 booking_data["pickup_time"] = time_str
                 break
-
     return booking_data
 
 
