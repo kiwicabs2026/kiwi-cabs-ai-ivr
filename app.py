@@ -1534,27 +1534,22 @@ for pattern in time_patterns:
 
         updated_booking["pickup_time"] = time_str
         time_found = True
-
-        # Now continue with your # Check for date keywords ... section, no changes needed
         break
 
+# Check for date keywords
+if "tomorrow" in speech_result.lower():
+    tomorrow = datetime.now() + timedelta(days=1)
+    updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
+    changes_made.append(f"time to tomorrow at {time_str}")
+elif "today" in speech_result.lower():
+    today = datetime.now()
+    updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
+    changes_made.append(f"time to today at {time_str}")
+else:
+    # Just time change, keep original date
+    changes_made.append(f"time to {time_str}")
+break
 
-        # Now continue with your # Check for date keywords ... section, no changes needed
-
-
- # Check for date keywords
- if "tomorrow" in speech_result.lower():
-     tomorrow = datetime.now() + timedelta(days=1)
-     updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
-     changes_made.append(f"time to tomorrow at {time_str}")
- elif "today" in speech_result.lower():
-      today = datetime.now()
-      updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
-      changes_made.append(f"time to today at {time_str}")
- else:
-       # Just time change, keep original date
-       changes_made.append(f"time to {time_str}")
- break
 
     # If changes were made, update the booking
     if changes_made:
