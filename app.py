@@ -1635,7 +1635,8 @@ if changes_made:
         elif updated_booking.get("pickup_time"):
             time_str = f"at {updated_booking['pickup_time']}"
 
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+if changes_made:
+    response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been updated.
@@ -1643,13 +1644,13 @@ if changes_made:
     </Say>
     <Hangup/>
 </Response>"""
-    else:
-        # Couldn't understand the changes
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+else:
+    # Couldn't understand the changes
+    response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, I couldn't understand what you wanted to change.
-        Please tell me clearly what you'd like to update - for example:
+        Please tell me clearly what you'd like to update – for example:
         "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
     </Say>
     <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
@@ -1657,7 +1658,8 @@ if changes_made:
     </Gather>
 </Response>"""
 
-    return Response(response, mimetype="text/xml")
+return Response(response, mimetype="text/xml")
+
 
     # Extract new pickup address if mentioned
     pickup_patterns = [
