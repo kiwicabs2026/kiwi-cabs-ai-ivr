@@ -1515,8 +1515,8 @@ def process_modification_smart():
         r"(\d{1,2}):(\d{2})\s*(?:am|pm|a\.m\.|p\.m\.)?",  # "11:30 am"
     ]
 
-    time_found = False
-    for pattern in time_patterns:
+time_found = False
+for pattern in time_patterns:
     match = re.search(pattern, speech_result, re.IGNORECASE)
     if match:
         # Always safely extract hour and minute
@@ -1534,6 +1534,10 @@ def process_modification_smart():
 
         updated_booking["pickup_time"] = time_str
         time_found = True
+
+        # Now continue with your # Check for date keywords ... section, no changes needed
+        break
+
 
         # Now continue with your # Check for date keywords ... section, no changes needed
 
