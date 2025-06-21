@@ -397,6 +397,7 @@ def parse_booking_speech(speech_text):
         'pickup_time': '',
         'pickup_date': '',
         'raw_speech': speech_text
+}
         # Extract weekdays (Monday, Tuesday, ...)
 from datetime import datetime, timedelta
 
