@@ -1517,24 +1517,26 @@ def process_modification_smart():
 
     time_found = False
     for pattern in time_patterns:
-        match = re.search(pattern, speech_result, re.IGNORECASE)
-        if match:
-            if ":" in pattern:  # Handle HH:MM format
-                hour = match.group(1)
-                minute = match.group(2)
-                time_str = f"{hour}:{minute}"
-            else:  # Handle hour only
-                hour = match.group(1)
-                time_str = f"{hour}:00"
+    match = re.search(pattern, speech_result, re.IGNORECASE)
+    if match:
+        # Always safely extract hour and minute
+        hour = match.group(1)
+        minute = "00"
+        if match.lastindex and match.lastindex >= 2 and match.group(2):
+            minute = match.group(2)
+        time_str = f"{hour}:{minute}"
 
-            # Add AM/PM
-            if "pm" in speech_result.lower() or "p.m." in speech_result.lower():
-                time_str += " PM"
-            elif "am" in speech_result.lower() or "a.m." in speech_result.lower():
-                time_str += " AM"
+        # Add AM/PM
+        if "pm" in speech_result.lower() or "p.m." in speech_result.lower():
+            time_str += " PM"
+        elif "am" in speech_result.lower() or "a.m." in speech_result.lower():
+            time_str += " AM"
 
-            updated_booking["pickup_time"] = time_str
-            time_found = True
+        updated_booking["pickup_time"] = time_str
+        time_found = True
+
+        # Now continue with your # Check for date keywords ... section, no changes needed
+
 
             # Check for date keywords
             if "tomorrow" in speech_result.lower():
