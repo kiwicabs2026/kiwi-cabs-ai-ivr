@@ -1662,12 +1662,17 @@ return Response(response, mimetype="text/xml")
 
 
     # Extract new pickup address if mentioned
+    
+def some_function():
+    # Extract new pickup address if mentioned
     pickup_patterns = [
         r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
         r"from\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
         r"change.*?pickup.*?to\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
         r"new.*?address.*?is\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
     ]
+
+
 
     for pattern in pickup_patterns:
         match = re.search(pattern, speech_result, re.IGNORECASE)
