@@ -1657,12 +1657,8 @@ else:
     </Gather>
 </Response>"""
 
-return Response(response, mimetype="text/xml")
+    return Response(response, mimetype="text/xml")
 
-
-    # Extract new pickup address if mentioned
-    
-def some_function():
     # Extract new pickup address if mentioned
     pickup_patterns = [
         r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
@@ -1670,9 +1666,6 @@ def some_function():
         r"change.*?pickup.*?to\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
         r"new.*?address.*?is\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
     ]
-
-
-
     for pattern in pickup_patterns:
         match = re.search(pattern, speech_result, re.IGNORECASE)
         if match:
