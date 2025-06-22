@@ -1471,11 +1471,6 @@ def process_modification_smart():
         return Response(response, mimetype="text/xml")
 
     # Create updated booking starting with original data
-    # (Continue your logic here...)
-
-
-
-    # Create updated booking starting with original data
     updated_booking = original_booking.copy()
     changes_made = []
 
@@ -1534,6 +1529,7 @@ def process_modification_smart():
     ]
 
     time_found = False
+    time_str = ""  # Initialize time_str variable to avoid scope issues
     for pattern in time_patterns:
         match = re.search(pattern, speech_result, re.IGNORECASE)
         if match:
@@ -1554,22 +1550,20 @@ def process_modification_smart():
             time_found = True
             break  # exits the for loop
 
-    # Check for date keywords
-    if "tomorrow" in speech_result.lower():
-        tomorrow = datetime.now() + timedelta(days=1)
-        updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
-        changes_made.append(f"time to tomorrow at {time_str}")
-    elif "today" in speech_result.lower():
-        today = datetime.now()
-        updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
-        changes_made.append(f"time to today at {time_str}")
-    else:
-        # Just time change, keep original date
-        changes_made.append(f"time to {time_str}")
+    # Check for date keywords only if time was found
+    if time_found:
+        if "tomorrow" in speech_result.lower():
+            tomorrow = datetime.now() + timedelta(days=1)
+            updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
+            changes_made.append(f"time to tomorrow at {time_str}")
+        elif "today" in speech_result.lower():
+            today = datetime.now()
+            updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
+            changes_made.append(f"time to today at {time_str}")
+        else:
+            # Just time change, keep original date
+            changes_made.append(f"time to {time_str}")
 
-
-    # If changes were made, update the booking
-    # If changes were made, update the booking
     # If changes were made, update the booking
     if changes_made:
         # Update database first
@@ -1577,16 +1571,26 @@ def process_modification_smart():
         if conn:
             try:
                 cur = conn.cursor()
+                # Start transaction
+                cur.execute("BEGIN")
                 # Update the booking status to 'modified'
                 cur.execute(
                     "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
                     (caller_number,),
                 )
+                # Commit transaction
+                cur.execute("COMMIT")
                 conn.commit()
                 cur.close()
                 conn.close()
             except Exception as e:
                 print(f"❌ Database update error: {e}")
+                if conn:
+                    try:
+                        cur.execute("ROLLBACK")
+                        conn.close()
+                    except:
+                        pass
 
         # STEP 1: Cancel the old booking first
         print("❌ CANCELLING OLD BOOKING FIRST")
@@ -1643,39 +1647,25 @@ def process_modification_smart():
         # Build complete booking details for confirmation
         pickup_str = updated_booking["pickup_address"]
         dest_str = updated_booking["destination"]
-        time_str = ""
+        time_confirmation_str = ""
 
         if updated_booking.get("pickup_time") == "ASAP":
-            time_str = "as soon as possible"
+            time_confirmation_str = "as soon as possible"
         elif updated_booking.get("pickup_date") and updated_booking.get("pickup_time"):
-            time_str = f"on {updated_booking['pickup_date']} at {updated_booking['pickup_time']}"
+            time_confirmation_str = f"on {updated_booking['pickup_date']} at {updated_booking['pickup_time']}"
         elif updated_booking.get("pickup_time"):
-            time_str = f"at {updated_booking['pickup_time']}"
+            time_confirmation_str = f"at {updated_booking['pickup_time']}"
 
-        if changes_made:
-            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been updated.
-        Your taxi will pick you up from {pickup_str} and take you to {dest_str} {time_str}.
+        Your taxi will pick you up from {pickup_str} and take you to {dest_str} {time_confirmation_str}.
     </Say>
     <Hangup/>
 </Response>"""
-        else:
-            # Couldn't understand the changes
-            response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't understand what you wanted to change.
-        Please tell me clearly what you'd like to update - for example:
-        "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
-    </Say>
-    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
-    </Gather>
-</Response>"""
         return Response(response, mimetype="text/xml")
-        
+    else:
         # Extract new pickup address if mentioned
         pickup_patterns = [
             r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
@@ -1700,67 +1690,67 @@ def process_modification_smart():
             r"change.*?destination.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at|on|and|$))",
         ]
 
-    for pattern in destination_patterns:
-        match = re.search(pattern, speech_result, re.IGNORECASE)
-        if match:
-            new_dest = match.group(1).strip()
-            # Smart destination mapping
-            if "hospital" in new_dest.lower():
-                new_dest = "Wellington Hospital"
-            elif "airport" in new_dest.lower():
-                new_dest = "Wellington Airport"
-            elif "station" in new_dest.lower():
-                new_dest = "Wellington Railway Station"
+        for pattern in destination_patterns:
+            match = re.search(pattern, speech_result, re.IGNORECASE)
+            if match:
+                new_dest = match.group(1).strip()
+                # Smart destination mapping
+                if "hospital" in new_dest.lower():
+                    new_dest = "Wellington Hospital"
+                elif "airport" in new_dest.lower():
+                    new_dest = "Wellington Airport"
+                elif "station" in new_dest.lower():
+                    new_dest = "Wellington Railway Station"
 
-            if new_dest and new_dest != original_booking["destination"]:
-                updated_booking["destination"] = new_dest
-                changes_made.append(f"destination to {new_dest}")
-            break
+                if new_dest and new_dest != original_booking["destination"]:
+                    updated_booking["destination"] = new_dest
+                    changes_made.append(f"destination to {new_dest}")
+                break
 
-    # Extract new time if mentioned
-    time_keywords = [
-        "tomorrow",
-        "today",
-        "tonight",
-        "morning",
-        "afternoon",
-        "evening",
-        "am",
-        "pm",
-        "o'clock",
-    ]
-    if any(keyword in speech_result.lower() for keyword in time_keywords):
-        # Use existing parse_booking_speech to extract time
-        temp_booking = parse_booking_speech(speech_result)
-        if temp_booking.get("pickup_time"):
-            updated_booking["pickup_time"] = temp_booking["pickup_time"]
-            if temp_booking.get("pickup_date"):
-                updated_booking["pickup_date"] = temp_booking["pickup_date"]
-            time_str = f"{temp_booking.get('pickup_date', '')} at {temp_booking['pickup_time']}".strip()
-            changes_made.append(f"time to {time_str}")
+        # Extract new time if mentioned
+        time_keywords = [
+            "tomorrow",
+            "today",
+            "tonight",
+            "morning",
+            "afternoon",
+            "evening",
+            "am",
+            "pm",
+            "o'clock",
+        ]
+        if any(keyword in speech_result.lower() for keyword in time_keywords):
+            # Use existing parse_booking_speech to extract time
+            temp_booking = parse_booking_speech(speech_result)
+            if temp_booking.get("pickup_time"):
+                updated_booking["pickup_time"] = temp_booking["pickup_time"]
+                if temp_booking.get("pickup_date"):
+                    updated_booking["pickup_date"] = temp_booking["pickup_date"]
+                time_update_str = f"{temp_booking.get('pickup_date', '')} at {temp_booking['pickup_time']}".strip()
+                changes_made.append(f"time to {time_update_str}")
 
-    # If changes were made, update the booking
-    if changes_made:
-        # Mark old booking as modified/cancelled
-        booking_storage[caller_number]["status"] = "modified"
-        booking_storage[caller_number]["modified_at"] = datetime.now().isoformat()
+        # If changes were made after fallback parsing, update the booking
+        if changes_made:
+            # Mark old booking as modified/cancelled
+            booking_storage[caller_number]["status"] = "modified"
+            booking_storage[caller_number]["modified_at"] = datetime.now().isoformat()
 
-        # Create new booking with updates
-        updated_booking["modified_from_original"] = True
-        updated_booking["original_booking_ref"] = original_booking.get(
-            "booking_reference", ""
-        )
-        updated_booking["confirmed_at"] = datetime.now().isoformat()
-        updated_booking["status"] = "confirmed"
+            # Create new booking with updates
+            updated_booking["modified_from_original"] = True
+            updated_booking["original_booking_ref"] = original_booking.get(
+                "booking_reference", ""
+            )
+            updated_booking["confirmed_at"] = datetime.now().isoformat()
+            updated_booking["status"] = "confirmed"
 
-        # Replace the booking
-        booking_storage[caller_number] = updated_booking
+            # Replace the booking
+            booking_storage[caller_number] = updated_booking
 
-        # Send the updated booking to API (this creates a new booking, old one is marked as modified)
-        send_booking_to_api(updated_booking, caller_number)
+            # Send the updated booking to API (this creates a new booking, old one is marked as modified)
+            send_booking_to_api(updated_booking, caller_number)
 
-        changes_text = " and ".join(changes_made)
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+            changes_text = " and ".join(changes_made)
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your {changes_text}.
@@ -1772,9 +1762,9 @@ def process_modification_smart():
     </Say>
     <Hangup/>
 </Response>"""
-    else:
-        # Couldn't understand the changes
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+        else:
+            # Couldn't understand the changes
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, I couldn't understand what you wanted to change.
@@ -1786,7 +1776,7 @@ def process_modification_smart():
     </Gather>
 </Response>"""
 
-    return Response(response, mimetype="text/xml")
+        return Response(response, mimetype="text/xml")
 
 
 @app.route("/no_booking_found", methods=["POST"])
