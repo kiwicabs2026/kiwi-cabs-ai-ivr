@@ -1495,6 +1495,9 @@ def process_modification_smart():
 
         # Update pickup if provided and different
         if has_pickup_keywords and modification_data["pickup_address"]:
+            # Skip if the parsed "pickup address" is actually a time
+            if any(time_word in modification_data["pickup_address"].lower() for time_word in ["a.m.", "p.m.", "am", "pm", "o'clock"]):
+                modification_data["pickup_address"] = ""  # Clear it - it's not an address
             # CHECK FOR AIRPORT PICKUP
             if any(
                 keyword in modification_data["pickup_address"].lower()
