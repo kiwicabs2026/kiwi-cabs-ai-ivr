@@ -1430,7 +1430,7 @@ def process_modification_smart():
     call_sid = request.form.get("CallSid", "")
     caller_number = request.form.get("From", "")
 
-    print(f"🎯 Modification request: '{speech_result}'")
+    print(f"📝 Modification request: '{speech_result}'")
 
     # Get original booking
     if caller_number not in booking_storage:
@@ -1459,6 +1459,11 @@ def process_modification_smart():
     <Hangup/>
 </Response>"""
         return Response(response, mimetype="text/xml")
+
+    # Create updated booking starting with original data
+    # (Continue your logic here...)
+
+
 
     # Create updated booking starting with original data
     updated_booking = original_booking.copy()
@@ -1643,9 +1648,9 @@ if changes_made:
     </Say>
     <Hangup/>
 </Response>"""
-else:
-    # Couldn't understand the changes
-    response = """<?xml version="1.0" encoding="UTF-8"?>
+    else:
+        # Couldn't understand the changes
+        response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, I couldn't understand what you wanted to change.
@@ -1656,7 +1661,7 @@ else:
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
     </Gather>
 </Response>"""
-    return Response(response, mimetype="text/xml")
+        return Response(response, mimetype="text/xml")
 
 
     # Extract new pickup address if mentioned
