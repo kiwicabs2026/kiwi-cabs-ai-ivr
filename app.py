@@ -1656,7 +1656,6 @@ else:
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
     </Gather>
 </Response>"""
-
     return Response(response, mimetype="text/xml")
 
 
