@@ -533,6 +533,9 @@ def parse_booking_speech(speech_text):
 
     # Extract destination - FIXED to completely remove "number" and clean up addresses
     destination_patterns = [
+        # Handle "I am going to" specifically
+        r"I am going to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at\s+\d{1,2}|thank))",
+        r"I'm going to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at\s+\d{1,2}|thank))",
         # Handle "going to number X" pattern - capture without "number"
         r"(?:to|going to|going)\s+(?:number\s+)?(\d+\s+[^,]+?)(?:\s+(?:tomorrow|today|tonight|at|\d{1,2}:|on|date|right now|now))",
         # Standard patterns without "number"
