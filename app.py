@@ -1549,7 +1549,6 @@ else:
     # Just time change, keep original date
     changes_made.append(f"time to {time_str}")
 
-break
 
 # If changes were made, update the booking
 # If changes were made, update the booking
