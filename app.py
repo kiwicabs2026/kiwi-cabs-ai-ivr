@@ -1659,6 +1659,7 @@ else:
 
     return Response(response, mimetype="text/xml")
 
+
     # Extract new pickup address if mentioned
     pickup_patterns = [
         r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
