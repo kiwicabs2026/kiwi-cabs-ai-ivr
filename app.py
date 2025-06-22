@@ -1520,80 +1520,80 @@ def process_modification_smart():
         r"(\d{1,2}):(\d{2})\s*(?:am|pm|a\.m\.|p\.m\.)?",  # "11:30 am"
     ]
 
-time_found = False
-for pattern in time_patterns:
-    match = re.search(pattern, speech_result, re.IGNORECASE)
-    if match:
-        # Always safely extract hour and minute
-        hour = match.group(1)
-        minute = "00"
-        if match.lastindex and match.lastindex >= 2 and match.group(2):
-            minute = match.group(2)
-        time_str = f"{hour}:{minute}"
+    time_found = False
+    for pattern in time_patterns:
+        match = re.search(pattern, speech_result, re.IGNORECASE)
+        if match:
+            # Always safely extract hour and minute
+            hour = match.group(1)
+            minute = "00"
+            if match.lastindex and match.lastindex >= 2 and match.group(2):
+                minute = match.group(2)
+            time_str = f"{hour}:{minute}"
 
-        # Add AM/PM
-        if "pm" in speech_result.lower() or "p.m." in speech_result.lower():
-            time_str += " PM"
-        elif "am" in speech_result.lower() or "a.m." in speech_result.lower():
-            time_str += " AM"
+            # Add AM/PM
+            if "pm" in speech_result.lower() or "p.m." in speech_result.lower():
+                time_str += " PM"
+            elif "am" in speech_result.lower() or "a.m." in speech_result.lower():
+                time_str += " AM"
 
-        updated_booking["pickup_time"] = time_str
-        time_found = True
-        break  # exits the for loop
+            updated_booking["pickup_time"] = time_str
+            time_found = True
+            break  # exits the for loop
 
-# Check for date keywords
-if "tomorrow" in speech_result.lower():
-    tomorrow = datetime.now() + timedelta(days=1)
-    updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
-    changes_made.append(f"time to tomorrow at {time_str}")
-elif "today" in speech_result.lower():
-    today = datetime.now()
-    updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
-    changes_made.append(f"time to today at {time_str}")
-else:
-    # Just time change, keep original date
-    changes_made.append(f"time to {time_str}")
-
-
-# If changes were made, update the booking
-# If changes were made, update the booking
-# If changes were made, update the booking
-if changes_made:
-    # Update database first
-    conn = get_db_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
-            # Update the booking status to 'modified'
-            cur.execute(
-                "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
-                (caller_number,),
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
-        except Exception as e:
-            print(f"❌ Database update error: {e}")
-
-    # STEP 1: Cancel the old booking first
-    print("❌ CANCELLING OLD BOOKING FIRST")
-
-    # Create cancellation payload
-    cancel_booking = original_booking.copy()
-    cancel_booking["status"] = "cancelled"
-    cancel_booking["cancelled_at"] = datetime.now().isoformat()
-    cancel_booking["cancellation_reason"] = "Customer modified booking"
-
-    # Send cancellation to TaxiCaller/API
-    print(f"📤 Sending CANCELLATION for old booking")
-    cancel_success, cancel_response = send_booking_to_api(
-        cancel_booking, caller_number
-    )
-
-    if cancel_success:
-        print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
+    # Check for date keywords
+    if "tomorrow" in speech_result.lower():
+        tomorrow = datetime.now() + timedelta(days=1)
+        updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
+        changes_made.append(f"time to tomorrow at {time_str}")
+    elif "today" in speech_result.lower():
+        today = datetime.now()
+        updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
+        changes_made.append(f"time to today at {time_str}")
     else:
-        print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
+        # Just time change, keep original date
+        changes_made.append(f"time to {time_str}")
+
+
+    # If changes were made, update the booking
+    # If changes were made, update the booking
+    # If changes were made, update the booking
+    if changes_made:
+        # Update database first
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor()
+                # Update the booking status to 'modified'
+                cur.execute(
+                    "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
+                    (caller_number,),
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                print(f"❌ Database update error: {e}")
+
+        # STEP 1: Cancel the old booking first
+        print("❌ CANCELLING OLD BOOKING FIRST")
+
+        # Create cancellation payload
+        cancel_booking = original_booking.copy()
+        cancel_booking["status"] = "cancelled"
+        cancel_booking["cancelled_at"] = datetime.now().isoformat()
+        cancel_booking["cancellation_reason"] = "Customer modified booking"
+
+        # Send cancellation to TaxiCaller/API
+        print(f"📤 Sending CANCELLATION for old booking")
+        cancel_success, cancel_response = send_booking_to_api(
+            cancel_booking, caller_number
+        )
+
+        if cancel_success:
+            print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
+        else:
+            print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
 
         # STEP 2: Create new booking with modifications
         updated_booking["modified_at"] = datetime.now().isoformat()
@@ -1639,7 +1639,7 @@ if changes_made:
         elif updated_booking.get("pickup_time"):
             time_str = f"at {updated_booking['pickup_time']}"
 
-if changes_made:
+        if changes_made:
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
