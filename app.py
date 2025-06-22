@@ -1640,7 +1640,7 @@ if changes_made:
             time_str = f"at {updated_booking['pickup_time']}"
 
 if changes_made:
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been updated.
@@ -1648,9 +1648,9 @@ if changes_made:
     </Say>
     <Hangup/>
 </Response>"""
-    else:
-        # Couldn't understand the changes
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+        else:
+            # Couldn't understand the changes
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, I couldn't understand what you wanted to change.
@@ -1661,32 +1661,31 @@ if changes_made:
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
     </Gather>
 </Response>"""
-
-    return Response(response, mimetype="text/xml")
-
-    # Extract new pickup address if mentioned
-    pickup_patterns = [
-        r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
-        r"from\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
-        r"change.*?pickup.*?to\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
-        r"new.*?address.*?is\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
-    ]
-    for pattern in pickup_patterns:
-        match = re.search(pattern, speech_result, re.IGNORECASE)
-        if match:
-            new_pickup = match.group(1).strip()
-            new_pickup = re.sub(r"\bnumber\s+", "", new_pickup, flags=re.IGNORECASE)
-            if new_pickup and new_pickup != original_booking["pickup_address"]:
-                updated_booking["pickup_address"] = new_pickup
-                changes_made.append(f"pickup to {new_pickup}")
-            break
-
-    # Extract new destination if mentioned
-    destination_patterns = [
-        r"(?:to|going to|destination)\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
-        r"take.*?me.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
-        r"change.*?destination.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at|on|and|$))",
-    ]
+        return Response(response, mimetype="text/xml")
+        
+        # Extract new pickup address if mentioned
+        pickup_patterns = [
+            r"pick.*?up.*?(?:from|at)\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
+            r"from\s+(?:number\s+)?([^,]+?)(?:\s+(?:instead|and|to|going))",
+            r"change.*?pickup.*?to\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
+            r"new.*?address.*?is\s+(?:number\s+)?([^,]+?)(?:\s+(?:and|to|going|$))",
+        ]
+        for pattern in pickup_patterns:
+            match = re.search(pattern, speech_result, re.IGNORECASE)
+            if match:
+                new_pickup = match.group(1).strip()
+                new_pickup = re.sub(r"\bnumber\s+", "", new_pickup, flags=re.IGNORECASE)
+                if new_pickup and new_pickup != original_booking["pickup_address"]:
+                    updated_booking["pickup_address"] = new_pickup
+                    changes_made.append(f"pickup to {new_pickup}")
+                break
+        
+        # Extract new destination if mentioned
+        destination_patterns = [
+            r"(?:to|going to|destination)\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
+            r"take.*?me.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:instead|at|on|and|$))",
+            r"change.*?destination.*?to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at|on|and|$))",
+        ]
 
     for pattern in destination_patterns:
         match = re.search(pattern, speech_result, re.IGNORECASE)
