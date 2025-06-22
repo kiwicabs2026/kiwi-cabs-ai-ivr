@@ -375,12 +375,31 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             "source": "AI_IVR",
         }
 
-        # Try multiple TaxiCaller endpoints since the original doesn't exist
+        # Try multiple TaxiCaller endpoints - UPDATED with potentially correct endpoints
         possible_endpoints = [
-            "https://api.taxicaller.net/v2/bookings/create",
+            "https://portal.taxicaller.net/api/v1/bookings",  # Portal-based endpoint
+            "https://api.taxicaller.net/v1/bookings/create",   # V1 endpoint (more likely to exist)
+            "https://api.taxicaller.net/api/v1/bookings",     # Alternative V1 endpoint
+            "https://api.taxicaller.net/v2/bookings/create",   # Keep v2 as fallback
             "https://api.taxicaller.net/api/v2/bookings/create",
-            "https://api.taxicaller.net/booking/create",
-            "https://taxicaller.net/api/v2/bookings/create",
+        ]
+
+        # IMPORTANT: Try with different HTTP methods and headers
+        headers_options = [
+            {
+                "Content-Type": "application/json",
+                "User-Agent": "KiwiCabs-AI-IVR/2.1",
+                "Authorization": f"Bearer {TAXICALLER_API_KEY}",  # Try Bearer token
+            },
+            {
+                "Content-Type": "application/json", 
+                "User-Agent": "KiwiCabs-AI-IVR/2.1",
+                "X-API-Key": TAXICALLER_API_KEY,  # Try X-API-Key header
+            },
+            {
+                "Content-Type": "application/json",
+                "User-Agent": "KiwiCabs-AI-IVR/2.1",
+            }
         ]
 
         booking_url = possible_endpoints[0]  # Start with most likely
@@ -397,44 +416,49 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
         for endpoint in possible_endpoints:
-            try:
-                print(f"📤 TRYING ENDPOINT: {endpoint}")
+            for headers in headers_options:
+                try:
+                    print(f"📤 TRYING ENDPOINT: {endpoint}")
+                    print(f"📤 TRYING HEADERS: {headers}")
 
-                response = requests.post(
-                    endpoint,
-                    json=booking_payload,
-                    timeout=3,  # Quick timeout - don't make customer wait
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "KiwiCabs-AI-IVR/2.1",
-                    },
-                )
+                    response = requests.post(
+                        endpoint,
+                        json=booking_payload,
+                        timeout=3,  # Quick timeout - don't make customer wait
+                        headers=headers,
+                    )
 
-                print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
-                print(f"📥 RESPONSE BODY: {response.text}")
+                    print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+                    print(f"📥 RESPONSE BODY: {response.text}")
 
-                # STEP 4: Log the API response and handle errors
-                if response.status_code in [200, 201]:
-                    try:
-                        response_data = response.json()
-                        booking_id = response_data.get(
-                            "bookingId", response_data.get("id", "Unknown")
-                        )
-                        print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
-                        return True, response_data
-                    except:
-                        print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
-                        return True, {"status": "created", "response": response.text}
-                else:
-                    print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
-                    continue  # Try next endpoint
+                    # STEP 4: Log the API response and handle errors
+                    if response.status_code in [200, 201]:
+                        try:
+                            response_data = response.json()
+                            booking_id = response_data.get(
+                                "bookingId", response_data.get("id", "Unknown")
+                            )
+                            print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
+                            return True, response_data
+                        except:
+                            print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                            return True, {"status": "created", "response": response.text}
+                    elif response.status_code == 401:
+                        print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+                        continue  # Try next header format
+                    elif response.status_code == 403:
+                        print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+                        continue  # Try next endpoint/header
+                    else:
+                        print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+                        continue  # Try next endpoint
 
-            except requests.exceptions.ConnectionError as e:
-                print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-                continue  # Try next endpoint
-            except Exception as e:
-                print(f"❌ ERROR for {endpoint}: {str(e)}")
-                continue  # Try next endpoint
+                except requests.exceptions.ConnectionError as e:
+                    print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+                    break  # Try next endpoint (no point trying other headers)
+                except Exception as e:
+                    print(f"❌ ERROR for {endpoint}: {str(e)}")
+                    continue  # Try next header/endpoint
 
         # If all endpoints failed
         print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
@@ -1566,84 +1590,9 @@ def process_modification_smart():
 
     # If changes were made, update the booking
     if changes_made:
-        # Update database first
-        conn = get_db_connection()
-        if conn:
-            try:
-                cur = conn.cursor()
-                # Start transaction
-                cur.execute("BEGIN")
-                # Update the booking status to 'modified'
-                cur.execute(
-                    "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
-                    (caller_number,),
-                )
-                # Commit transaction
-                cur.execute("COMMIT")
-                conn.commit()
-                cur.close()
-                conn.close()
-            except Exception as e:
-                print(f"❌ Database update error: {e}")
-                if conn:
-                    try:
-                        cur.execute("ROLLBACK")
-                        conn.close()
-                    except:
-                        pass
-
-        # STEP 1: Cancel the old booking first
-        print("❌ CANCELLING OLD BOOKING FIRST")
-
-        # Create cancellation payload
-        cancel_booking = original_booking.copy()
-        cancel_booking["status"] = "cancelled"
-        cancel_booking["cancelled_at"] = datetime.now().isoformat()
-        cancel_booking["cancellation_reason"] = "Customer modified booking"
-
-        # Send cancellation to TaxiCaller/API
-        print(f"📤 Sending CANCELLATION for old booking")
-        cancel_success, cancel_response = send_booking_to_api(
-            cancel_booking, caller_number
-        )
-
-        if cancel_success:
-            print("✅ OLD BOOKING CANCELLED SUCCESSFULLY")
-        else:
-            print("⚠️ FAILED TO CANCEL OLD BOOKING - CONTINUING WITH NEW BOOKING")
-
-        # STEP 2: Create new booking with modifications
-        updated_booking["modified_at"] = datetime.now().isoformat()
-        updated_booking[
-            "raw_speech"
-        ] = f"Modified booking (replaces cancelled): {speech_result}"
-        updated_booking["previous_booking_cancelled"] = True
-        updated_booking["replaces_booking"] = original_booking.get(
-            "booking_reference", ""
-        )
-
-        # Replace the booking in storage
-        booking_storage[caller_number] = updated_booking
-
-        # Send the NEW booking to API
-        print("📝 SENDING NEW MODIFIED BOOKING")
-        print(f"   Name: {updated_booking['name']}")
-        print(f"   From: {updated_booking['pickup_address']}")
-        print(f"   To: {updated_booking['destination']}")
-        print(f"   Time: {updated_booking.get('pickup_time', '')}")
-        print(f"   Date: {updated_booking.get('pickup_date', '')}")
-        print(f"   Note: This REPLACES the cancelled booking")
-
-        success, api_response = send_booking_to_api(updated_booking, caller_number)
-
-        if success:
-            print("✅ NEW BOOKING SENT SUCCESSFULLY")
-        else:
-            print("❌ FAILED TO SEND NEW BOOKING")
-
-        # Create confirmation message
+        # IMMEDIATE RESPONSE TO CUSTOMER - Don't make them wait!
         changes_text = " and ".join(changes_made)
-
+        
         # Build complete booking details for confirmation
         pickup_str = updated_booking["pickup_address"]
         dest_str = updated_booking["destination"]
@@ -1656,15 +1605,94 @@ def process_modification_smart():
         elif updated_booking.get("pickup_time"):
             time_confirmation_str = f"at {updated_booking['pickup_time']}"
 
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # IMMEDIATE RESPONSE - Customer doesn't wait for API calls
+        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Your booking has been updated.
+        Perfect! Your booking has been updated successfully.
         Your taxi will pick you up from {pickup_str} and take you to {dest_str} {time_confirmation_str}.
+        Thank you for using Kiwi Cabs!
     </Say>
     <Hangup/>
 </Response>"""
-        return Response(response, mimetype="text/xml")
+
+        # BACKGROUND PROCESSING - Don't make customer wait
+        def background_modification():
+            try:
+                print("🔄 BACKGROUND: Starting modification process...")
+                
+                # Update database first
+                conn = get_db_connection()
+                if conn:
+                    try:
+                        cur = conn.cursor()
+                        # Start transaction
+                        cur.execute("BEGIN")
+                        # Update the booking status to 'modified'
+                        cur.execute(
+                            "UPDATE bookings SET status = 'modified' WHERE customer_phone = %s AND status = 'confirmed'",
+                            (caller_number,),
+                        )
+                        # Commit transaction
+                        cur.execute("COMMIT")
+                        conn.commit()
+                        cur.close()
+                        conn.close()
+                        print("✅ BACKGROUND: Database updated")
+                    except Exception as e:
+                        print(f"❌ BACKGROUND: Database update error: {e}")
+                        if conn:
+                            try:
+                                cur.execute("ROLLBACK")
+                                conn.close()
+                            except:
+                                pass
+
+                # STEP 1: Cancel the old booking first
+                print("❌ BACKGROUND: Cancelling old booking")
+                cancel_booking = original_booking.copy()
+                cancel_booking["status"] = "cancelled"
+                cancel_booking["cancelled_at"] = datetime.now().isoformat()
+                cancel_booking["cancellation_reason"] = "Customer modified booking"
+
+                # Send cancellation to TaxiCaller/API
+                cancel_success, cancel_response = send_booking_to_api(cancel_booking, caller_number)
+                if cancel_success:
+                    print("✅ BACKGROUND: Old booking cancelled successfully")
+                else:
+                    print("⚠️ BACKGROUND: Failed to cancel old booking - continuing with new booking")
+
+                # STEP 2: Create new booking with modifications
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["raw_speech"] = f"Modified booking (replaces cancelled): change time to {updated_booking.get('pickup_time', '')}"
+                updated_booking["previous_booking_cancelled"] = True
+                updated_booking["replaces_booking"] = original_booking.get("booking_reference", "")
+
+                # Replace the booking in storage
+                booking_storage[caller_number] = updated_booking
+
+                # Send the NEW booking to API
+                print("📝 BACKGROUND: Sending new modified booking")
+                print(f"   Name: {updated_booking['name']}")
+                print(f"   From: {updated_booking['pickup_address']}")
+                print(f"   To: {updated_booking['destination']}")
+                print(f"   Time: {updated_booking.get('pickup_time', '')}")
+                print(f"   Date: {updated_booking.get('pickup_date', '')}")
+
+                success, api_response = send_booking_to_api(updated_booking, caller_number)
+                if success:
+                    print("✅ BACKGROUND: New booking sent successfully")
+                else:
+                    print("❌ BACKGROUND: Failed to send new booking")
+                    
+                print("✅ BACKGROUND: Modification process completed")
+            except Exception as e:
+                print(f"❌ BACKGROUND: Modification error: {str(e)}")
+
+        # Start background thread for API processing
+        threading.Thread(target=background_modification, daemon=True).start()
+        
+        return Response(immediate_response, mimetype="text/xml")
     else:
         # Extract new pickup address if mentioned
         pickup_patterns = [
