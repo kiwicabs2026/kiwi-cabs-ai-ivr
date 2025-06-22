@@ -592,7 +592,10 @@ def parse_booking_speech(speech_text):
     today_keywords = [
         "tonight", "today", "later today", "this afternoon", "this evening", "this morning",
     ]
-
+    after_tomorrow_keywords = [
+        "after tomorrow", "day after tomorrow", "2 days", "two days"
+    ]
+    
     # First check for specific date mentions (22nd, 23rd, etc.)
     date_pattern = r"(\d{1,2})(?:st|nd|rd|th)"
     date_match = re.search(date_pattern, speech_text)
@@ -601,6 +604,10 @@ def parse_booking_speech(speech_text):
         current_time = datetime.now()
         booking_data["pickup_date"] = current_time.strftime("%d/%m/%Y")
         booking_data["pickup_time"] = "ASAP"
+    elif any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
+        # Handle "after tomorrow" - add 2 days
+        after_tomorrow = datetime.now() + timedelta(days=2)
+        booking_data["pickup_date"] = after_tomorrow.strftime("%d/%m/%Y")
     elif date_match:
         # Customer specified a specific date number
         day = int(date_match.group(1))
