@@ -437,6 +437,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
         # Try multiple TaxiCaller endpoints - UPDATED with potentially correct endpoints
         possible_endpoints = [
+            "https://api-rc.taxicaller.net/api/v1/booker/order",
             "https://portal.taxicaller.net/api/v1/bookings",  # Portal-based endpoint
             "https://api.taxicaller.net/v1/bookings/create",   # V1 endpoint (more likely to exist)
             "https://api.taxicaller.net/api/v1/bookings",     # Alternative V1 endpoint
