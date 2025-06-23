@@ -1082,7 +1082,7 @@ def process_booking():
         missing_items.append("your destination")
         # IMPORTANT: Always ask for time if not provided
     if not merged_booking["pickup_time"].strip() and not merged_booking["pickup_date"].strip():
-    missing_items.append("please tell me when you need the taxi - you can say now, or any time like today at 3 PM or tomorrow morning")
+        missing_items.append("please tell me when you need the taxi - you can say now, or any time like today at 3 PM or tomorrow morning")
 
     if missing_items:
         missing_text = " and ".join(missing_items)
