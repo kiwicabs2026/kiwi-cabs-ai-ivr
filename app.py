@@ -1430,7 +1430,7 @@ def modify_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Hello {name}, I found your booking.
         You have a taxi from {pickup} to {destination} {time_str}.
-        GWhat would you like to change? You can change the time, pickup location, destination, or cancel the booking.
+        What would you like to change? You can change the time, pickup location, destination, or cancel the booking.
         Go ahead, I am listening
     </Say>
     <Gather input="speech" 
@@ -1439,7 +1439,6 @@ def modify_booking():
             timeout="20" 
             language="en-NZ" 
             speechTimeout="3">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
