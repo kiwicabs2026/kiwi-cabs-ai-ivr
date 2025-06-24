@@ -1711,8 +1711,8 @@ def process_modification_smart():
             updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
             changes_made.append(f"time to today at {time_str}")
         else:
+            pass
             # Just time change, keep original date
-
         changes_made.append(f"time to {time_str}")
     # If changes were made, update the booking
     if changes_made:
