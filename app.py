@@ -613,8 +613,16 @@ def parse_booking_speech(speech_text):
             pickup = pickup.replace("Melbourne Street", "Hobart Street")
             pickup = pickup.replace("mill street", "Willis Street")
 
-            booking_data["pickup_address"] = pickup
-            break
+    booking_data["pickup_address"] = pickup
+    # AI Smart Cleaning - Remove time from pickup address
+    if booking_data["pickup_address"]:
+        pickup = booking_data["pickup_address"]
+        # Remove patterns like "at 6 p.m.", "at 10:30 AM"
+        pickup = re.sub(r'\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)', '', pickup, flags=re.IGNORECASE)
+        # Remove time words
+        pickup = re.sub(r'\s+(?:tomorrow|today|tonight|morning|afternoon|evening|now|asap).*$', '', pickup, flags=re.IGNORECASE)
+        booking_data["pickup_address"] = pickup.strip()
+    break
 
     # Extract destination - FIXED to completely remove "number" and clean up addresses
     destination_patterns = [
@@ -667,8 +675,15 @@ def parse_booking_speech(speech_text):
             elif "te papa" in destination.lower():
                 destination = "Te Papa Museum"
 
-            booking_data["destination"] = destination
-            break
+        booking_data["destination"] = destination
+        # AI Smart Cleaning - Remove time from destination
+        if booking_data["destination"]:
+            dest = booking_data["destination"]
+            # Remove time patterns
+            dest = re.sub(r'\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)', '', dest, flags=re.IGNORECASE)
+            dest = re.sub(r'\s+by\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)', '', dest, flags=re.IGNORECASE)
+            booking_data["destination"] = dest.strip()
+        break
 
     # Extract date - IMPROVED TO HANDLE SPECIFIC DATES LIKE 22nd, 23rd
     immediate_keywords = [
