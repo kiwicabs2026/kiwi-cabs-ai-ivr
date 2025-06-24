@@ -1697,7 +1697,7 @@ def process_modification_smart():
             pickup_str = original_booking["pickup_address"]
             updated_booking["pickup_address"] = original_booking["pickup_address"]
 
-dest_str = updated_booking["destination"]
+        dest_str = updated_booking["destination"]
         dest_str = updated_booking["destination"]
         time_confirmation_str = ""
 
