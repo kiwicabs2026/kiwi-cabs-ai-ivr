@@ -1111,7 +1111,7 @@ def process_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
-        Thank you for using Kiwi Cabs. Goodbye
+        We appreciate your booking with Kiwi Cabs. Have a great day. Goodbye
     </Say>
     <Hangup/>
 </Response>""",
@@ -1358,7 +1358,7 @@ def confirm_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your urgent booking has been dispatched immediately to our drivers.
-        Thank you for contacting Kiwi Cabs.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
         Goodbye!
     </Say>
     <Hangup/>
@@ -1369,7 +1369,7 @@ def confirm_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been created successfully.
-        Thank you for contacting Kiwi Cabs.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
         Goodbye!
     </Say>
     <Hangup/>
@@ -1380,7 +1380,7 @@ def confirm_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been created successfully.
-        Thank you for contacting Kiwi Cabs.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
         Goodbye!
     </Say>
     <Hangup/>
@@ -1393,7 +1393,7 @@ def confirm_booking():
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Your booking has been created successfully.
-        Thank you for contacting Kiwi Cabs.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
         Goodbye!
     </Say>
     <Hangup/>
@@ -1714,7 +1714,7 @@ def process_modification_smart():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! Your booking has been updated successfully.
         Your taxi will pick you up from {pickup_str} and take you to {dest_str} {time_confirmation_str}.
-        Thank you for using Kiwi Cabs!
+        We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
 </Response>"""
@@ -1923,7 +1923,7 @@ def no_booking_found():
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! Thank you for Using Kiwi Cabs. Have a great day!
+        No worries! We appreciate your booking with Kiwi Cabs. Have a great day!
     </Say>
     <Hangup/>
 </Response>"""
