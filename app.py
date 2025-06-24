@@ -1649,6 +1649,20 @@ def process_modification_smart():
 
     time_found = False
     time_str = ""  # Initialize time_str variable to avoid scope issues
+    # Special handling for "from X to Y" time changes
+    if "from" in speech_result.lower() and "to" in speech_result.lower():
+        from_to_pattern = r'from\s+(\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)?\s+to\s+(\d{1,2})\s*(?:am|pm|a\.m\.|p\.m\.)'
+        from_to_match = re.search(from_to_pattern, speech_result, re.IGNORECASE)
+        if from_to_match:
+            # Take the SECOND time (after "to")
+            hour = from_to_match.group(2)
+            time_str = f"{hour}:00"
+            if "pm" in speech_result.lower() or "p.m." in speech_result.lower():
+                time_str += " PM"
+            elif "am" in speech_result.lower() or "a.m." in speech_result.lower():
+                time_str += " AM"
+            updated_booking["pickup_time"] = time_str
+            time_found = True
     for pattern in time_patterns:
         match = re.search(pattern, speech_result, re.IGNORECASE)
         if match:
