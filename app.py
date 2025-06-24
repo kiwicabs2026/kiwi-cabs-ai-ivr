@@ -98,7 +98,7 @@ TAXICALLER_API_KEY = os.getenv(
     "TAXICALLER_API_KEY", "c18afde179ec057037084b4daf10f01a"
 )  # Your TaxiCaller key
 RENDER_ENDPOINT = os.getenv(
-    "RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onrender.com/api/bookings"
+    "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
 )
 
 # Google Cloud and Twilio Configuration
@@ -438,11 +438,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Try multiple TaxiCaller endpoints - UPDATED with potentially correct endpoints
         possible_endpoints = [
             "https://api-rc.taxicaller.net/api/v1/booker/order",
-            "https://portal.taxicaller.net/api/v1/bookings",  # Portal-based endpoint
-            "https://api.taxicaller.net/v1/bookings/create",   # V1 endpoint (more likely to exist)
-            "https://api.taxicaller.net/api/v1/bookings",     # Alternative V1 endpoint
-            "https://api.taxicaller.net/v2/bookings/create",   # Keep v2 as fallback
-            "https://api.taxicaller.net/api/v2/bookings/create",
+           
         ]
 
         # IMPORTANT: Try with different HTTP methods and headers
@@ -2036,7 +2032,7 @@ def team():
         Please hold while I transfer you to our team.
     </Say>
     <Dial>
-        <Number>006448966156</Number>
+        <Number>+6489661566</Number>
     </Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
@@ -2103,10 +2099,7 @@ def test_taxicaller():
             if TAXICALLER_API_KEY
             else None,
             "endpoints_tried": [
-                "https://api.taxicaller.net/v2/bookings/create",
-                "https://api.taxicaller.net/api/v2/bookings/create",
-                "https://api.taxicaller.net/booking/create",
-                "https://taxicaller.net/api/v2/bookings/create",
+                "https://api-rc.taxicaller.net/api/v1/booker/order",
             ],
             "immediate_dispatch": "enabled for urgent bookings",
         }, 200
