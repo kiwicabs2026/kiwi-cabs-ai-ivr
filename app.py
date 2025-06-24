@@ -627,6 +627,7 @@ def parse_booking_speech(speech_text):
     # Extract destination - FIXED to completely remove "number" and clean up addresses
     destination = "railway station"  # This will be cleaned up by the mapping logic below
     destination_patterns = [
+        r"(?:going to|to)\s+(railway station|train station|station)",
         # Handle "I am going to" specifically
         r"I am going to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at\s+\d{1,2}|thank))",
         r"I'm going to\s+(?:the\s+)?([^,]+?)(?:\s+(?:at\s+\d{1,2}|thank))",
