@@ -753,7 +753,7 @@ def parse_booking_speech(speech_text):
                     time_str = time_str.replace(" AM", ":00 AM").replace(
                         " PM", ":00 PM"
                     )
-                booking_data["pickup_time"] = time_str
+                updated_booking["pickup_time"] = time_str
                 break
                 # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
@@ -1712,8 +1712,8 @@ def process_modification_smart():
             changes_made.append(f"time to today at {time_str}")
         else:
             # Just time change, keep original date
-            changes_made.append(f"time to {time_str}")
 
+        changes_made.append(f"time to {time_str}")
     # If changes were made, update the booking
     if changes_made:
         # IMMEDIATE RESPONSE TO CUSTOMER - Don't make them wait!
