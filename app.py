@@ -1690,6 +1690,14 @@ def process_modification_smart():
         
         # Build complete booking details for confirmation
         pickup_str = updated_booking["pickup_address"]
+        # Build complete booking details for confirmation
+        pickup_str = updated_booking["pickup_address"]
+        # FIX: If pickup is empty, use original booking's pickup
+        if not pickup_str and original_booking.get("pickup_address"):
+            pickup_str = original_booking["pickup_address"]
+            updated_booking["pickup_address"] = original_booking["pickup_address"]
+
+dest_str = updated_booking["destination"]
         dest_str = updated_booking["destination"]
         time_confirmation_str = ""
 
