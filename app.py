@@ -1230,7 +1230,7 @@ def process_booking_with_google():
         Sorry, I'm having trouble understanding. Let me transfer you to our team.
     </Say>
     <Dial>
-        <Number>+6489661566</Number>
+        <Number>+64489661566</Number>
     </Dial>
 </Response>""",
             mimetype="text/xml",
