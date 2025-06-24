@@ -613,17 +613,17 @@ def parse_booking_speech(speech_text):
             pickup = pickup.replace("Melbourne Street", "Hobart Street")
             pickup = pickup.replace("mill street", "Willis Street")
 
-    booking_data["pickup_address"] = pickup
-    # AI Smart Cleaning - Remove time from pickup address
-    if booking_data["pickup_address"]:
-        pickup = booking_data["pickup_address"]
-        # Remove patterns like "at 6 p.m.", "at 10:30 AM"
-        pickup = re.sub(r'\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)', '', pickup, flags=re.IGNORECASE)
-        # Remove time words
-        pickup = re.sub(r'\s+(?:tomorrow|today|tonight|morning|afternoon|evening|now|asap).*$', '', pickup, flags=re.IGNORECASE)
-        booking_data["pickup_address"] = pickup.strip()
-    break
-
+            booking_data["pickup_address"] = pickup
+            # AI Smart Cleaning - Remove time from pickup address
+            if booking_data["pickup_address"]:
+                pickup = booking_data["pickup_address"]
+                # Remove patterns like "at 6 p.m.", "at 10:30 AM"
+                pickup = re.sub(r'\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)', '', pickup, flags=re.IGNORECASE)
+                # Remove time words
+                pickup = re.sub(r'\s+(?:tomorrow|today|tonight|morning|afternoon|evening|now|asap).*$', '', pickup, flags=re.IGNORECASE)
+                booking_data["pickup_address"] = pickup.strip()
+            break
+            
     # Extract destination - FIXED to completely remove "number" and clean up addresses
     destination_patterns = [
         # Handle "I am going to" specifically
