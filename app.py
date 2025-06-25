@@ -374,13 +374,20 @@ def get_taxicaller_jwt():
 
 
 def send_booking_to_taxicaller(booking_data, caller_number):
-    """STEP 2: Send booking to TaxiCaller API using the correct v2 endpoint"""
+    """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
+        # Get environment variables
+        TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+        COMPANY_ID = os.getenv("COMPANY_ID", "")  # Add your company ID in Render
+        USER_ID = os.getenv("USER_ID", "")  # Optional
+        
         if not TAXICALLER_API_KEY:
             print("❌ No TaxiCaller API key available")
             return False, None
-
+            
         print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+        if COMPANY_ID:
+            print(f"🏢 Company ID: {COMPANY_ID}")
 
         # Format time to ISO format with NZ timezone as per your instructions
         is_immediate = booking_data.get("pickup_time", "").upper() in [
@@ -420,56 +427,57 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 print(f"❌ Error parsing date/time: {e}, using current time + 1 hour")
                 pickup_datetime = datetime.now() + timedelta(hours=1)
 
-        # Format to ISO with NZ timezone as per your instructions
-        pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
+        # Format to ISO format WITHOUT timezone as per guide
+        pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S")
 
-        # Create payload according to your step-by-step instructions
+        # Create payload according to the guide
         booking_payload = {
-            "apiKey": TAXICALLER_API_KEY,
-            "customerPhone": caller_number,
-            "customerName": booking_data["name"],
-            "pickup": booking_data["pickup_address"],
-            "dropoff": booking_data["destination"],
-            "time": pickup_time_iso,  # Format: '2025-05-29T15:30:00+12:00'
-            "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
-            "source": "AI_IVR",
+            "apikey": TAXICALLER_API_KEY,
+            "companyid": COMPANY_ID,
+            "passenger": {
+                "name": booking_data["name"],
+                "phone": caller_number
+            },
+            "pickup": {
+                "address": booking_data["pickup_address"]
+            },
+            "dropoff": {
+                "address": booking_data["destination"]
+            },
+            "pickuptime": pickup_time_iso,
+            "source": "KiwiCabsAI"
         }
+        
+        # Add optional User ID if available
+        if USER_ID:
+            booking_payload["userid"] = USER_ID
+        
+        # Add notes if available
+        if booking_data.get("raw_speech"):
+            booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
-        # Try multiple TaxiCaller endpoints - UPDATED with potentially correct endpoints
-        possible_endpoints = [
-            "https://api-rc.taxicaller.net/api/v1/booker/order",
-           
-        ]
+        # Use the correct endpoint from the guide
+        booking_url = "https://api-rc.taxicaller.net/v1/bookings"
 
-        # IMPORTANT: Try with different HTTP methods and headers
+
+        # Define endpoints and headers for the loop
+        possible_endpoints = [booking_url]  # Use the single correct endpoint
         headers_options = [
             {
                 "Content-Type": "application/json",
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
-                "Authorization": f"Bearer {TAXICALLER_API_KEY}",  # Try Bearer token
-            },
-            {
-                "Content-Type": "application/json", 
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
-                "X-API-Key": TAXICALLER_API_KEY,  # Try X-API-Key header
-            },
-            {
-                "Content-Type": "application/json",
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
+                "User-Agent": "KiwiCabs-AI-IVR/2.1"
             }
         ]
-
-        booking_url = possible_endpoints[0]  # Start with most likely
 
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url}")
         print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"   Customer: {booking_payload['customerName']}")
-        print(f"   Phone: {booking_payload['customerPhone']}")
-        print(f"   Pickup: {booking_payload['pickup']}")
-        print(f"   Dropoff: {booking_payload['dropoff']}")
-        print(f"   Time: {booking_payload['time']}")
-        print(f"   Payload: {json.dumps(booking_payload, indent=2)}")
+        print(f"   Customer: {booking_payload['passenger']['name']}")
+        print(f"   Phone: {booking_payload['passenger']['phone']}")
+        print(f"   Pickup: {booking_payload['pickup']['address']}")
+        print(f"   Dropoff: {booking_payload['dropoff']['address']}")
+        print(f"   Time: {booking_payload['pickuptime']}")
+
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
         for endpoint in possible_endpoints:
