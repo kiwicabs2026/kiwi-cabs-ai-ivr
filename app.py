@@ -733,48 +733,48 @@ def parse_booking_speech(speech_text):
         booking_data["pickup_date"] = today.strftime("%d/%m/%Y")
 
     # Extract time
-# Extract time
-time_patterns = [
-    r"in\s+(\d+)\s+minutes?",  # NEW: matches "in 30 minutes"
-    r"in\s+(\d+)\s+hours?",    # NEW: matches "in 2 hours"
-    r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
-    r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
-    r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
-]
+    time_patterns = [
+        r"in\s+(\d+)\s+minutes?",  # NEW: matches "in 30 minutes"
+        r"in\s+(\d+)\s+hours?",    # NEW: matches "in 2 hours"
+        r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+    ]
 
-# Add special handling for "half hour" BEFORE the pattern matching
-if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
-    booking_time = datetime.now() + timedelta(minutes=30)
-    booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
-    # Then do the pattern matching
-    for pattern in time_patterns:
-        match = re.search(pattern, speech_text, re.IGNORECASE)
-        if match:
-            if pattern == r"in\s+(\d+)\s+minutes?":
-                minutes = int(match.group(1))
-                booking_time = datetime.now() + timedelta(minutes=minutes)
-                time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
-                booking_data["pickup_time"] = time_str
-                booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-                break
-            elif pattern == r"in\s+(\d+)\s+hours?":
-                hours = int(match.group(1))
-                booking_time = datetime.now() + timedelta(hours=hours)
-                time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
-                booking_data["pickup_time"] = time_str
-                booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-                break
-            else:
-                # Handle regular time patterns (4 PM, etc.)
-                time_str = match.group(1).strip()
-                time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
-                if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
-                booking_data["pickup_time"] = time_str
-                break
-                # Clean temporal words from addresses
+    # Add special handling for "half hour" BEFORE the pattern matching
+    if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
+        booking_time = datetime.now() + timedelta(minutes=30)
+        booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+        booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+    elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
+        # Then do the pattern matching
+        for pattern in time_patterns:
+            match = re.search(pattern, speech_text, re.IGNORECASE)
+            if match:
+                if pattern == r"in\s+(\d+)\s+minutes?":
+                    minutes = int(match.group(1))
+                    booking_time = datetime.now() + timedelta(minutes=minutes)
+                    time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    break
+                elif pattern == r"in\s+(\d+)\s+hours?":
+                    hours = int(match.group(1))
+                    booking_time = datetime.now() + timedelta(hours=hours)
+                    time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    break
+                else:
+                    # Handle regular time patterns (4 PM, etc.)
+                    time_str = match.group(1).strip()
+                    time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
+                    if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
+                        time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                    booking_data["pickup_time"] = time_str
+                    break
+    
+    # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
     
     # Clean and validate pickup address
@@ -808,7 +808,6 @@ elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
     return booking_data
 
 
-
 def send_booking_to_api(booking_data, caller_number):
     """STEP 2 & 3: Send booking to TaxiCaller dispatch system with reduced timeout"""
     
@@ -829,15 +828,9 @@ def send_booking_to_api(booking_data, caller_number):
         "number_of_passengers": 1,
         "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
         "created_at": datetime.now().isoformat(),
-        "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]  # No comma here
+        "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]
     }
     
-    print(f"📤 QUICK BOOKING SUBMISSION:")
-    print(f"   Name: {enhanced_booking_data['customer_name']}")
-    print(f"   From: {enhanced_booking_data['pickup_address']}")
-    print(f"   To: {enhanced_booking_data['destination']}")
-    print(f"   Time: {enhanced_booking_data['pickup_time']}")
-
     print(f"📤 QUICK BOOKING SUBMISSION:")
     print(f"   Name: {enhanced_booking_data['customer_name']}")
     print(f"   From: {enhanced_booking_data['pickup_address']}")
