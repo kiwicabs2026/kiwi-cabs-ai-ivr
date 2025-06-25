@@ -454,7 +454,14 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
 
         # Define endpoints and headers for the loop
-        possible_endpoints = [booking_url]  # Use the single correct endpoint
+        possible_endpoints = [
+        booking_url,  # Keep the one from line 453 as first option
+        "https://api-rc.taxicaller.net/v2/bookings/create",
+        "https://apiv2-rc.taxicaller.net/v2/bookings/create", 
+        "https://api-rc.taxicaller.net/api/v2/bookings/create",
+        "https://api-rc.taxicaller.net/bookings",
+        "https://api-rc.taxicaller.net/api/bookings"
+        ]
         headers_options = [
             {
                 "Content-Type": "application/json",
