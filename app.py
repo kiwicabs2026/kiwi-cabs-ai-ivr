@@ -807,13 +807,11 @@ elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
     
     return booking_data
 
-    return booking_data
-
 
 
 def send_booking_to_api(booking_data, caller_number):
     """STEP 2 & 3: Send booking to TaxiCaller dispatch system with reduced timeout"""
-
+    
     # STEP 3: Format the input data - ensure we extract name, pickup, dropoff, time/date
     enhanced_booking_data = {
         "customer_name": booking_data.get("name", ""),
@@ -831,9 +829,14 @@ def send_booking_to_api(booking_data, caller_number):
         "number_of_passengers": 1,
         "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
         "created_at": datetime.now().isoformat(),
-        "is_immediate": booking_data.get("pickup_time", "").upper()
-        in ["ASAP", "NOW", "IMMEDIATELY"],
+        "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]  # No comma here
     }
+    
+    print(f"📤 QUICK BOOKING SUBMISSION:")
+    print(f"   Name: {enhanced_booking_data['customer_name']}")
+    print(f"   From: {enhanced_booking_data['pickup_address']}")
+    print(f"   To: {enhanced_booking_data['destination']}")
+    print(f"   Time: {enhanced_booking_data['pickup_time']}")
 
     print(f"📤 QUICK BOOKING SUBMISSION:")
     print(f"   Name: {enhanced_booking_data['customer_name']}")
