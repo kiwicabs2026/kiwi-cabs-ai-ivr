@@ -1006,7 +1006,7 @@ def book_taxi():
             method="POST" 
             timeout="10" 
             language="en-NZ" 
-            speechTimeout="2" 
+            speechTimeout="1" 
             finishOnKey="" 
             enhanced="true">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
@@ -1096,7 +1096,7 @@ def process_booking():
         Nice to meet you, {name}! 
         What's your pickup address?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me where to pick you up.</Say>
     </Gather>
 </Response>"""
@@ -1106,7 +1106,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I didn't catch your name. Could you please tell me your name?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
@@ -1157,7 +1157,7 @@ def process_booking():
         Perfect! I have your pickup at {pickup}.
         Where would you like to go?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your destination.</Say>
     </Gather>
 </Response>"""
@@ -1167,7 +1167,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I didn't catch that. Could you please tell me your pickup address?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
@@ -1214,7 +1214,7 @@ def process_booking():
         When do you need the taxi?
         You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me when you need the taxi.</Say>
     </Gather>
 </Response>"""
@@ -1224,7 +1224,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I didn't catch that. Where would you like to go?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
@@ -1264,7 +1264,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         What time on {parsed_booking['pickup_date']} would you like the taxi?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
     </Gather>
 </Response>"""
@@ -1281,7 +1281,7 @@ def process_booking():
             
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             {confirmation_text}.
             Is this correct? Say yes to confirm or no to start over.
@@ -1297,7 +1297,7 @@ def process_booking():
         Could you please tell me when you need the taxi?
         For example, say "now", "in 30 minutes", or "at 3 PM".
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
@@ -1589,7 +1589,7 @@ def confirm_booking():
         No problem. Let's start over.
         Please tell me your name.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
@@ -1602,7 +1602,7 @@ def confirm_booking():
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
             {simple_confirm}? Say YES or NO.
         </Say>
@@ -1696,7 +1696,7 @@ def modify_booking():
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="3">
+            speechTimeout="1">
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
@@ -1707,7 +1707,7 @@ def modify_booking():
         I couldn't find any active booking for your phone number.
         Would you like to make a new booking?
     </Say>
-    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
     </Gather>
 </Response>"""
 
@@ -2079,7 +2079,7 @@ def process_modification_smart():
         Please tell me clearly what you'd like to update - for example:
         "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
     </Say>
-    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
+    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
     </Gather>
 </Response>"""
@@ -2115,7 +2115,7 @@ def cancel_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Just to confirm - you want to cancel your taxi booking?
     </Say>
-    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Say yes to cancel, or no to keep it.</Say>
     </Gather>
     <Redirect>/modify_booking</Redirect>
