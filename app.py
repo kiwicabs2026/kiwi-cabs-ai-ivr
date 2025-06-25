@@ -428,24 +428,17 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 pickup_datetime = datetime.now() + timedelta(hours=1)
 
         # Format to ISO format WITHOUT timezone as per guide
-        pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+        pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
 
         # Create payload according to the guide
+       # Create payload according to the guide
         booking_payload = {
-            "apikey": TAXICALLER_API_KEY,
-            "companyid": COMPANY_ID,
-            "passenger": {
-                "name": booking_data["name"],
-                "phone": caller_number
-            },
-            "pickup": {
-                "address": booking_data["pickup_address"]
-            },
-            "dropoff": {
-                "address": booking_data["destination"]
-            },
-            "pickuptime": pickup_time_iso,
-            "source": "KiwiCabsAI"
+            "apiKey": TAXICALLER_API_KEY,  # Note: capital K
+            "customerPhone": caller_number,
+            "customerName": booking_data["name"],
+            "pickup": booking_data["pickup_address"],
+            "dropoff": booking_data["destination"],
+            "time": pickup_time_iso,  # Format: '2025-05-29T15:30:00+12:00'
         }
         
         # Add optional User ID if available
@@ -472,11 +465,11 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url}")
         print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"   Customer: {booking_payload['passenger']['name']}")
-        print(f"   Phone: {booking_payload['passenger']['phone']}")
-        print(f"   Pickup: {booking_payload['pickup']['address']}")
-        print(f"   Dropoff: {booking_payload['dropoff']['address']}")
-        print(f"   Time: {booking_payload['pickuptime']}")
+        print(f"   Customer: {booking_payload['customerName']}")
+        print(f"   Phone: {booking_payload['customerPhone']}")
+        print(f"   Pickup: {booking_payload['pickup']}")
+        print(f"   Dropoff: {booking_payload['dropoff']}")
+        print(f"   Time: {booking_payload['time']}")
 
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
