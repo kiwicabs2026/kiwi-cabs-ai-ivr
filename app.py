@@ -326,7 +326,7 @@ def transcribe_with_google(audio_url):
 
 
 def get_taxicaller_jwt():
-    """Legacy JWT function - kept for compatibility but not used in v2 API"""
+    print("🚀 Starting get_taxicaller_jwt()")
     if (
         TAXICALLER_JWT_CACHE["token"]
         and time.time() < TAXICALLER_JWT_CACHE["expires_at"]
@@ -339,19 +339,17 @@ def get_taxicaller_jwt():
         return None
 
     try:
-        # Try multiple possible JWT endpoints
         jwt_endpoints = [
-            "https://api.taxicaller.net/v1/jwt/for-key",
-            "https://api.taxicaller.net/jwt/for-key",
-            "https://api.taxicaller.net/api/v1/jwt/for-key",
+            "https://api-rc.taxicaller.net/api/v1/jwt/for-key",
         ]
-
         params = {"key": TAXICALLER_API_KEY, "sub": "*", "ttl": "900"}
 
         for jwt_url in jwt_endpoints:
             print(f"🔑 Trying JWT endpoint: {jwt_url}")
             try:
                 response = requests.get(jwt_url, params=params, timeout=5)
+                print(f"🌐 Status Code: {response.status_code}")
+                print(f"📥 Raw Response: {response.text}")
 
                 if response.status_code == 200:
                     jwt_token = response.text.strip()
@@ -365,12 +363,15 @@ def get_taxicaller_jwt():
                 print(f"❌ JWT endpoint {jwt_url} error: {str(e)}")
                 continue
 
-        print(f"❌ All JWT endpoints failed - using v2 API instead")
+        print("❌ All JWT endpoints failed")
         return None
 
     except Exception as e:
         print(f"❌ Error generating JWT: {str(e)}")
         return None
+
+# ✅ Call it
+get_taxicaller_jwt()
 
 
 def send_booking_to_taxicaller(booking_data, caller_number):
@@ -450,18 +451,11 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://apiv2-rc.taxicaller.net/v2/bookings/create"
+        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
 
 
         # Define endpoints and headers for the loop
-        possible_endpoints = [
-        booking_url,  # Keep the one from line 453 as first option
-        "https://api-rc.taxicaller.net/v2/bookings/create",
-        "https://apiv2-rc.taxicaller.net/v2/bookings/create", 
-        "https://api-rc.taxicaller.net/api/v2/bookings/create",
-        "https://api-rc.taxicaller.net/bookings",
-        "https://api-rc.taxicaller.net/api/bookings"
-        ]
+        possible_endpoints = [booking_url]  # Use the single correct endpoint
         headers_options = [
             {
                 "Content-Type": "application/json",
@@ -2274,6 +2268,9 @@ def test_taxicaller():
             "api_key_preview": TAXICALLER_API_KEY[:8] + "..."
             if TAXICALLER_API_KEY
             else None,
+            "endpoints_tried": [
+                "https://api-rc.taxicaller.net/api/v1/booker/order",
+            ],
             "immediate_dispatch": "enabled for urgent bookings",
         }, 200
 
