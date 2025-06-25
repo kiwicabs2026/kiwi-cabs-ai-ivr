@@ -975,22 +975,36 @@ def menu():
 
 @app.route("/book_taxi", methods=["POST"])
 def book_taxi():
-    """Start taxi booking process"""
+    """Start taxi booking process - STEP-BY-STEP FLOW"""
     call_sid = request.form.get("CallSid", "")
-    print(f"🚖 Starting booking for call: {call_sid}")
-
+    caller_number = request.form.get("From", "")
+    print(f"🚖 Starting step-by-step booking for call: {call_sid}")
+    
+    # Initialize session for this call
+    if call_sid not in user_sessions:
+        user_sessions[call_sid] = {
+            "booking_step": "name",
+            "partial_booking": {
+                "name": "",
+                "pickup_address": "",
+                "destination": "",
+                "pickup_time": "",
+                "pickup_date": "",
+                "raw_speech": ""
+            },
+            "caller_number": caller_number
+        }
+    
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
-        Please tell me your name, pickup address, destination, date, and time.
-        For example, you can say:
-        My name is James Smith, from 63 Hobart Street to Wellington Airport, tomorrow at 9 AM.
+        Please tell me your name.
     </Say>
     <Gather input="speech" 
             action="/process_booking" 
             method="POST" 
-            timeout="20" 
+            timeout="10" 
             language="en-NZ" 
             speechTimeout="2" 
             finishOnKey="" 
@@ -1004,7 +1018,7 @@ def book_taxi():
 
 @app.route("/process_booking", methods=["POST"])
 def process_booking():
-    """Process booking speech input"""
+    """Process booking speech input - STEP-BY-STEP LOGIC"""
     speech_data = request.form.get("SpeechResult", "")
     confidence = float(request.form.get("Confidence", "0"))
     call_sid = request.form.get("CallSid", "")
@@ -1027,155 +1041,276 @@ def process_booking():
         except Exception as e:
             print(f"❌ Error saving conversation: {e}")
 
-    # If low confidence and Google available, try recording
-    if GOOGLE_SPEECH_AVAILABLE and confidence < 0.7 and speech_data.strip():
-        print(f"⚠️ Low confidence - trying Google Speech")
-        if call_sid not in user_sessions:
-            user_sessions[call_sid] = {}
-        user_sessions[call_sid]["caller_number"] = caller_number
-
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't catch that clearly. Please repeat your booking details.
-    </Say>
-    <Record action="/process_booking_with_google" 
-            method="POST" 
-            maxLength="30" 
-            timeout="5"
-            finishOnKey="#"
-            playBeep="false"/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-
-    # Get existing session data
-    existing_data = {}
-    if call_sid in user_sessions:
-        existing_data = user_sessions[call_sid].get("partial_booking", {})
-
-    # Parse speech
-    booking_data = parse_booking_speech(speech_data)
-
-    # Merge with existing data
-    merged_booking = {
-        "name": booking_data["name"] or existing_data.get("name", ""),
-        "pickup_address": booking_data["pickup_address"]
-        or existing_data.get("pickup_address", ""),
-        "destination": booking_data["destination"]
-        or existing_data.get("destination", ""),
-        "pickup_time": booking_data["pickup_time"]
-        or existing_data.get("pickup_time", ""),
-        "pickup_date": booking_data["pickup_date"]
-        or existing_data.get("pickup_date", ""),
-        "raw_speech": f"{existing_data.get('raw_speech', '')} {speech_data}".strip(),
-    }
-
-    # Store in session
+    # Get or create session
     if call_sid not in user_sessions:
-        user_sessions[call_sid] = {}
-    user_sessions[call_sid]["partial_booking"] = merged_booking
-    user_sessions[call_sid]["caller_number"] = caller_number
-
-    print(
-        f"📋 BOOKING DATA: Name={merged_booking['name']}, From={merged_booking['pickup_address']}, To={merged_booking['destination']}"
-    )
-
-    # Validate required fields
-    missing_items = []
-    if not merged_booking["name"].strip() or len(merged_booking["name"].strip()) < 2:
-        missing_items.append("your name")
-    if (
-        not merged_booking["pickup_address"].strip()
-        or len(merged_booking["pickup_address"].strip()) < 5
-    ):
-        missing_items.append("your pickup address")
-    if (
-        not merged_booking["destination"].strip()
-        or len(merged_booking["destination"].strip()) < 3
-    ):
-        missing_items.append("your destination")
-        # IMPORTANT: Always ask for time if not provided
-    if not merged_booking["pickup_time"].strip() and not merged_booking["pickup_date"].strip():
-        missing_items.append("please tell me when you need the taxi - you can say now, or any time like today at 3 PM or tomorrow morning")
-
-    if missing_items:
-        missing_text = " and ".join(missing_items)
-        print(f"❌ Missing: {missing_text}")
-
-        return Response(
-            f"""<?xml version="1.0" encoding="UTF-8"?>
+        user_sessions[call_sid] = {
+            "booking_step": "name",
+            "partial_booking": {
+                "name": "",
+                "pickup_address": "",
+                "destination": "",
+                "pickup_time": "",
+                "pickup_date": "",
+                "raw_speech": ""
+            },
+            "caller_number": caller_number
+        }
+    
+    session = user_sessions[call_sid]
+    current_step = session.get("booking_step", "name")
+    partial_booking = session.get("partial_booking", {})
+    
+    # Add current speech to raw speech
+    partial_booking["raw_speech"] = f"{partial_booking.get('raw_speech', '')} {speech_data}".strip()
+    
+    print(f"📋 CURRENT STEP: {current_step}")
+    
+    # Process based on current step
+    if current_step == "name":
+        # Extract name from speech
+        name = speech_data.strip()
+        
+        # Clean common phrases
+        name_lower = name.lower()
+        if name_lower.startswith("my name is "):
+            name = name[11:].strip()
+        elif name_lower.startswith("i am "):
+            name = name[5:].strip()
+        elif name_lower.startswith("i'm "):
+            name = name[4:].strip()
+        elif name_lower.startswith("it's "):
+            name = name[5:].strip()
+        elif name_lower.startswith("this is "):
+            name = name[8:].strip()
+        
+        # Capitalize properly
+        name = ' '.join(word.capitalize() for word in name.split())
+        
+        if len(name) >= 2 and not any(char.isdigit() for char in name):
+            partial_booking["name"] = name
+            session["booking_step"] = "pickup"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I need {missing_text} to complete your booking. Please provide the missing information.
+        Nice to meet you, {name}! 
+        What's your pickup address?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me where to pick you up.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch your name. Could you please tell me your name?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Check for airport pickup
-    pickup_address = merged_booking.get("pickup_address", "").lower()
-    if any(keyword in pickup_address for keyword in ["airport", "terminal"]):
-        print(f"✈️ Airport pickup detected - rejecting")
-        return Response(
-            """<?xml version="1.0" encoding="UTF-8"?>
+</Response>"""
+    
+    elif current_step == "pickup":
+        # Process pickup address
+        pickup = speech_data.strip()
+        
+        # Clean common prefixes
+        pickup_lower = pickup.lower()
+        if pickup_lower.startswith("from "):
+            pickup = pickup[5:].strip()
+        elif pickup_lower.startswith("at "):
+            pickup = pickup[3:].strip()
+        elif pickup_lower.startswith("pickup from "):
+            pickup = pickup[12:].strip()
+        elif pickup_lower.startswith("pick me up at "):
+            pickup = pickup[14:].strip()
+        elif pickup_lower.startswith("pick me up from "):
+            pickup = pickup[16:].strip()
+        
+        # Remove "number" word
+        pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
+        
+        if len(pickup) >= 5:
+            # Check for airport pickup
+            if any(keyword in pickup.lower() for keyword in ["airport", "terminal"]):
+                response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
-        We appreciate your booking with Kiwi Cabs. Have a great day. Goodbye
+        We appreciate your booking with Kiwi Cabs. Have a great day. Goodbye!
     </Say>
     <Hangup/>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Check outside Wellington
-    outside_cities = ["melbourne", "sydney", "auckland", "christchurch"]
-    if any(city in pickup_address for city in outside_cities):
-        print(f"🚫 Outside pickup detected")
-        return Response(
-            """<?xml version="1.0" encoding="UTF-8"?>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+            
+            # Validate with Google Maps if available
+            if gmaps:
+                pickup = validate_and_format_address(pickup, "pickup")
+            
+            partial_booking["pickup_address"] = pickup
+            session["booking_step"] = "destination"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, Kiwi Cabs operates only in the Wellington region.
-        Thank you for calling!
+        Perfect! I have your pickup at {pickup}.
+        Where would you like to go?
     </Say>
-    <Hangup/>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Store for confirmation
-    user_sessions[call_sid]["pending_booking"] = merged_booking
-
-    # Create confirmation
-    confirmation_parts = []
-    if merged_booking["name"]:
-        confirmation_parts.append(merged_booking["name"])
-    if merged_booking["pickup_address"]:
-        confirmation_parts.append(f"from {merged_booking['pickup_address']}")
-    if merged_booking["destination"]:
-        confirmation_parts.append(f"to {merged_booking['destination']}")
-    if merged_booking["pickup_date"]:
-        confirmation_parts.append(merged_booking["pickup_date"])
-    if merged_booking["pickup_time"]:
-        confirmation_parts.append(merged_booking["pickup_time"])
-
-    confirmation_text = ", ".join(confirmation_parts)
-    print(f"❓ Confirming: {confirmation_text}")
-
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your destination.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Could you please tell me your pickup address?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    elif current_step == "destination":
+        # Process destination
+        destination = speech_data.strip()
+        
+        # Clean common prefixes
+        dest_lower = destination.lower()
+        if dest_lower.startswith("to "):
+            destination = destination[3:].strip()
+        elif dest_lower.startswith("going to "):
+            destination = destination[9:].strip()
+        elif dest_lower.startswith("take me to "):
+            destination = destination[11:].strip()
+        elif dest_lower.startswith("i'm going to "):
+            destination = destination[13:].strip()
+        elif dest_lower.startswith("i am going to "):
+            destination = destination[14:].strip()
+        
+        # Smart destination mapping
+        if "hospital" in destination.lower():
+            destination = "Wellington Hospital"
+        elif any(airport_word in destination.lower() for airport_word in ["airport", "the airport", "domestic", "international"]):
+            destination = "Wellington Airport"
+        elif any(station_word in destination.lower() for station_word in ["station", "railway", "train"]):
+            destination = "Wellington Railway Station"
+        elif "te papa" in destination.lower():
+            destination = "Te Papa Museum"
+        
+        if len(destination) >= 3:
+            # Validate with Google Maps if available
+            if gmaps:
+                destination = validate_and_format_address(destination, "destination")
+            
+            partial_booking["destination"] = destination
+            session["booking_step"] = "time"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! Going to {destination}.
+        When do you need the taxi?
+        You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me when you need the taxi.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Where would you like to go?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    elif current_step == "time":
+        # Process time
+        time_text = speech_data.lower().strip()
+        time_string = ""
+        valid_time = False
+        
+        # Check for immediate booking
+        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
+        if any(keyword in time_text for keyword in immediate_keywords):
+            partial_booking["pickup_time"] = "ASAP"
+            partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+            time_string = "right now"
+            valid_time = True
+        else:
+            # Parse time using existing logic
+            parsed_booking = parse_booking_speech(speech_data)
+            
+            if parsed_booking.get("pickup_time"):
+                partial_booking["pickup_time"] = parsed_booking["pickup_time"]
+                if parsed_booking.get("pickup_date"):
+                    partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                    time_string = f"on {parsed_booking['pickup_date']} at {parsed_booking['pickup_time']}"
+                else:
+                    # Default to today if no date specified
+                    partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    time_string = f"today at {parsed_booking['pickup_time']}"
+                valid_time = True
+            elif parsed_booking.get("pickup_date"):
+                # Date specified but no time - ask for time
+                partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What time on {parsed_booking['pickup_date']} would you like the taxi?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
+    </Gather>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+        
+        if valid_time:
+            session["booking_step"] = "confirmation"
+            
+            # Build confirmation message
+            confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
+            confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+            confirmation_text += f"going to {partial_booking['destination']}, "
+            confirmation_text += f"{time_string}"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Lovely! Let me just double-check that for you: {confirmation_text}.
-            Does that sound right? Just say yes to confirm, or no if you'd like to make any changes.
+            {confirmation_text}.
+            Is this correct? Say yes to confirm or no to start over.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
 </Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. 
+        Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="2">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    # Store session updates
+    session["partial_booking"] = partial_booking
+    user_sessions[call_sid] = session
+    
+    # Store in pending for confirmation step
+    if current_step == "time" and valid_time:
+        user_sessions[call_sid]["pending_booking"] = partial_booking
+        user_sessions[call_sid]["caller_number"] = caller_number
+    
     return Response(response, mimetype="text/xml")
 
 
@@ -1424,38 +1559,52 @@ def confirm_booking():
             # Start background thread for non-urgent bookings
             threading.Thread(target=background_api, daemon=True).start()
 
+        # Clear session
+        if call_sid in user_sessions:
+            del user_sessions[call_sid]
+
         return Response(immediate_response, mimetype="text/xml")
 
-    elif any(word in speech_result for word in ["no", "wrong", "change", "different"]):
+    elif any(word in speech_result for word in ["no", "wrong", "change", "different", "start over"]):
         print("❌ Booking rejected - starting over")
+        
+        # Reset session to start from name
+        if call_sid in user_sessions:
+            user_sessions[call_sid] = {
+                "booking_step": "name",
+                "partial_booking": {
+                    "name": "",
+                    "pickup_address": "",
+                    "destination": "",
+                    "pickup_time": "",
+                    "pickup_date": "",
+                    "raw_speech": ""
+                },
+                "caller_number": caller_number
+            }
+        
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No problem. Let's start over.
-        Please tell me your corrected booking details.
+        Please tell me your name.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
     else:
         print("❓ Unclear response - asking again with simpler question")
-        confirmation_parts = []
-        if booking_data.get("name"):
-            confirmation_parts.append(booking_data["name"])
-        if booking_data.get("pickup_address"):
-            confirmation_parts.append(f"from {booking_data['pickup_address']}")
-        if booking_data.get("destination"):
-            confirmation_parts.append(f"to {booking_data['destination']}")
-
-        confirmation_text = ", ".join(confirmation_parts)
-
+        
+        # Build simple confirmation
+        booking = session_data.get("pending_booking", {})
+        simple_confirm = f"Is this booking correct? {booking.get('name')}, from {booking.get('pickup_address')} to {booking.get('destination')}"
+        
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Is this booking correct: {confirmation_text}?
-            Say YES or NO.
+            {simple_confirm}? Say YES or NO.
         </Say>
     </Gather>
     <Redirect>/confirm_booking</Redirect>
