@@ -450,7 +450,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
+        booking_url = "https://apiv2-rc.taxicaller.net/v2/bookings/create"
 
 
         # Define endpoints and headers for the loop
