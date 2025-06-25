@@ -2274,7 +2274,6 @@ def test_taxicaller():
             "api_key_preview": TAXICALLER_API_KEY[:8] + "..."
             if TAXICALLER_API_KEY
             else None,
-            ],
             "immediate_dispatch": "enabled for urgent bookings",
         }, 200
 
