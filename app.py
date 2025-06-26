@@ -95,7 +95,8 @@ def validate_and_format_address(address, address_type="general"):
 # Configuration - STEP 1: Environment Variables (with fallback to your key)
 TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
 TAXICALLER_API_KEY = os.getenv(
-    "TAXICALLER_API_KEY", "c18afde179ec057037084b4daf10f01a"
+    TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 )  # Your TaxiCaller key
 RENDER_ENDPOINT = os.getenv(
     "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
@@ -451,7 +452,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
+        booking_url = "https://api.taxicaller.net/v2/bookings/create"
 
 
         # Define endpoints and headers for the loop
