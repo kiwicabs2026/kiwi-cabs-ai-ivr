@@ -12,6 +12,7 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
+import pytz
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -752,9 +753,9 @@ def parse_booking_speech(speech_text):
 
     # Add special handling for "half hour" BEFORE the pattern matching
     if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
-        booking_time = datetime.now() + timedelta(minutes=30)
-        booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-        booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+        
+        
+        
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
         # Then do the pattern matching
         for pattern in time_patterns:
@@ -762,17 +763,18 @@ def parse_booking_speech(speech_text):
             if match:
                 if pattern == r"in\s+(\d+)\s+minutes?":
                     minutes = int(match.group(1))
-                    booking_time = datetime.now() + timedelta(minutes=minutes)
+                    nz_tz = pytz.timezone('Pacific/Auckland')
+                    booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes)
                     time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
                     break
                 elif pattern == r"in\s+(\d+)\s+hours?":
                     hours = int(match.group(1))
-                    booking_time = datetime.now() + timedelta(hours=hours)
+                    booking_time = datetime.now(nz_tz) + timedelta(hours=hours)
                     time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
                     break
                 else:
                     # Handle regular time patterns (4 PM, etc.)
