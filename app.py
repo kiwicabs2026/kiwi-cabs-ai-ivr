@@ -744,11 +744,19 @@ def parse_booking_speech(speech_text):
 
     # Extract time
     time_patterns = [
-        r"in\s+(\d+)\s+minutes?",  # NEW: matches "in 30 minutes"
-        r"in\s+(\d+)\s+hours?",    # NEW: matches "in 2 hours"
-        r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
-        r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
-        r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"in\s+(\d+)\s+minutes?",  # Keep this one
+        r"in\s+(\d+)\s+hours?",    # Keep this one  
+        r"time\s+(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
+        r"at\s+(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
+        r"(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
+    
+        # ADD THESE NEW SMART PATTERNS:
+        r"(?:in\s+)?(?:a\s+)?half\s+(?:an\s+)?hours?",      # "half hour", "half an hour", "in half hour"
+        r"(?:in\s+)?(?:about\s+)?thirty\s+minutes?",        # "thirty minutes", "in thirty minutes"  
+        r"(?:in\s+)?(?:about\s+)?30\s+minutes?",            # "30 minutes", "in 30 minutes"
+        r"(?:within\s+)?(?:a\s+)?half\s+(?:an\s+)?hours?",  # "within half hour", "within a half hour"
+        r"(?:within\s+)?thirty\s+minutes?",                 # "within thirty minutes"
+        r"(?:within\s+)?30\s+minutes?",                     # "within 30 minutes"
     ]
 
     # Add special handling for "half hour" BEFORE the pattern matching
@@ -771,20 +779,37 @@ def parse_booking_speech(speech_text):
                     break
                 elif pattern == r"in\s+(\d+)\s+hours?":
                     hours = int(match.group(1))
+                    nz_tz = pytz.timezone('Pacific/Auckland')  # ADD THIS LINE
                     booking_time = datetime.now(nz_tz) + timedelta(hours=hours)
                     time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
                     break
-                else:
-                    # Handle regular time patterns (4 PM, etc.)
-                    time_str = match.group(1).strip()
-                    time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
-                    if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                        time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                elif "half" in pattern.lower():
+                    # Handle "half hour", "half an hour", etc.
+                    nz_tz = pytz.timezone('Pacific/Auckland') 
+                    booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
+                    time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
                     break
-    
+                elif "30" in pattern.lower() or "thirty" in pattern.lower():
+                    # Handle "30 minutes", "thirty minutes", etc.
+                    nz_tz = pytz.timezone('Pacific/Auckland')
+                    booking_time = datetime.now(nz_tz) + timedelta(minutes=30) 
+                    time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
+                    break
+            else:
+                # Handle regular time patterns (4 PM, etc.)
+                time_str = match.group(1).strip()
+                time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
+                if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
+                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                booking_data["pickup_time"] = time_str
+                break
+                
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
     
