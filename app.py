@@ -1163,7 +1163,7 @@ def process_booking():
         pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
         if "railway station" in pickup.lower() or "train station" in pickup.lower():
            pickup = "Wellington Railway Station"
-    elif "airport" in pickup.lower() and "from" not in pickup.lower():
+        elif "airport" in pickup.lower() and "from" not in pickup.lower():
             pickup = "Wellington Airport"
         
         if len(pickup) >= 5:
