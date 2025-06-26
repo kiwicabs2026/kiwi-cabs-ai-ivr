@@ -386,7 +386,6 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             return False, None
             
         print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"🔑 JWT Token: {jwt_token[:20]}...")
         if COMPANY_ID:
             print(f"🏢 Company ID: {COMPANY_ID}")
 
