@@ -764,7 +764,7 @@ def parse_booking_speech(speech_text):
                 if pattern == r"in\s+(\d+)\s+minutes?":
                     minutes = int(match.group(1))
                     nz_tz = pytz.timezone('Pacific/Auckland')
-                    booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes
+                    booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes)
                     time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
