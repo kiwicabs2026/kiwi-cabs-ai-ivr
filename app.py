@@ -765,50 +765,54 @@ def parse_booking_speech(speech_text):
         
         
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
-        # Then do the pattern matching
-        for pattern in time_patterns:
-            match = re.search(pattern, speech_text, re.IGNORECASE)
-            if match:
-                if pattern == r"in\s+(\d+)\s+minutes?":
-                    minutes = int(match.group(1))
-                    nz_tz = pytz.timezone('Pacific/Auckland')
-                    booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes)
-                    time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
-                    booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                    break
-                elif pattern == r"in\s+(\d+)\s+hours?":
-                    hours = int(match.group(1))
-                    nz_tz = pytz.timezone('Pacific/Auckland')  # ADD THIS LINE
-                    booking_time = datetime.now(nz_tz) + timedelta(hours=hours)
-                    time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
-                    booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                    break
-                elif "half" in pattern.lower():
-                    # Handle "half hour", "half an hour", etc.
-                    nz_tz = pytz.timezone('Pacific/Auckland') 
-                    booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
-                    time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-                    booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                    break
-                elif "30" in pattern.lower() or "thirty" in pattern.lower():
-                    # Handle "30 minutes", "thirty minutes", etc.
-                    nz_tz = pytz.timezone('Pacific/Auckland')
-                    booking_time = datetime.now(nz_tz) + timedelta(minutes=30) 
-                    time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-                    booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                    break
-            else:
-                # Handle regular time patterns (4 PM, etc.)
-                time_str = match.group(1).strip()
-                time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
-                if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
-                booking_data["pickup_time"] = time_str
-                break
+       # Then do the pattern matching
+       for pattern in time_patterns:
+           match = re.search(pattern, speech_text, re.IGNORECASE)
+           if match:
+               matched_text = speech_text.lower()
+               
+               # Check what was actually said, not the pattern
+               if ("half" in matched_text or "haf" in matched_text or "haff" in matched_text) and ("hour" in matched_text):
+                   nz_tz = pytz.timezone('Pacific/Auckland')
+                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
+                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+                   booking_data["pickup_time"] = time_str
+                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
+                   break
+               
+               elif ("30" in matched_text and "minute" in matched_text) or ("thirty" in matched_text and "minute" in matched_text):
+                   nz_tz = pytz.timezone('Pacific/Auckland')
+                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
+                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+                   booking_data["pickup_time"] = time_str
+                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
+                   break
+               
+               elif "minute" in matched_text and any(char.isdigit() for char in matched_text):
+                   digit_match = re.search(r"(\d+)", matched_text)
+                   if digit_match:
+                       minutes = int(digit_match.group(1))
+                       nz_tz = pytz.timezone('Pacific/Auckland')
+                       booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes)
+                       time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
+                       booking_data["pickup_time"] = time_str
+                       booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
+                       break
+               
+               else:
+                   # Default fallback - 30 minutes from now
+                   nz_tz = pytz.timezone('Pacific/Auckland')
+                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
+                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+                   booking_data["pickup_time"] = time_str
+                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
+                   break
+       
+       # Move to confirmation step
+       session["booking_step"] = "confirmation"
+       
+       # Create response
+       pickup_time = partial_booking.get("pickup_time", "soon")
                 
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
