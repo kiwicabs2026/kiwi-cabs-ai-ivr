@@ -457,8 +457,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Get JWT token first
         jwt_token = get_taxicaller_jwt()
         if not jwt_token:
-        print("❌ No JWT token available")
-        return False, None
+            print("❌ No JWT token available")
+            return False, None
 
 # Define endpoints and headers for the loop
         # Define endpoints and headers for the loop
