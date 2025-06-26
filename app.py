@@ -94,9 +94,8 @@ def validate_and_format_address(address, address_type="general"):
         return address
 # Configuration - STEP 1: Environment Variables (with fallback to your key)
 TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
-TAXICALLER_API_KEY = os.getenv(
-    TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 )  # Your TaxiCaller key
 RENDER_ENDPOINT = os.getenv(
     "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
