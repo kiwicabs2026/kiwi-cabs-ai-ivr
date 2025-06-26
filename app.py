@@ -450,7 +450,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://api.taxicaller.net/booking"
+        booking_url = "https://api-rc.taxicaller.net/api/v1/bookings"
 
 
         # Get JWT token first
@@ -465,7 +465,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         headers_options = [
             {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {jwt_token}", 
+                "Authorization": f"Bearer {jwt_token.get('token', '')}",
                 "User-Agent": "KiwiCabs-AI-IVR/2.1"
             }
         ]
