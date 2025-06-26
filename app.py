@@ -454,6 +454,13 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         booking_url = "https://api.taxicaller.net/booking"
 
 
+        # Get JWT token first
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+        print("❌ No JWT token available")
+        return False, None
+
+# Define endpoints and headers for the loop
         # Define endpoints and headers for the loop
         possible_endpoints = [booking_url]  # Use the single correct endpoint
         headers_options = [
@@ -1139,6 +1146,8 @@ def process_booking():
         
         # Clean common prefixes
         pickup_lower = pickup.lower()
+        if pickup_lower.startswith("i need a taxi from "):    # ADD THIS LINE
+           pickup = pickup[19:].strip()
         if pickup_lower.startswith("from "):
             pickup = pickup[5:].strip()
         elif pickup_lower.startswith("at "):
@@ -1152,6 +1161,10 @@ def process_booking():
         
         # Remove "number" word
         pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
+        if "railway station" in pickup.lower() or "train station" in pickup.lower():
+           pickup = "Wellington Railway Station"
+    elif "airport" in pickup.lower() and "from" not in pickup.lower():
+            pickup = "Wellington Airport"
         
         if len(pickup) >= 5:
             # Check for airport pickup
