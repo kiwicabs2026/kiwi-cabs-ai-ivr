@@ -1295,42 +1295,42 @@ def process_booking():
 </Response>"""
     
     elif current_step == "time":
-    # Process time
-    time_text = speech_data.lower().strip()
-    time_string = ""
-    valid_time = False
-
-    # Check for immediate booking
-    immediate_keywords = ["now", "right now", "immediately", "asap", "as-soon-as-possible", "straight away"]
-    if any(keyword in time_text for keyword in immediate_keywords):
-        partial_booking["pickup_time"] = "ASAP"
-        partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-        time_string = "right now"
-        valid_time = True
-
-    else:
-        # Try to parse natural time expressions
-        parsed_time = parse_time(time_text)
-        if parsed_time:
-            partial_booking["pickup_time"] = parsed_time
+        # Process time
+        time_text = speech_data.lower().strip()
+        time_string = ""
+        valid_time = False
+        
+        # Check for immediate booking
+        immediate_keywords = ["now", "right now", "immediately", "asap", "as-soon-as-possible", "straight away"]
+        if any(keyword in time_text for keyword in immediate_keywords):
+            partial_booking["pickup_time"] = "ASAP"
             partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-            time_string = f"today at {parsed_time}"
+            time_string = "right now"
             valid_time = True
         else:
-            # Fallback: if date already exists, ask again for time
-            if "pickup_date" in partial_booking:
-                response = """<?xml version="1.0" encoding="UTF-8"?>
-                <Response>
-                    <Say voice="Polly.ArIa-Neural" language="en-NZ">
-                        Thanks. What time should we pick you up?
-                    </Say>
-                    <Redirect>/book_taxi</Redirect>
-                </Response>"""
-                return Response(response, mimetype="text/xml")
+            # Try to parse natural time expressions
+            parsed_time = parse_time(time_text)
+            if parsed_time:
+                partial_booking["pickup_time"] = parsed_time
+                partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                time_string = f"today at {parsed_time}"
+                valid_time = True
+            else:
+                # Fallback: if date already exists, ask again for time
+                if "pickup_date" in partial_booking:
+                    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.ArIa-Neural" language="en-NZ">
+        Thanks. What time should we pick you up?
+    </Say>
+    <Redirect>/book_taxi</Redirect>
+</Response>"""
+                    return Response(response, mimetype="text/xml")
 
-                # Date specified but no time - ask for time
-                partial_booking["pickup_date"] = parsed_booking["pickup_date"]
-                response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # Date specified but no time - ask for time
+        partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         What time on {parsed_booking['pickup_date']} would you like the taxi?
