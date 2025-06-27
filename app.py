@@ -1319,7 +1319,7 @@ def process_booking():
                 # Fallback: if date already exists, ask again for time
                 if "pickup_date" in partial_booking:
                     response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
+                <Response>
     <Say voice="Polly.ArIa-Neural" language="en-NZ">
         Thanks. What time should we pick you up?
     </Say>
@@ -1332,46 +1332,48 @@ def process_booking():
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 
 <Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        What time on {parsed_booking['pickup_date']} would you like the taxi?
-    </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
-    </Gather>
-</Response>"""
-                return Response(response, mimetype="text/xml")
-        
-        if valid_time:
-            session["booking_step"] = "confirmation"
-            
-            # Build confirmation message
-            confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
-            confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-            confirmation_text += f"going to {partial_booking['destination']}, "
-            confirmation_text += f"{time_string}"
-            
-            response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
+        <Response>
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            {confirmation_text}.
-            Is this correct? Say yes to confirm or no to start over.
+            What time on {parsed_booking['pickup_date']} would you like the taxi?
         </Say>
-    </Gather>
-    <Redirect>/process_booking</Redirect>
-</Response>"""
-        else:
-            response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I didn't understand the time. 
-        Could you please tell me when you need the taxi?
-        For example, say "now", "in 30 minutes", or "at 3 PM".
-    </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
-    </Gather>
-</Response>"""
+        <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+            <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
+        </Gather>
+    </Response>"""
+    return Response(response, mimetype="text/xml")
+
+    if valid_time:
+        session["booking_step"] = "confirmation"
+
+        # Build confirmation message
+        confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
+        confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+        confirmation_text += f"going to {partial_booking['destination']}, "
+        confirmation_text += f"{time_string}"
+
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+            <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
+                <Say voice="Polly.Aria-Neural" language="en-NZ">
+                    {confirmation_text}
+                    Is this correct? Say yes to confirm or no to start over.
+                </Say>
+            </Gather>
+            <Redirect>/process_booking</Redirect>
+        </Response>"""
+    else:
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+            <Say voice="Polly.Aria-Neural" language="en-NZ">
+                I didn't understand the time.
+                Could you please tell me when you need the taxi?
+                For example, say "now", "in 30 minutes", or "at 3 PM".
+            </Say>
+            <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+                <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+            </Gather>
+        </Response>"""
+
     
     # Store session updates
     session["partial_booking"] = partial_booking
