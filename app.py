@@ -1310,7 +1310,7 @@ def process_booking():
         else:
             # Parse time using existing logic
 
-            
+            parsed_booking = {}
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
                 if parsed_booking.get("pickup_date"):
