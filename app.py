@@ -1309,7 +1309,7 @@ def process_booking():
             valid_time = True
         else:
             # Parse time using existing logic
-            parsed_booking = parse_booking_speech(speech_data)
+
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
