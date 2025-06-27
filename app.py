@@ -12,7 +12,6 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
-import pytz
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -387,6 +386,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             return False, None
             
         print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+        print(f"🔑 JWT Token: {jwt_token[:20]}...")
         if COMPANY_ID:
             print(f"🏢 Company ID: {COMPANY_ID}")
 
@@ -451,22 +451,15 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://api-rc.taxicaller.net/api/v1/bookings"
+        booking_url = "https://api.taxicaller.net/booking"
 
 
-        # Get JWT token first
-        jwt_token = get_taxicaller_jwt()
-        if not jwt_token:
-            print("❌ No JWT token available")
-            return False, None
-
-# Define endpoints and headers for the loop
         # Define endpoints and headers for the loop
         possible_endpoints = [booking_url]  # Use the single correct endpoint
         headers_options = [
             {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {jwt_token.get('token', '')}",
+                "Authorization": f"Bearer {jwt_token}", 
                 "User-Agent": "KiwiCabs-AI-IVR/2.1"
             }
         ]
@@ -744,76 +737,46 @@ def parse_booking_speech(speech_text):
 
     # Extract time
     time_patterns = [
-        r"in\s+(\d+)\s+minutes?",  # Keep this one
-        r"in\s+(\d+)\s+hours?",    # Keep this one  
-        r"time\s+(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
-        r"at\s+(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
-        r"(\d{1,2}):(\d{0,2})\s*(?:am|pm|a\.m\.|p\.m\.)?",
-    
-        # ADD THESE NEW SMART PATTERNS:
-        r"(?:in\s+)?(?:a\s+)?half\s+(?:an\s+)?hours?",      # "half hour", "half an hour", "in half hour"
-        r"(?:in\s+)?(?:about\s+)?thirty\s+minutes?",        # "thirty minutes", "in thirty minutes"  
-        r"(?:in\s+)?(?:about\s+)?30\s+minutes?",            # "30 minutes", "in 30 minutes"
-        r"(?:within\s+)?(?:a\s+)?half\s+(?:an\s+)?hours?",  # "within half hour", "within a half hour"
-        r"(?:within\s+)?thirty\s+minutes?",                 # "within thirty minutes"
-        r"(?:within\s+)?30\s+minutes?",                     # "within 30 minutes"
+        r"in\s+(\d+)\s+minutes?",  # NEW: matches "in 30 minutes"
+        r"in\s+(\d+)\s+hours?",    # NEW: matches "in 2 hours"
+        r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
+        r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
     ]
 
     # Add special handling for "half hour" BEFORE the pattern matching
     if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
-        pass
-        
-        
+        booking_time = datetime.now() + timedelta(minutes=30)
+        booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+        booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
-       # Then do the pattern matching
-       for pattern in time_patterns:
-           match = re.search(pattern, speech_text, re.IGNORECASE)
-           if match:
-               matched_text = speech_text.lower()
-               
-               # Check what was actually said, not the pattern
-               if ("half" in matched_text or "haf" in matched_text or "haff" in matched_text) and ("hour" in matched_text):
-                   nz_tz = pytz.timezone('Pacific/Auckland')
-                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
-                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-                   booking_data["pickup_time"] = time_str
-                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                   break
-               
-               elif ("30" in matched_text and "minute" in matched_text) or ("thirty" in matched_text and "minute" in matched_text):
-                   nz_tz = pytz.timezone('Pacific/Auckland')
-                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
-                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-                   booking_data["pickup_time"] = time_str
-                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                   break
-               
-               elif "minute" in matched_text and any(char.isdigit() for char in matched_text):
-                   digit_match = re.search(r"(\d+)", matched_text)
-                   if digit_match:
-                       minutes = int(digit_match.group(1))
-                       nz_tz = pytz.timezone('Pacific/Auckland')
-                       booking_time = datetime.now(nz_tz) + timedelta(minutes=minutes)
-                       time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
-                       booking_data["pickup_time"] = time_str
-                       booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                       break
-               
-               else:
-                   # Default fallback - 30 minutes from now
-                   nz_tz = pytz.timezone('Pacific/Auckland')
-                   booking_time = datetime.now(nz_tz) + timedelta(minutes=30)
-                   time_str = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-                   booking_data["pickup_time"] = time_str
-                   booking_data["pickup_date"] = datetime.now(nz_tz).strftime("%d/%m/%Y")
-                   break
-       
-       # Move to confirmation step
-       session["booking_step"] = "confirmation"
-       
-       # Create response
-       pickup_time = partial_booking.get("pickup_time", "soon")
-                
+        # Then do the pattern matching
+        for pattern in time_patterns:
+            match = re.search(pattern, speech_text, re.IGNORECASE)
+            if match:
+                if pattern == r"in\s+(\d+)\s+minutes?":
+                    minutes = int(match.group(1))
+                    booking_time = datetime.now() + timedelta(minutes=minutes)
+                    time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    break
+                elif pattern == r"in\s+(\d+)\s+hours?":
+                    hours = int(match.group(1))
+                    booking_time = datetime.now() + timedelta(hours=hours)
+                    time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    break
+                else:
+                    # Handle regular time patterns (4 PM, etc.)
+                    time_str = match.group(1).strip()
+                    time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
+                    if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
+                        time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                    booking_data["pickup_time"] = time_str
+                    break
+    
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
     
@@ -1176,8 +1139,6 @@ def process_booking():
         
         # Clean common prefixes
         pickup_lower = pickup.lower()
-        if pickup_lower.startswith("i need a taxi from "):    # ADD THIS LINE
-           pickup = pickup[19:].strip()
         if pickup_lower.startswith("from "):
             pickup = pickup[5:].strip()
         elif pickup_lower.startswith("at "):
@@ -1191,10 +1152,6 @@ def process_booking():
         
         # Remove "number" word
         pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
-        if "railway station" in pickup.lower() or "train station" in pickup.lower():
-           pickup = "Wellington Railway Station"
-        elif "airport" in pickup.lower() and "from" not in pickup.lower():
-            pickup = "Wellington Airport"
         
         if len(pickup) >= 5:
             # Check for airport pickup
@@ -1301,79 +1258,71 @@ def process_booking():
         valid_time = False
         
         # Check for immediate booking
-        immediate_keywords = ["now", "right now", "immediately", "asap", "as-soon-as-possible", "straight away"]
+        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
         if any(keyword in time_text for keyword in immediate_keywords):
             partial_booking["pickup_time"] = "ASAP"
             partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
             time_string = "right now"
             valid_time = True
         else:
-            # Try to parse natural time expressions
-            if False:  # This will never execute
-                if parsed_time:
-                    partial_booking["pickup_time"] = parsed_time
+            # Parse time using existing logic
+            parsed_booking = parse_booking_speech(speech_data)
+            
+            if parsed_booking.get("pickup_time"):
+                partial_booking["pickup_time"] = parsed_booking["pickup_time"]
+                if parsed_booking.get("pickup_date"):
+                    partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                    time_string = f"on {parsed_booking['pickup_date']} at {parsed_booking['pickup_time']}"
+                else:
+                    # Default to today if no date specified
                     partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
-                    time_string = f"today at {parsed_time}"
-                    valid_time = True
-            else:
-                # Fallback: if date already exists, ask again for time
-                if "pickup_date" in partial_booking:
-                    response = """<?xml version="1.0" encoding="UTF-8"?>
-                <Response>
-    <Say voice="Polly.ArIa-Neural" language="en-NZ">
-        Thanks. What time should we pick you up?
-    </Say>
-    <Redirect>/book_taxi</Redirect>
-</Response>"""
-                    return Response(response, mimetype="text/xml")
-
-        # Date specified but no time - ask for time
-        partial_booking["pickup_date"] = parsed_booking["pickup_date"]
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-
+                    time_string = f"today at {parsed_booking['pickup_time']}"
+                valid_time = True
+            elif parsed_booking.get("pickup_date"):
+                # Date specified but no time - ask for time
+                partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-        <Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What time on {parsed_booking['pickup_date']} would you like the taxi?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
+    </Gather>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+        
+        if valid_time:
+            session["booking_step"] = "confirmation"
+            
+            # Build confirmation message
+            confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
+            confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+            confirmation_text += f"going to {partial_booking['destination']}, "
+            confirmation_text += f"{time_string}"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            What time on {parsed_booking['pickup_date']} would you like the taxi?
+            {confirmation_text}.
+            Is this correct? Say yes to confirm or no to start over.
         </Say>
-        <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-            <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
-        </Gather>
-    </Response>"""
-    return Response(response, mimetype="text/xml")
-
-    if valid_time:
-        session["booking_step"] = "confirmation"
-
-        # Build confirmation message
-        confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
-        confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-        confirmation_text += f"going to {partial_booking['destination']}, "
-        confirmation_text += f"{time_string}"
-
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-                <Say voice="Polly.Aria-Neural" language="en-NZ">
-                    {confirmation_text}
-                    Is this correct? Say yes to confirm or no to start over.
-                </Say>
-            </Gather>
-            <Redirect>/process_booking</Redirect>
-        </Response>"""
-    else:
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say voice="Polly.Aria-Neural" language="en-NZ">
-                I didn't understand the time.
-                Could you please tell me when you need the taxi?
-                For example, say "now", "in 30 minutes", or "at 3 PM".
-            </Say>
-            <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-                <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
-            </Gather>
-        </Response>"""
-
+    </Gather>
+    <Redirect>/process_booking</Redirect>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. 
+        Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
     
     # Store session updates
     session["partial_booking"] = partial_booking
