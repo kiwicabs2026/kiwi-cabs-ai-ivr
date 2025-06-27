@@ -1309,7 +1309,7 @@ def process_booking():
             valid_time = True
         else:
             # Try to parse natural time expressions
-            parsed_time = parse_time(time_text)
+if False:  # This will never execute
             if parsed_time:
                 partial_booking["pickup_time"] = parsed_time
                 partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
