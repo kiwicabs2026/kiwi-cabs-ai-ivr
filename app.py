@@ -459,7 +459,9 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Define endpoints and headers for the loop
         try:
             # Force token extraction to trigger KeyError if jwt_token is missing
-            token = jwt_token['token']
+            import json
+            token_data = json.loads(jwt_token)
+            token = token_data['token']
             possible_endpoints = [
                 "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
                 "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
