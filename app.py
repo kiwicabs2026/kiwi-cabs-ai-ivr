@@ -1132,7 +1132,7 @@ def process_booking():
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Nice to meet you, {name}! 
+        Nice to meet you {name}! 
         What's your pickup address?
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
