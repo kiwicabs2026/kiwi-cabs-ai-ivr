@@ -378,17 +378,22 @@ def send_booking_to_taxicaller(booking_data, caller_number):
     try:
         # Get environment variables
         TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
-        COMPANY_ID = os.getenv("COMPANY_ID", "")  # Add your company ID in Render
+        COMPANY_ID = os.getenv("COMPANY_ID", "")
         USER_ID = os.getenv("USER_ID", "")  # Optional
-        
+
         if not TAXICALLER_API_KEY:
             print("❌ No TaxiCaller API key available")
             return False, None
-            
-        print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+
+        # 🔑 FIX: generate the JWT token
+        jwt_token = get_taxicaller_jwt()  # ← Add this line here
+
+        print(f"🔐 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
         print(f"🔑 JWT Token: {jwt_token[:20]}...")
+
         if COMPANY_ID:
             print(f"🏢 Company ID: {COMPANY_ID}")
+
 
         # Format time to ISO format with NZ timezone as per your instructions
         is_immediate = booking_data.get("pickup_time", "").upper() in [
