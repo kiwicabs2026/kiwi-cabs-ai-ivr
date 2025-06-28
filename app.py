@@ -460,31 +460,29 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
 # Define endpoints and headers for the loop
 try:
-possible_endpoints = [
-    "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
-    "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
-]
+    possible_endpoints = [
+        "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
+        "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
+    ]
 
-headers_options = [
-    {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {jwt_token['token']}",
-        "User-Agent": "KiwiCabs-AI-IVR/2.1"
-    }
-]
+    headers_options = [
+        {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {jwt_token['token']}",
+            "User-Agent": "KiwiCabs-AI-IVR/2.1"
+        }
+    ]
 
 except Exception as e:
     print("⚠️ Error while defining endpoints or headers:", e)
-
-        print(f"📤 SENDING TO TAXICALLER V2:")
-        print(f"   URL: {booking_url}")
-        print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"   Customer: {booking_payload['customerName']}")
-        print(f"   Phone: {booking_payload['customerPhone']}")
-        print(f"   Pickup: {booking_payload['pickup']}")
-        print(f"   Dropoff: {booking_payload['dropoff']}")
-        print(f"   Time: {booking_payload['time']}")
-
+    print(f"📤 SENDING TO TAXICALLER V2:")
+    print(f"   URL: {booking_url}")
+    print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
+    print(f"   Customer: {booking_payload.get('customerName')}")
+    print(f"   Phone: {booking_payload.get('customerPhone')}")
+    print(f"   Pickup: {booking_payload.get('pickup')}")
+    print(f"   Dropoff: {booking_payload.get('dropoff')}")
+    print(f"   Time: {booking_payload.get('time')}")
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
         for endpoint in possible_endpoints:
