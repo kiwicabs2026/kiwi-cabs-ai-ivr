@@ -456,15 +456,17 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://api.taxicaller.net/booking"
+        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
 
 
         # Define endpoints and headers for the loop
-        possible_endpoints = [booking_url]  # Use the single correct endpoint
-        headers_options = [
+            possible_endpoints = [
+                "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
+                "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
+            ]
             {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {jwt_token}", 
+                "Authorization": f"Bearer {jwt_token['token']}",
                 "User-Agent": "KiwiCabs-AI-IVR/2.1"
             }
         ]
@@ -500,9 +502,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     if response.status_code in [200, 201]:
                         try:
                             response_data = response.json()
-                            booking_id = response_data.get(
-                                "bookingId", response_data.get("id", "Unknown")
-                            )
+                            booking_id = response_data.get("bookingId") or response_data.get("id", "Unknown")
+                            
                             print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
                             return True, response_data
                         except:
