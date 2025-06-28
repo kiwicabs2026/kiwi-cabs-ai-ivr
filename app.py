@@ -474,23 +474,77 @@ try:
             "User-Agent": "KiwiCabs-AI-IVR/2.1"
         }
     ]
+    
+    print(f"📤 SENDING TO TAXICALLER V2:")
+    print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
+    print(f"   Customer: {booking_payload.get('customerName')}")
+    print(f"   Phone: {booking_payload.get('customerPhone')}")
+    print(f"   Pickup: {booking_payload.get('pickup')}")
+    print(f"   Dropoff: {booking_payload.get('dropoff')}")
+    print(f"   Time: {booking_payload.get('time')}")
+    
+    # Try multiple TaxiCaller endpoints
+    for endpoint in possible_endpoints:
+        for headers in headers_options:
+            try:
+                print(f"📤 TRYING ENDPOINT: {endpoint}")
+                print(f"📤 TRYING HEADERS: {headers}")
+                
+                response = requests.post(
+                    endpoint,
+                    json=booking_payload,
+                    timeout=3,  # Quick timeout - don't make customer wait
+                    headers=headers,
+                )
+                
+                print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+                print(f"📥 RESPONSE BODY: {response.text}")
+                
+                # Log the API response and handle errors
+                if response.status_code in [200, 201]:
+                    try:
+                        response_data = response.json()
+                        booking_id = response_data.get("bookingId") or response_data.get("id", "Unknown")
+                        print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
+                        return True, response_data
+                    except:
+                        print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                        return True, {"status": "created", "response": response.text}
+                elif response.status_code == 401:
+                    print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+                    continue  # Try next header format
+                elif response.status_code == 403:
+                    print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+                    continue  # Try next endpoint/header
+                else:
+                    print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+                    continue  # Try next endpoint
+                    
+            except requests.exceptions.ConnectionError as e:
+                print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+                break  # Try next endpoint (no point trying other headers)
+            except Exception as e:
+                print(f"❌ ERROR for {endpoint}: {str(e)}")
+                continue  # Try next header/endpoint
+    
+    # If all endpoints failed
+    print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
+    return False, None
 
 except Exception as e:
     print("⚠️ Error while defining endpoints or headers:", e)
-        try:
+    try:
         print(f"📤 SENDING TO TAXICALLER V2:")
-        print(f"   URL: {booking_url}")
+        print(f"   URL: {booking_url if 'booking_url' in locals() else 'Not available'}")
         print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"   Customer: {booking_payload.get('customerName')}")
-        print(f"   Phone: {booking_payload.get('customerPhone')}")
-        print(f"   Pickup: {booking_payload.get('pickup')}")
-        print(f"   Dropoff: {booking_payload.get('dropoff')}")
-        print(f"   Time: {booking_payload.get('time')}")
-        except Exception as debug_err:
-            print("⚠️ Debug info not available:", debug_err)
-
+        print(f"   Customer: {booking_payload.get('customerName') if 'booking_payload' in locals() else 'Not available'}")
+        print(f"   Phone: {booking_payload.get('customerPhone') if 'booking_payload' in locals() else 'Not available'}")
+        print(f"   Pickup: {booking_payload.get('pickup') if 'booking_payload' in locals() else 'Not available'}")
+        print(f"   Dropoff: {booking_payload.get('dropoff') if 'booking_payload' in locals() else 'Not available'}")
+        print(f"   Time: {booking_payload.get('time') if 'booking_payload' in locals() else 'Not available'}")
+    except Exception as debug_err:
+        print("⚠️ Debug info not available:", debug_err)
     return False, None
-
 
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
