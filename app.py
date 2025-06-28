@@ -460,7 +460,6 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
 
 # Define endpoints and headers for the loop
-
 try:
     # Force token extraction to trigger KeyError if jwt_token is missing
     token = jwt_token['token']
@@ -480,6 +479,8 @@ try:
 
 except Exception as e:
     print("⚠️ Error while defining endpoints or headers:", e)
+
+     return False, None
 
     try:
         print(f"📤 SENDING TO TAXICALLER V2:")
