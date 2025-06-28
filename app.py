@@ -480,8 +480,6 @@ try:
 except Exception as e:
     print("⚠️ Error while defining endpoints or headers:", e)
 
-     return False, None
-
     try:
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url}")
@@ -495,6 +493,7 @@ except Exception as e:
         print("⚠️ Debug info not available:", debug_err)
 
     return False, None
+
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
 for endpoint in possible_endpoints:
