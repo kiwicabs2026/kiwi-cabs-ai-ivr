@@ -459,6 +459,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
 
 # Define endpoints and headers for the loop
+try:
 possible_endpoints = [
     "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
     "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
@@ -472,6 +473,8 @@ headers_options = [
     }
 ]
 
+except Exception as e:
+    print("⚠️ Error while defining endpoints or headers:", e)
 
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url}")
