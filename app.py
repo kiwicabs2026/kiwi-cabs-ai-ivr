@@ -550,8 +550,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         traceback.print_exc()
         return False, None
 
-    except Exception as e:
-    print("⚠️ Error while defining endpoints or headers:", e)
+        except Exception as e:
+            print("⚠️ Error while defining endpoints or headers:", e)
     try:
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url if 'booking_url' in locals() else 'Not available'}")
