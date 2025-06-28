@@ -463,12 +463,10 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 try:
     # Force token extraction to trigger KeyError if jwt_token is missing
     token = jwt_token['token']
-
     possible_endpoints = [
         "https://apiv2.taxicaller.net/v2/bookings/create",  # First try v2
         "https://api.taxicaller.net/v1/bookings"            # Then fallback to v1
     ]
-
     headers_options = [
         {
             "Content-Type": "application/json",
@@ -479,8 +477,7 @@ try:
 
 except Exception as e:
     print("⚠️ Error while defining endpoints or headers:", e)
-
-    try:
+        try:
         print(f"📤 SENDING TO TAXICALLER V2:")
         print(f"   URL: {booking_url}")
         print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
@@ -489,10 +486,11 @@ except Exception as e:
         print(f"   Pickup: {booking_payload.get('pickup')}")
         print(f"   Dropoff: {booking_payload.get('dropoff')}")
         print(f"   Time: {booking_payload.get('time')}")
-    except Exception as debug_err:
-        print("⚠️ Debug info not available:", debug_err)
+        except Exception as debug_err:
+            print("⚠️ Debug info not available:", debug_err)
 
     return False, None
+
 
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
