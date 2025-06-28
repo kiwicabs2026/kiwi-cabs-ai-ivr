@@ -582,7 +582,7 @@ for endpoint in possible_endpoints:
             else:
                 print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
                 continue
-
+                
         except requests.exceptions.ConnectionError as e:
             print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
             break
