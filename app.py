@@ -496,60 +496,51 @@ except Exception as e:
     return False, None
 
         # Try multiple TaxiCaller endpoints since the original doesn't exist
-        for endpoint in possible_endpoints:
-            for headers in headers_options:
+for endpoint in possible_endpoints:
+    for headers in headers_options:
+        try:
+            print(f"📤 TRYING ENDPOINT: {endpoint}")
+            print(f"📤 TRYING HEADERS: {headers}")
+
+            response = requests.post(
+                endpoint,
+                json=booking_payload,
+                timeout=3,  # Quick timeout - don't make customer wait
+                headers=headers,
+            )
+
+            print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+            print(f"📥 RESPONSE BODY: {response.text}")
+
+            if response.status_code in [200, 201]:
                 try:
-                    print(f"📤 TRYING ENDPOINT: {endpoint}")
-                    print(f"📤 TRYING HEADERS: {headers}")
+                    response_data = response.json()
+                    booking_id = response_data.get("bookingId") or response_data.get("id", "Unknown")
+                    print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
+                    return True, response_data
+                except:
+                    print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                    return True, {"status": "created", "response": response.text}
+            elif response.status_code == 401:
+                print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+                continue
+            elif response.status_code == 403:
+                print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+                continue
+            else:
+                print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+                continue
 
-                    response = requests.post(
-                        endpoint,
-                        json=booking_payload,
-                        timeout=3,  # Quick timeout - don't make customer wait
-                        headers=headers,
-                    )
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+            break
+        except Exception as e:
+            print(f"❌ ERROR for {endpoint}: {str(e)}")
+            continue
 
-                    print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
-                    print(f"📥 RESPONSE BODY: {response.text}")
-
-                    # STEP 4: Log the API response and handle errors
-                    if response.status_code in [200, 201]:
-                        try:
-                            response_data = response.json()
-                            booking_id = response_data.get("bookingId") or response_data.get("id", "Unknown")
-                            
-                            print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
-                            return True, response_data
-                        except:
-                            print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
-                            return True, {"status": "created", "response": response.text}
-                    elif response.status_code == 401:
-                        print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
-                        continue  # Try next header format
-                    elif response.status_code == 403:
-                        print(f"🚫 FORBIDDEN - API key may not have booking permissions")
-                        continue  # Try next endpoint/header
-                    else:
-                        print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
-                        continue  # Try next endpoint
-
-                except requests.exceptions.ConnectionError as e:
-                    print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-                    break  # Try next endpoint (no point trying other headers)
-                except Exception as e:
-                    print(f"❌ ERROR for {endpoint}: {str(e)}")
-                    continue  # Try next header/endpoint
-
-        # If all endpoints failed
-        print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
-        return False, None
-
-    except Exception as e:
-        print(f"❌ TAXICALLER API ERROR: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
-        return False, None
+# If all endpoints failed
+print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
+return False, None
 
 
 def parse_booking_speech(speech_text):
