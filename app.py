@@ -12,6 +12,10 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
+import googlemaps
+
+# New Zealand timezone
+NZ_TZ = pytz.timezone('Pacific/Auckland')
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -463,6 +467,12 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             pickup_timestamp = int(pickup_datetime.timestamp())
 
         # Create TaxiCaller compliant payload
+        # Convert only NZ international numbers to local format
+        nz_local_phone = caller_number
+        if caller_number.startswith("+64"):
+            nz_local_phone = "0" + caller_number[3:]  # +64220881234 → 0220881234
+        elif caller_number.startswith("64") and len(caller_number) == 11:  # Ensure it's NZ format
+            nz_local_phone = "0" + caller_number[2:]  # 64220881234 → 0220881234
         booking_payload = {
             "order": {
                 "company_id": 8257,
@@ -473,8 +483,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                         "seq": 0,
                         "passenger": {
                             "name": booking_data.get('name', 'Customer'),
-                            "email": "customer@kiwicabs.co.nz", 
-                            "phone": caller_number
+                            "email": "customer@kiwicabs.co.nz",
+                            "phone": nz_local_phone
                         },
                         "client_id": 0,
                         "account": {"id": 0},
