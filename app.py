@@ -437,12 +437,20 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Create payload according to the guide
        # Create payload according to the guide
         booking_payload = {
-            "apiKey": TAXICALLER_API_KEY,  # Note: capital K
-            "customerPhone": caller_number,
-            "customerName": booking_data["name"],
-            "pickup": booking_data["pickup_address"],
-            "dropoff": booking_data["destination"],
-            "time": pickup_time_iso,  # Format: '2025-05-29T15:30:00+12:00'
+            "apikey": TAXICALLER_API_KEY,  # lowercase 'apikey'
+            "companyid": "kiwic",  # ADD THIS LINE
+            "passenger": {  # nested object
+            "name": booking_data["name"],
+            "phone": caller_number
+            },
+            "pickup": {  # nested object
+                "address": booking_data["pickup_address"]
+            },
+            "dropoff": {  # nested object
+                "address": booking_data["destination"]
+            },
+            "pickuptime": pickup_time_iso,  # lowercase 'pickuptime'
+            "source": "KiwiCabsAI"  # ADD THIS LINE
         }
         
         # Add optional User ID if available
@@ -454,7 +462,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
 
         # Use the correct endpoint from the guide
-        booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
+            booking_url = "https://api.taxicaller.net/v1/bookings"
 
         # Define endpoints and headers for the loop
         try:
@@ -463,8 +471,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             token_data = json.loads(jwt_token)
             token = token_data['token']
             possible_endpoints = [
-                "https://api-rc.taxicaller.net/api/v1/booker/order",  # First try v2
-                "https://api-rc.taxicaller.net/api/v2/booker/order",            # Then fallback to v1
+                "https://api.taxicaller.net/v1/bookings",  # Guide method
+                "https://api-rc.taxicaller.net/api/v1/booker/order",  # Fallback
             ]
             headers_options = [
                 {
