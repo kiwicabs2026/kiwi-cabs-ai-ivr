@@ -463,8 +463,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             token_data = json.loads(jwt_token)
             token = token_data['token']
             possible_endpoints = [
-                "https://api-rc.taxicaller.net/v2/bookings/create",  # First try v2
-                "https://api-rc.taxicaller.net/v1/bookings"            # Then fallback to v1
+                "https://api-rc.taxicaller.net/api/v1/booker/order",  # First try v2
+                "https://api-rc.taxicaller.net/api/v2/booker/order",            # Then fallback to v1
             ]
             headers_options = [
                 {
