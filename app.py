@@ -477,6 +477,9 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             headers_options = [
                 {
                     "Content-Type": "application/json",
+                    "User-Agent": "KiwiCabs-AI-IVR/2.1"
+                },
+                {   "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}",
                     "User-Agent": "KiwiCabs-AI-IVR/2.1"
                 }
