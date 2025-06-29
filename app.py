@@ -465,7 +465,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Create TaxiCaller compliant payload
         booking_payload = {
             "order": {
-                "company_id": int(COMPANY_ID) if COMPANY_ID else 8257,
+                "company_id": 8257,
                 "provider_id": 0,
                 "items": [
                     {
