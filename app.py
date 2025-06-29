@@ -434,20 +434,20 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Format to ISO format WITHOUT timezone as per guide
         pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
 
+
         # Create payload according to the guide
-       # Create payload according to the guide
         booking_payload = {
             "apikey": TAXICALLER_API_KEY,  # lowercase 'apikey'
             "companyid": "kiwic",  # ADD THIS LINE
             "passenger": {  # nested object
-            "name": booking_data["name"],
+            "name": booking_data.get("name", "Customer"),
             "phone": caller_number
             },
             "pickup": {  # nested object
-                "address": booking_data["pickup_address"]
+                "address": booking_data.get("pickup_address", "")
             },
             "dropoff": {  # nested object
-                "address": booking_data["destination"]
+                "address": booking_data.get("destination", "")
             },
             "pickuptime": pickup_time_iso,  # lowercase 'pickuptime'
             "source": "KiwiCabsAI"  # ADD THIS LINE
