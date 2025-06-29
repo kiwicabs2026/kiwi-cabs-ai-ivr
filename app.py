@@ -12,7 +12,7 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
-import googlemaps
+import pytz 
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
