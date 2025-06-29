@@ -435,26 +435,87 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
 
 
-        # Create payload according to the guide
-        booking_payload = {
-            'apiKey': TAXICALLER_API_KEY,
-            'customerPhone': caller_number,
-            'customerName': booking_data.get('name', 'Customer'),
-            'pickup': booking_data.get('pickup_address', ''),
-            'dropoff': booking_data.get('destination', ''),
-            'time': pickup_time_iso
-            }
+        # Get coordinates for pickup and destination using Google Maps
+        pickup_coords = [0, 0]  # Default fallback
+        dropoff_coords = [0, 0]  # Default fallback
         
-        # Add optional User ID if available
-        if USER_ID:
-            booking_payload["userid"] = USER_ID
-        
-        # Add notes if available
-        if booking_data.get("raw_speech"):
-            booking_payload["notes"] = f"AI IVR Booking - {booking_data.get('raw_speech', '')}"
+        if gmaps:
+            try:
+                # Get pickup coordinates
+                pickup_geocode = gmaps.geocode(booking_data.get('pickup_address', ''))
+                if pickup_geocode:
+                    pickup_lat = pickup_geocode[0]['geometry']['location']['lat']
+                    pickup_lng = pickup_geocode[0]['geometry']['location']['lng']
+                    pickup_coords = [int(pickup_lng * 1000000), int(pickup_lat * 1000000)]
+                
+                # Get dropoff coordinates  
+                dropoff_geocode = gmaps.geocode(booking_data.get('destination', ''))
+                if dropoff_geocode:
+                    dropoff_lat = dropoff_geocode[0]['geometry']['location']['lat']
+                    dropoff_lng = dropoff_geocode[0]['geometry']['location']['lng']
+                    dropoff_coords = [int(dropoff_lng * 1000000), int(dropoff_lat * 1000000)]
+            except Exception as e:
+                print(f"⚠️ Geocoding error: {e}")
 
-        # Use the correct endpoint from the guide
-            booking_url = "https://apiv2.taxicaller.net/v2/bookings/create"
+        # Convert pickup time to Unix timestamp
+        pickup_timestamp = 0  # Default for ASAP
+        if not is_immediate:
+            pickup_timestamp = int(pickup_datetime.timestamp())
+
+        # Create TaxiCaller compliant payload
+        booking_payload = {
+            "order": {
+                "company_id": int(COMPANY_ID) if COMPANY_ID else 8257,
+                "provider_id": 0,
+                "items": [
+                    {
+                        "@type": "passengers",
+                        "seq": 0,
+                        "passenger": {
+                            "name": booking_data.get('name', 'Customer'),
+                            "email": "customer@kiwicabs.co.nz", 
+                            "phone": caller_number
+                        },
+                        "client_id": 0,
+                        "account": {"id": 0},
+                        "require": {"seats": 1, "wc": 0, "bags": 1},
+                        "pay_info": [{"@t": 0, "data": None}]
+                    }
+                ],
+                "route": {
+                    "meta": {"est_dur": "600", "dist": "5000"},
+                    "nodes": [
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
+                            "location": {
+                                "name": booking_data.get('pickup_address', ''),
+                                "coords": pickup_coords
+                            },
+                            "times": {"arrive": {"target": pickup_timestamp}},
+                            "info": {"all": booking_data.get("raw_speech", "")[:100]},
+                            "seq": 0
+                        },
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "out"}],
+                            "location": {
+                                "name": booking_data.get('destination', ''),
+                                "coords": dropoff_coords
+                            },
+                            "seq": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "pts": pickup_coords + dropoff_coords,
+                            "meta": {"dist": "5000", "est_dur": "600"},
+                            "from_seq": 0,
+                            "to_seq": 1
+                        }
+                    ]
+                }
+            }
+        }
+        
 
         # Define endpoints and headers for the loop
         try:
@@ -463,7 +524,6 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             token_data = json.loads(jwt_token)
             token = token_data['token']
             possible_endpoints = [
-                "https://apiv2.taxicaller.net/v2/bookings/create",  # Guide method
                 "https://api-rc.taxicaller.net/api/v1/booker/order",  # Fallback
             ]
             headers_options = [
@@ -479,11 +539,11 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             
             print(f"📤 SENDING TO TAXICALLER V2:")
             print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-            print(f"   Customer: {booking_payload.get('customerName')}")
-            print(f"   Phone: {booking_payload.get('customerPhone')}")
-            print(f"   Pickup: {booking_payload.get('pickup')}")
-            print(f"   Dropoff: {booking_payload.get('dropoff')}")
-            print(f"   Time: {booking_payload.get('time')}")
+            print(f"   Customer: {booking_payload['order']['items'][0]['passenger']['name']}")
+            print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone']}")
+            print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
+            print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
+            print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
             
             # Try multiple TaxiCaller endpoints
             for endpoint in possible_endpoints:
@@ -537,13 +597,13 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print("⚠️ Error while defining endpoints or headers:", e)
             try:
                 print(f"📤 SENDING TO TAXICALLER V2:")
-                print(f"   URL: {booking_url if 'booking_url' in locals() else 'Not available'}")
+                print(f"   URL: https://api-rc.taxicaller.net/api/v1/booker/order")
                 print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-                print(f"   Customer: {booking_payload.get('customerName') if 'booking_payload' in locals() else 'Not available'}")
-                print(f"   Phone: {booking_payload.get('customerPhone') if 'booking_payload' in locals() else 'Not available'}")
-                print(f"   Pickup: {booking_payload.get('pickup') if 'booking_payload' in locals() else 'Not available'}")
-                print(f"   Dropoff: {booking_payload.get('dropoff') if 'booking_payload' in locals() else 'Not available'}")
-                print(f"   Time: {booking_payload.get('time') if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Customer: {booking_payload['order']['items'][0]['passenger']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target'] if 'booking_payload' in locals() else 'Not available'}")
             except Exception as debug_err:
                 print("⚠️ Debug info not available:", debug_err)
             return False, None
