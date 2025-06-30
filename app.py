@@ -786,7 +786,7 @@ def parse_booking_speech(speech_text):
 
             # Smart destination mapping
 
-            elif any(airport_word in destination.lower() for airport_word in [
+            if any(airport_word in destination.lower() for airport_word in [
                 "airport", "the airport", "domestic airport", "international airport", 
                 "steward duff", "stewart duff", "wlg airport", "wellington airport"
         ]):
