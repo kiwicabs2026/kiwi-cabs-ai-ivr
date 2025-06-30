@@ -804,13 +804,16 @@ def parse_booking_speech(speech_text):
         # Handle "after tomorrow" - add 2 days
         after_tomorrow = datetime.now() + timedelta(days=2)
         booking_data["pickup_date"] = after_tomorrow.strftime("%d/%m/%Y")
+    elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
+        # Handle "tomorrow" - add 1 day
+        tomorrow = datetime.now() + timedelta(days=1)
+        booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif date_match:
         # Customer specified a specific date number
         day = int(date_match.group(1))
         current_date = datetime.now()
         current_month = current_date.month
         current_year = current_date.year
-
         # If the day has already passed this month, assume next month
         if day < current_date.day:
             if current_month == 12:
@@ -819,9 +822,6 @@ def parse_booking_speech(speech_text):
             else:
                 current_month += 1
 
-        booking_data["pickup_date"] = f"{day:02d}/{current_month:02d}/{current_year}"
-    elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
-        tomorrow = datetime.now() + timedelta(days=1)
         booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in today_keywords):
         today = datetime.now()
