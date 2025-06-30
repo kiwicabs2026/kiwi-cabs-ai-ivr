@@ -786,13 +786,10 @@ def parse_booking_speech(speech_text):
 
             # Smart destination mapping
 
-            elif any(
-                airport_word in destination.lower()
-                for airport_word in [
-                    "airport", "the airport", "domestic airport", "international airport",
-                    "steward duff", "stewart duff", "wlg airport", "wellington airport"
-                ]
-            ):
+            elif any(airport_word in destination.lower() for airport_word in [
+                "airport", "the airport", "domestic airport", "international airport", 
+                "steward duff", "stewart duff", "wlg airport", "wellington airport"
+        ]):
                 destination = "Wellington Airport"
             elif "station" in destination.lower() or "railway" in destination.lower():
                 destination = "Wellington Railway Station"
