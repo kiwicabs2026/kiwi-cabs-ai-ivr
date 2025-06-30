@@ -892,8 +892,8 @@ def parse_booking_speech(speech_text):
                     # Handle regular time patterns (4 PM, etc.)
                     time_str = match.group(1).strip()
                     time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
-                    if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
+                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")  # ← ADD 4 SPACES HERE
                 
                 # Convert to 24-hour format for timestamp calculation
                 if "PM" in time_str and not time_str.startswith("12"):
