@@ -418,7 +418,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     day = int(date_parts[0])
                 else:
                     # Default to today
-                    today = datetime.now()
+                    today = datetime.now(NZ_TZ)
                     year, month, day = today.year, today.month, today.day
 
                 # Parse time
@@ -433,7 +433,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 )
             except Exception as e:
                 print(f"❌ Error parsing date/time: {e}, using current time + 1 hour")
-                pickup_datetime = datetime.now() + timedelta(hours=1)
+                pickup_datetime = datetime.now(NZ_TZ) + timedelta(hours=1)
 
         # Format to ISO format WITHOUT timezone as per guide
         pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
@@ -502,7 +502,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 "coords": pickup_coords
                             },
                             "times": {"arrive": {"target": pickup_timestamp}},
-                            "info": {"all": booking_data.get("raw_speech", "")[:100]},
+                            "info": {"all": ""},
                             "seq": 0
                         },
                         {
@@ -824,7 +824,7 @@ def parse_booking_speech(speech_text):
 
         booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in today_keywords):
-        today = datetime.now()
+        today = datetime.now(NZ_TZ)
         booking_data["pickup_date"] = today.strftime("%d/%m/%Y")
 
     # Extract time
@@ -838,9 +838,9 @@ def parse_booking_speech(speech_text):
 
     # Add special handling for "half hour" BEFORE the pattern matching
     if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
-        booking_time = datetime.now() + timedelta(minutes=30)
+        booking_time = datetime.now(NZ_TZ) + timedelta(minutes=30)
         booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
-        booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+        booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
         # Then do the pattern matching
         for pattern in time_patterns:
@@ -848,25 +848,35 @@ def parse_booking_speech(speech_text):
             if match:
                 if pattern == r"in\s+(\d+)\s+minutes?":
                     minutes = int(match.group(1))
-                    booking_time = datetime.now() + timedelta(minutes=minutes)
+                    booking_time = datetime.now(NZ_TZ) + timedelta(minutes=minutes)
                     time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
                 elif pattern == r"in\s+(\d+)\s+hours?":
                     hours = int(match.group(1))
-                    booking_time = datetime.now() + timedelta(hours=hours)
+                    booking_time = datetime.now(NZ_TZ) + timedelta(hours=hours)
                     time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
                     booking_data["pickup_time"] = time_str
-                    booking_data["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
                 else:
                     # Handle regular time patterns (4 PM, etc.)
                     time_str = match.group(1).strip()
                     time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
                     if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                        time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
-                    booking_data["pickup_time"] = time_str
+                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+                
+                # Convert to 24-hour format for timestamp calculation
+                if "PM" in time_str and not time_str.startswith("12"):
+                    hour = int(time_str.split(":")[0])
+                    time_str = time_str.replace(f"{hour}:", f"{hour + 12}:").replace(" PM", "")
+                elif "AM" in time_str:
+                    if time_str.startswith("12"):
+                        time_str = time_str.replace("12:", "00:")
+                    time_str = time_str.replace(" AM", "")
+                
+                booking_data["pickup_time"] = time_str
                     break
     
     # Clean temporal words from addresses
@@ -1962,11 +1972,11 @@ def process_modification_smart():
     # Check for date keywords only if time was found
     if time_found:
         if "tomorrow" in speech_result.lower():
-            tomorrow = datetime.now() + timedelta(days=1)
+            tomorrow = datetime.now(NZ_TZ) + timedelta(days=1)
             updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
             changes_made.append(f"time to tomorrow at {time_str}")
         elif "today" in speech_result.lower():
-            today = datetime.now()
+            today = datetime.now(NZ_TZ)
             updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
             changes_made.append(f"time to today at {time_str}")
         else:
