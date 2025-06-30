@@ -905,7 +905,7 @@ def parse_booking_speech(speech_text):
                     time_str = time_str.replace("AM", "").replace(" AM", "").strip()
                 
                 booking_data["pickup_time"] = time_str
-                    break
+                break
     
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
