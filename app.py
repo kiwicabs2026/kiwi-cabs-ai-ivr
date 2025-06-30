@@ -381,6 +381,45 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
+
+# ADD CANCEL FUNCTION HERE ⬇️
+def cancel_taxicaller_booking(order_id):
+    """Cancel booking using TaxiCaller API"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            return False
+            
+        import json
+        token_data = json.loads(jwt_token)
+        token = token_data['token']
+        
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"🗑️ CANCELLING ORDER: {order_id}")
+        response = requests.post(cancel_url, headers=headers, timeout=10)
+        
+        print(f"📥 CANCEL RESPONSE: {response.status_code} - {response.text}")
+        
+        if response.status_code in [200, 201, 204]:
+            print(f"✅ ORDER CANCELLED: {order_id}")
+            return True
+        else:
+            print(f"❌ CANCEL FAILED: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ CANCEL ERROR: {e}")
+        return False
+
+def resolve_wellington_poi_to_address(place_name):
+    # ... your existing function continues
+
 def resolve_wellington_poi_to_address(place_name):
     """Convert Wellington POI names to exact addresses using Google Maps"""
     if not gmaps:
@@ -720,8 +759,13 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                         if response.status_code in [200, 201]:
                             try:
                                 response_data = response.json()
-                                booking_id = response_data.get("bookingId") or response_data.get("id", "Unknown")
-                                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
+                                order_id = response_data.get("order", {}).get("order_id", "Unknown")
+                                booking_id = response_data.get("bookingId") or order_id
+                                
+                                # STORE ORDER ID for future cancellation  
+                                booking_data["taxicaller_order_id"] = order_id 
+                                
+                                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 return True, response_data
                             except:
                                 print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
@@ -2088,6 +2132,22 @@ def process_modification_smart():
             def background_modification():
                 try:
                     print("🔄 BACKGROUND: Starting AI modification...")
+                    2134: print("🔄 BACKGROUND: Starting AI modification...")
+                    old_order_id = original_booking.get("taxicaller_order_id")
+                    if old_order_id:
+                    print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                    cancel_success = cancel_taxicaller_booking(old_order_id)
+                    if cancel_success:
+                    print("✅ OLD BOOKING CANCELLED")
+                    else:
+                    print("❌ CANCEL FAILED - manual intervention needed")
+    
+                    # Wait a moment for cancellation to process
+                    import time
+                    time.sleep(2)
+
+                    # STEP 2: Create new booking
+                    2135: updated_booking["modified_at"] = datetime.now().isoformat()
                     updated_booking["modified_at"] = datetime.now().isoformat()
                     updated_booking["ai_modified"] = True
                     booking_storage[caller_number] = updated_booking
