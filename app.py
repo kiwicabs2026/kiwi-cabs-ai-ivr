@@ -260,45 +260,49 @@ def transcribe_with_google(audio_url):
             speech_contexts=[
                 speech.SpeechContext(
                     phrases=[
-                        "Willis Street",
-                        "Cuba Street",
-                        "Lambton Quay",
-                        "Courtenay Place",
-                        "Taranaki Street",
-                        "Victoria Street",
-                        "Manners Street",
-                        "Dixon Street",
-                        "Wakefield Street",
-                        "Cable Street",
-                        "Oriental Parade",
-                        "Kent Terrace",
-                        "Hobart Street",
-                        "Molesworth Street",
-                        "The Terrace",
-                        "Featherston Street",
-                        "Wellington",
-                        "Lower Hutt",
-                        "Upper Hutt",
-                        "Porirua",
-                        "Petone",
-                        "Island Bay",
-                        "Newtown",
-                        "Kilbirnie",
-                        "Miramar",
-                        "Karori",
-                        "Kelburn",
-                        "Thorndon",
-                        "Te Aro",
-                        "Mount Victoria",
-                        "Oriental Bay",
-                        "Airport",
-                        "Hospital",
-                        "Railway Station",
-                        "Train Station",
-                        "Te Papa",
-                        "Westpac Stadium",
-                        "Sky Stadium",
-                        "Wellington Zoo",
+                        # Wellington Streets
+                        "Willis Street", "Cuba Street", "Lambton Quay", "Courtenay Place",
+                        "Taranaki Street", "Victoria Street", "Manners Street", "Dixon Street",
+                        "Wakefield Street", "Cable Street", "Oriental Parade", "Kent Terrace",
+                        "Hobart Street", "Molesworth Street", "The Terrace", "Featherston Street",
+                        
+                        # Wellington Areas
+                        "Wellington", "Lower Hutt", "Upper Hutt", "Porirua", "Petone",
+                        "Island Bay", "Newtown", "Kilbirnie", "Miramar", "Karori", "Kelburn",
+                        "Thorndon", "Te Aro", "Mount Victoria", "Oriental Bay",
+                        
+                        # Major POIs & Landmarks
+                        "Airport", "Wellington Airport", "Railway Station", "Train Station",
+                        "Te Papa", "Te Papa Museum", "Westpac Stadium", "Sky Stadium",
+                        "Wellington Zoo", "Cable Car", "Wellington Cable Car",
+                        
+                        # Hospitals
+                        "Hospital", "Wellington Hospital", "Hutt Hospital", "Bowen Hospital",
+                        "Kenepuru Hospital", "Kapiti Hospital",
+                        
+                        # Hotels
+                        "James Cook Hotel", "InterContinental Wellington", "Bolton Hotel",
+                        "Copthorne Hotel", "Travelodge Wellington", "YHA Wellington",
+                        
+                        # Shopping Centers
+                        "Westfield", "Westfield Queensgate", "Lambton Quay", "Cuba Mall",
+                        "Johnsonville Mall", "Coastlands", "North City Shopping Centre",
+                        
+                        # Entertainment & Attractions
+                        "Weta Cave", "Weta Workshop", "Wellington Botanic Garden",
+                        "Mount Victoria Lookout", "Carter Observatory", "City Gallery",
+                        "National Library", "Parliament", "Parliament Buildings",
+                        
+                        # Restaurants & Bars (popular ones)
+                        "Logan Brown", "Charley Noble", "Molly Malone's", "Shed 5",
+                        "Ortega Fish Shack", "Noble Rot Wine Bar", "Havana Coffee Works",
+                        
+                        # Universities & Schools
+                        "Victoria University", "Massey University", "Whitireia",
+                        
+                        # Transport Hubs
+                        "Wellington Station", "Waterloo Station", "Petone Station",
+                        "Lower Hutt Station", "Upper Hutt Station", "Johnsonville Station"
                     ],
                     boost=20.0,
                 )
@@ -377,15 +381,66 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
+def resolve_wellington_poi_to_address(place_name):
+    """Convert Wellington POI names to exact addresses using Google Maps"""
+    if not gmaps:
+        return place_name
+    
+    try:
+        print(f"🔍 Resolving Wellington POI: {place_name}")
+        
+        # Try multiple search strategies
+        search_queries = [
+            f"{place_name}, Wellington, New Zealand",
+            f"{place_name}, Lower Hutt, New Zealand", 
+            f"{place_name}, Upper Hutt, New Zealand",
+            f"{place_name}, Porirua, New Zealand"
+        ]
+        
+        for query in search_queries:
+            try:
+                # First try Places API for businesses/landmarks
+                places_result = gmaps.places(
+                    query=query,
+                    radius=50000,  # 50km radius
+                    location=(-41.2924, 174.7787)  # Wellington coordinates
+                )
+                
+                if places_result.get('results'):
+                    best_place = places_result['results'][0]
+                    place_address = best_place.get('formatted_address', '')
+                    place_actual_name = best_place.get('name', place_name)
+                    
+                    print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
+                    return place_address
+                    
+            except Exception as e:
+                print(f"⚠️ Places search failed for {query}: {e}")
+                continue
+        
+        # Fallback to geocoding
+        geocode_result = gmaps.geocode(f"{place_name}, Wellington, New Zealand")
+        if geocode_result:
+            address = geocode_result[0]['formatted_address']
+            print(f"✅ GEOCODED: {place_name} → {address}")
+            return address
+            
+        print(f"❌ Could not resolve: {place_name}")
+        return place_name
+        
+    except Exception as e:
+        print(f"❌ POI resolution error: {e}")
+        return place_name
+
 def extract_modification_intent_with_ai(speech_text, current_booking):
-    """Use OpenAI to understand modification requests naturally"""
+    """Use OpenAI to understand modification requests naturally with Wellington POI knowledge"""
     
     if not OPENAI_API_KEY:
         print("⚠️ No OpenAI API key - falling back to basic parsing")
         return None
     
     try:
-        prompt = f"""You are analyzing a taxi booking modification request.
+        prompt = f"""You are a Wellington, New Zealand taxi dispatcher AI with comprehensive local knowledge.
 
 CURRENT BOOKING:
 - Pickup: {current_booking.get('pickup_address', 'Unknown')}
@@ -394,13 +449,23 @@ CURRENT BOOKING:
 
 CUSTOMER SAID: "{speech_text}"
 
-What does the customer want to change? Respond ONLY with JSON:
+Extract what they want to change. Use your knowledge of Wellington landmarks, businesses, hospitals, hotels, restaurants, attractions, and POIs.
 
-{{"intent": "change_pickup|change_destination|change_time|cancel|no_change", "new_value": "extracted value or null", "confidence": 0.95}}
+WELLINGTON POI EXAMPLES:
+- Hospitals: "Hutt Hospital", "Wellington Hospital", "Bowen Hospital", "Kenepuru Hospital"
+- Hotels: "James Cook Hotel", "InterContinental Wellington", "Bolton Hotel"
+- Attractions: "Te Papa", "Weta Cave", "Wellington Zoo", "Cable Car", "Sky Stadium"
+- Shopping: "Westfield Queensgate", "Lambton Quay", "Cuba Mall"
+- Transport: "Wellington Airport", "Wellington Station", "Railway Station"
+- Areas: "Lower Hutt", "Upper Hutt", "Miramar", "Kelburn", "Newtown"
+
+What does the customer want to change? Respond ONLY with JSON:
+{{"intent": "change_pickup|change_destination|change_time|cancel|no_change", "new_value": "exact place name or time", "confidence": 0.95}}
 
 Examples:
-"change destination to Bowen Hospital" → {{"intent": "change_destination", "new_value": "Bowen Hospital", "confidence": 0.95}}
-"pick me up from Willis Street instead" → {{"intent": "change_pickup", "new_value": "Willis Street", "confidence": 0.90}}"""
+"change destination to Hutt Hospital" → {{"intent": "change_destination", "new_value": "Hutt Hospital", "confidence": 0.95}}
+"go to Weta Cave instead" → {{"intent": "change_destination", "new_value": "Weta Cave", "confidence": 0.92}}
+"pick me up from James Cook Hotel" → {{"intent": "change_pickup", "new_value": "James Cook Hotel", "confidence": 0.90}}"""
 
         import openai
         openai.api_key = OPENAI_API_KEY
@@ -408,7 +473,7 @@ Examples:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=100,
+            max_tokens=150,
             temperature=0.1
         )
         
@@ -830,17 +895,19 @@ def parse_booking_speech(speech_text):
             destination = destination.replace("wellington wellington", "wellington")
             destination = re.sub(r"\s+(at|around|by)\s+\d+", "", destination)
 
-            # Smart destination mapping
-
-            if any(airport_word in destination.lower() for airport_word in [
+            # FIXED Smart destination mapping - ONLY for generic terms
+            if destination.lower() in ["hospital", "the hospital"]:
+                destination = "Wellington Hospital"
+            elif any(airport_word in destination.lower() for airport_word in [
                 "airport", "the airport", "domestic airport", "international airport", 
                 "steward duff", "stewart duff", "wlg airport", "wellington airport"
-        ]):
+            ]):
                 destination = "Wellington Airport"
-            elif "station" in destination.lower() or "railway" in destination.lower():
+            elif destination.lower() in ["station", "railway station", "train station", "the station"]:
                 destination = "Wellington Railway Station"
             elif "te papa" in destination.lower():
                 destination = "Te Papa Museum"
+            # For specific hospitals like "Hutt Hospital", "Bowen Hospital" - keep as-is!
 
         booking_data["destination"] = destination
         # AI Smart Cleaning - Remove time from destination
@@ -852,7 +919,7 @@ def parse_booking_speech(speech_text):
             booking_data["destination"] = dest.strip()
         break
 
-    # Extract date - IMPROVED TO HANDLE SPECIFIC DATES LIKE 22nd, 23rd
+    # Extract date - FIXED DATE PARSING BUG
     immediate_keywords = [
         "right now", "now", "asap", "as soon as possible", "immediately", "straight away",
     ]
@@ -883,7 +950,7 @@ def parse_booking_speech(speech_text):
         tomorrow = datetime.now(NZ_TZ) + timedelta(days=1)
         booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif date_match:
-        # Customer specified a specific date number
+        # Customer specified a specific date number - FIXED BUG HERE
         day = int(date_match.group(1))
         current_date = datetime.now(NZ_TZ)
         current_month = current_date.month
@@ -895,8 +962,8 @@ def parse_booking_speech(speech_text):
                 current_year += 1
             else:
                 current_month += 1
-
-        booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
+        # FIXED: Use the correct variables for the date
+        booking_data["pickup_date"] = datetime(current_year, current_month, day).strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in today_keywords):
         today = datetime.now(NZ_TZ)
         booking_data["pickup_date"] = today.strftime("%d/%m/%Y")
@@ -1113,6 +1180,7 @@ def index():
             "fast_confirmation",
             "clean_addresses",
             "database_storage",
+            "smart_wellington_poi_recognition"
         ],
     }, 200
 
@@ -1371,7 +1439,7 @@ def process_booking():
 </Response>"""
     
     elif current_step == "destination":
-        # Process destination
+        # Process destination using AI POI resolution
         destination = speech_data.strip()
         
         # Clean common prefixes
@@ -1387,28 +1455,18 @@ def process_booking():
         elif dest_lower.startswith("i am going to "):
             destination = destination[14:].strip()
         
-        # Smart destination mapping
-        if "hospital" in destination.lower():
-            destination = "Wellington Hospital"
-        elif any(airport_word in destination.lower() for airport_word in ["airport", "the airport", "domestic", "international"]):
-            destination = "Wellington Airport"
-        elif any(station_word in destination.lower() for station_word in ["station", "railway", "train"]):
-            destination = "Wellington Railway Station"
-        elif "te papa" in destination.lower():
-            destination = "Te Papa Museum"
+        # SMART WELLINGTON POI RESOLUTION
+        print(f"🔍 Resolving destination POI: {destination}")
+        resolved_destination = resolve_wellington_poi_to_address(destination)
         
-        if len(destination) >= 3:
-            # Validate with Google Maps if available
-            if gmaps:
-                destination = validate_and_format_address(destination, "destination")
-            
-            partial_booking["destination"] = destination
+        if len(resolved_destination) >= 3:
+            partial_booking["destination"] = resolved_destination
             session["booking_step"] = "time"
             
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! Going to {destination}.
+        Great! Going to {resolved_destination}.
         When do you need the taxi?
         You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
     </Say>
@@ -2002,47 +2060,15 @@ def process_modification_smart():
             return Response(response, mimetype="text/xml")
         
         elif intent == "change_destination" and new_value:
-            # 🌟 SMART WELLINGTON REGION POI RECOGNITION (50KM RADIUS)
-            print(f"🔍 Searching Wellington region for: {new_value}")
+            # 🌟 SUPER SMART WELLINGTON POI RECOGNITION
+            print(f"🔍 Resolving Wellington POI: {new_value}")
             
-            # Use Google Maps to find ANY Wellington region POI
-            if gmaps:
-                try:
-                    # Search specifically in Wellington, NZ area
-                    search_query = f"{new_value}, Wellington, New Zealand"
-                    
-                    # Get location suggestions from Google Maps
-                    geocode_result = gmaps.geocode(search_query)
-                    
-                    if geocode_result:
-                        # Get the best match
-                        best_match = geocode_result[0]
-                        formatted_address = best_match['formatted_address']
-                        place_name = best_match.get('address_components', [{}])[0].get('long_name', new_value)
-                        
-                        print(f"✅ Found Wellington region POI: {place_name} → {formatted_address}")
-                        new_value = formatted_address
-                        
-                    else:
-                        # Fallback: try places search for businesses/POIs
-                        places_result = gmaps.places(
-                            query=search_query,
-                            radius=50000,  # 🎯 50KM RADIUS - ENTIRE WELLINGTON REGION
-                            location=(-41.2924, 174.7787)  # Wellington coordinates
-                        )
-                        
-                        if places_result.get('results'):
-                            best_place = places_result['results'][0]
-                            new_value = best_place['formatted_address']
-                            print(f"✅ Found Wellington region business: {best_place['name']} → {new_value}")
-                            
-                except Exception as e:
-                    print(f"❌ Google Maps search failed: {str(e)}")
-                    # Keep original value as fallback
+            # Convert POI name to exact address
+            exact_address = resolve_wellington_poi_to_address(new_value)
             
             updated_booking = original_booking.copy()
-            updated_booking["destination"] = new_value
-            changes_made = [f"destination to {new_value}"]
+            updated_booking["destination"] = exact_address
+            changes_made = [f"destination to {exact_address}"]
             
             # SUCCESS - send immediate response and background processing
             changes_text = " and ".join(changes_made)
@@ -2071,6 +2097,39 @@ def process_modification_smart():
                     print(f"❌ BACKGROUND: AI modification error: {str(e)}")
 
             threading.Thread(target=background_modification, daemon=True).start()
+            return Response(immediate_response, mimetype="text/xml")
+        
+        elif intent == "change_pickup" and new_value:
+            # Same smart POI resolution for pickup changes
+            exact_address = resolve_wellington_poi_to_address(new_value)
+            
+            updated_booking = original_booking.copy()
+            updated_booking["pickup_address"] = exact_address
+            
+            # Background processing
+            def background_modification():
+                try:
+                    print("🔄 BACKGROUND: Starting AI pickup modification...")
+                    updated_booking["modified_at"] = datetime.now().isoformat()
+                    updated_booking["ai_modified"] = True
+                    booking_storage[caller_number] = updated_booking
+                    success, response = send_booking_to_api(updated_booking, caller_number)
+                    print("✅ BACKGROUND: AI pickup modification completed")
+                except Exception as e:
+                    print(f"❌ BACKGROUND: AI modification error: {str(e)}")
+
+            threading.Thread(target=background_modification, daemon=True).start()
+            
+            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your pickup to {exact_address}.
+        Your taxi will now pick you up from {exact_address} 
+        and take you to {updated_booking['destination']}.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
             return Response(immediate_response, mimetype="text/xml")
     
     print("🤖 AI parsing failed or low confidence - using fallback logic")
@@ -2325,17 +2384,12 @@ def process_modification_smart():
             match = re.search(pattern, speech_result, re.IGNORECASE)
             if match:
                 new_dest = match.group(1).strip()
-                # Smart destination mapping
-                if "hospital" in new_dest.lower():
-                    new_dest = "Wellington Hospital"
-                elif "airport" in new_dest.lower():
-                    new_dest = "Wellington Airport"
-                elif "station" in new_dest.lower():
-                    new_dest = "Wellington Railway Station"
-
-                if new_dest and new_dest != original_booking["destination"]:
-                    updated_booking["destination"] = new_dest
-                    changes_made.append(f"destination to {new_dest}")
+                # Use smart POI resolution for destinations in fallback too
+                resolved_dest = resolve_wellington_poi_to_address(new_dest)
+                
+                if resolved_dest and resolved_dest != original_booking["destination"]:
+                    updated_booking["destination"] = resolved_dest
+                    changes_made.append(f"destination to {resolved_dest}")
                 break
 
         # Extract new time if mentioned
@@ -2657,4 +2711,5 @@ if __name__ == "__main__":
     )
     print(f"🚨 IMMEDIATE DISPATCH: Enabled for urgent bookings (right now, ASAP)")
     print(f"📅 SCHEDULED DISPATCH: Background processing for future bookings")
+    print(f"🧠 SMART WELLINGTON POI: AI recognizes all Wellington landmarks by name")
     app.run(host="0.0.0.0", port=port, debug=True)
