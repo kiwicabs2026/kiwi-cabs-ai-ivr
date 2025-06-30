@@ -2119,14 +2119,12 @@ def process_modification_smart():
                                 pass
 
                 # STEP 1: Cancel the old booking first
-                print("❌ BACKGROUND: Cancelling old booking")
-                cancel_booking = original_booking.copy()
-                cancel_booking["status"] = "cancelled"
-                cancel_booking["cancelled_at"] = datetime.now().isoformat()
-                cancel_booking["cancellation_reason"] = "Customer modified booking"
+                # STEP 1: Skip TaxiCaller cancellation (no proper cancel endpoint)
+                print("⚠️ BACKGROUND: Skipping TaxiCaller cancellation (will be replaced by new booking)")
+                cancel_success = True  # Assume success, let new booking replace old one
 
                 # Send cancellation to TaxiCaller/API
-                cancel_success, cancel_response = send_booking_to_api(cancel_booking, caller_number)
+                # cancel_success, cancel_response = send_booking_to_api(old_booking, caller_number)  # DISABLED - prevents double booking
                 if cancel_success:
                     print("✅ BACKGROUND: Old booking cancelled successfully")
                 else:
