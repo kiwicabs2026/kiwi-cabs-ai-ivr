@@ -96,6 +96,7 @@ def validate_and_format_address(address, address_type="general"):
     except Exception as e:
         print(f"❌ Google Maps error: {e}")
         return address
+
 # Configuration - STEP 1: Environment Variables (with fallback to your key)
 TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
 TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
@@ -375,6 +376,51 @@ def get_taxicaller_jwt():
 
 # ✅ Call it
 get_taxicaller_jwt()
+
+def extract_modification_intent_with_ai(speech_text, current_booking):
+    """Use OpenAI to understand modification requests naturally"""
+    
+    if not OPENAI_API_KEY:
+        print("⚠️ No OpenAI API key - falling back to basic parsing")
+        return None
+    
+    try:
+        prompt = f"""You are analyzing a taxi booking modification request.
+
+CURRENT BOOKING:
+- Pickup: {current_booking.get('pickup_address', 'Unknown')}
+- Destination: {current_booking.get('destination', 'Unknown')}
+- Time: {current_booking.get('pickup_time', 'Unknown')}
+
+CUSTOMER SAID: "{speech_text}"
+
+What does the customer want to change? Respond ONLY with JSON:
+
+{{"intent": "change_pickup|change_destination|change_time|cancel|no_change", "new_value": "extracted value or null", "confidence": 0.95}}
+
+Examples:
+"change destination to Bowen Hospital" → {{"intent": "change_destination", "new_value": "Bowen Hospital", "confidence": 0.95}}
+"pick me up from Willis Street instead" → {{"intent": "change_pickup", "new_value": "Willis Street", "confidence": 0.90}}"""
+
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.1
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        print(f"🤖 AI PARSED: {ai_response}")
+        
+        import json
+        return json.loads(ai_response)
+        
+    except Exception as e:
+        print(f"❌ AI parsing error: {e}")
+        return None
 
 def extract_driver_instructions(raw_speech):
     """Extract only driver-specific instructions from speech"""
@@ -1442,6 +1488,19 @@ def process_booking():
         <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
     </Gather>
 </Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. 
+        Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
     elif current_step == "driver_instructions":
         # Process driver instructions
         instructions = speech_data.strip()
@@ -1919,19 +1978,20 @@ def process_modification_smart():
 
     original_booking = booking_storage[caller_number].copy()
 
-    # Check for cancellation first
-    if any(
-        word in speech_result.lower()
-        for word in ["cancel", "delete", "don't need", "not going"]
-    ):
-        return redirect_to("/cancel_booking")
-
-    # Check if they want no changes
-    if any(
-        word in speech_result.lower()
-        for word in ["nothing", "no change", "keep it", "fine", "good", "same"]
-    ):
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+    # 🧠 TRY AI FIRST FOR NATURAL LANGUAGE UNDERSTANDING
+    ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
+    
+    if ai_intent and ai_intent.get("confidence", 0) > 0.7:
+        intent = ai_intent["intent"]
+        new_value = ai_intent["new_value"]
+        
+        print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
+        
+        if intent == "cancel":
+            return redirect_to("/cancel_booking")
+        
+        elif intent == "no_change":
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! Your booking remains unchanged.
@@ -1939,8 +1999,83 @@ def process_modification_smart():
     </Say>
     <Hangup/>
 </Response>"""
-        return Response(response, mimetype="text/xml")
+            return Response(response, mimetype="text/xml")
+        
+        elif intent == "change_destination" and new_value:
+            # 🌟 SMART WELLINGTON REGION POI RECOGNITION (50KM RADIUS)
+            print(f"🔍 Searching Wellington region for: {new_value}")
+            
+            # Use Google Maps to find ANY Wellington region POI
+            if gmaps:
+                try:
+                    # Search specifically in Wellington, NZ area
+                    search_query = f"{new_value}, Wellington, New Zealand"
+                    
+                    # Get location suggestions from Google Maps
+                    geocode_result = gmaps.geocode(search_query)
+                    
+                    if geocode_result:
+                        # Get the best match
+                        best_match = geocode_result[0]
+                        formatted_address = best_match['formatted_address']
+                        place_name = best_match.get('address_components', [{}])[0].get('long_name', new_value)
+                        
+                        print(f"✅ Found Wellington region POI: {place_name} → {formatted_address}")
+                        new_value = formatted_address
+                        
+                    else:
+                        # Fallback: try places search for businesses/POIs
+                        places_result = gmaps.places(
+                            query=search_query,
+                            radius=50000,  # 🎯 50KM RADIUS - ENTIRE WELLINGTON REGION
+                            location=(-41.2924, 174.7787)  # Wellington coordinates
+                        )
+                        
+                        if places_result.get('results'):
+                            best_place = places_result['results'][0]
+                            new_value = best_place['formatted_address']
+                            print(f"✅ Found Wellington region business: {best_place['name']} → {new_value}")
+                            
+                except Exception as e:
+                    print(f"❌ Google Maps search failed: {str(e)}")
+                    # Keep original value as fallback
+            
+            updated_booking = original_booking.copy()
+            updated_booking["destination"] = new_value
+            changes_made = [f"destination to {new_value}"]
+            
+            # SUCCESS - send immediate response and background processing
+            changes_text = " and ".join(changes_made)
+            
+            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your {changes_text}.
+        Your taxi will pick you up from {updated_booking['pickup_address']} 
+        and take you to {updated_booking['destination']}.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
 
+            # Background processing
+            def background_modification():
+                try:
+                    print("🔄 BACKGROUND: Starting AI modification...")
+                    updated_booking["modified_at"] = datetime.now().isoformat()
+                    updated_booking["ai_modified"] = True
+                    booking_storage[caller_number] = updated_booking
+                    success, response = send_booking_to_api(updated_booking, caller_number)
+                    print("✅ BACKGROUND: AI modification completed")
+                except Exception as e:
+                    print(f"❌ BACKGROUND: AI modification error: {str(e)}")
+
+            threading.Thread(target=background_modification, daemon=True).start()
+            return Response(immediate_response, mimetype="text/xml")
+    
+    print("🤖 AI parsing failed or low confidence - using fallback logic")
+    
+    # FALLBACK: Continue with existing logic below...
     # Create updated booking starting with original data
     updated_booking = original_booking.copy()
     changes_made = []
