@@ -1442,6 +1442,42 @@ def process_booking():
         <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
     </Gather>
 </Response>"""
+elif current_step == "driver_instructions":
+        # Process driver instructions
+        instructions = speech_data.strip()
+        
+        # Check if they have instructions or said no
+        instructions_lower = instructions.lower()
+        if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
+            partial_booking["driver_instructions"] = ""
+            instructions_msg = ""
+        else:
+            partial_booking["driver_instructions"] = instructions
+            instructions_msg = f", with instructions: {instructions}"
+        
+        session["booking_step"] = "confirmation"
+        
+        # Build final confirmation
+        name = partial_booking['name']
+        confirmation_text = f"Perfect {name}! Let me confirm everything: "
+        confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+        confirmation_text += f"going to {partial_booking['destination']}, "
+        if partial_booking.get("pickup_time") == "ASAP":
+            confirmation_text += "right now"
+        else:
+            confirmation_text += f"on {partial_booking.get('pickup_date', '')} at {partial_booking.get('pickup_time', '')}"
+        confirmation_text += instructions_msg
+        
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            {confirmation_text}.
+            Is everything correct? Say yes to confirm or no to start over.
+        </Say>
+    </Gather>
+    <Redirect>/process_booking</Redirect>
+</Response>"""
         else:
             response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -1455,42 +1491,7 @@ def process_booking():
     </Gather>
 </Response>"""
     
-elif current_step == "driver_instructions":
-    # Process driver instructions
-    instructions = speech_data.strip()
-    
-    # Check if they have instructions or said no
-    instructions_lower = instructions.lower()
-    if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
-        partial_booking["driver_instructions"] = ""
-        instructions_msg = ""
-else:
-        partial_booking["driver_instructions"] = instructions
-        instructions_msg = f", with instructions: {instructions}"
-    
-    session["booking_step"] = "confirmation"
-    
-    # Build final confirmation
-    name = partial_booking['name']
-    confirmation_text = f"Perfect {name}! Let me confirm everything: "
-    confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-    confirmation_text += f"going to {partial_booking['destination']}, "
-if partial_booking.get("pickup_time") == "ASAP":
-        confirmation_text += "right now"
-else:
-        confirmation_text += f"on {partial_booking.get('pickup_date', '')} at {partial_booking.get('pickup_time', '')}"
-    confirmation_text += instructions_msg
-    
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            {confirmation_text}.
-            Is everything correct? Say yes to confirm or no to start over.
-        </Say>
-    </Gather>
-    <Redirect>/process_booking</Redirect>
-</Response>"""
+
     # Store session updates
     session["partial_booking"] = partial_booking
     user_sessions[call_sid] = session
