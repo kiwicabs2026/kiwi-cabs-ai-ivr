@@ -1464,7 +1464,7 @@ elif current_step == "driver_instructions":
     if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
         partial_booking["driver_instructions"] = ""
         instructions_msg = ""
-    else:
+else:
         partial_booking["driver_instructions"] = instructions
         instructions_msg = f", with instructions: {instructions}"
     
@@ -1475,9 +1475,9 @@ elif current_step == "driver_instructions":
     confirmation_text = f"Perfect {name}! Let me confirm everything: "
     confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
     confirmation_text += f"going to {partial_booking['destination']}, "
-    if partial_booking.get("pickup_time") == "ASAP":
+if partial_booking.get("pickup_time") == "ASAP":
         confirmation_text += "right now"
-    else:
+else:
         confirmation_text += f"on {partial_booking.get('pickup_date', '')} at {partial_booking.get('pickup_time', '')}"
     confirmation_text += instructions_msg
     
