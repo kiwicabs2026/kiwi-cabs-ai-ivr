@@ -409,8 +409,6 @@ def extract_driver_instructions(raw_speech):
     # Return combined instructions or empty string
     return "; ".join(instructions) if instructions else ""
 
-
-def send_booking_to_taxicaller(booking_data, caller_number):
 def send_booking_to_taxicaller(booking_data, caller_number):
     """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
