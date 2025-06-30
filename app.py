@@ -497,7 +497,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # Convert pickup time to Unix timestamp
         pickup_timestamp = 0  # Default for ASAP
         if not is_immediate:
-            pickup_timestamp = int(pickup_datetime.timestamp())
+            pickup_timestamp = int(NZ_TZ.localize(pickup_datetime).timestamp())
 
         # Create TaxiCaller compliant payload
         # Convert only NZ international numbers to local format
@@ -535,7 +535,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 "coords": pickup_coords
                             },
                             "times": {"arrive": {"target": pickup_timestamp}},
-                            "info": {"all": extract_driver_instructions(booking_data.get("raw_speech", ""))},
+                            "info": {"all": booking_data.get("driver_instructions", "")},
                             "seq": 0
                         },
                         {
@@ -825,7 +825,7 @@ def parse_booking_speech(speech_text):
     date_match = re.search(date_pattern, speech_text)
 
     if any(keyword in speech_text.lower() for keyword in immediate_keywords):
-        current_time = datetime.now()
+        current_time = datetime.now(NZ_TZ)
         booking_data["pickup_date"] = current_time.strftime("%d/%m/%Y")
         booking_data["pickup_time"] = "ASAP"
     elif any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
@@ -834,12 +834,12 @@ def parse_booking_speech(speech_text):
         booking_data["pickup_date"] = after_tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
         # Handle "tomorrow" - add 1 day
-        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = datetime.now(NZ_TZ) + timedelta(days=1)
         booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif date_match:
         # Customer specified a specific date number
         day = int(date_match.group(1))
-        current_date = datetime.now()
+        current_date = datetime.now(NZ_TZ)
         current_month = current_date.month
         current_year = current_date.year
         # If the day has already passed this month, assume next month
@@ -1423,7 +1423,7 @@ def process_booking():
                 return Response(response, mimetype="text/xml")
         
         if valid_time:
-            session["booking_step"] = "confirmation"
+            session["booking_step"] = "driver_instructions"
             
             # Build confirmation message
             confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
@@ -1433,13 +1433,14 @@ def process_booking():
             
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
-            {confirmation_text}.
-            Is this correct? Say yes to confirm or no to start over.
-        </Say>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great {partial_booking['name']}! Your taxi is booked for {time_string}.
+        Do you have any special instructions for the driver?
+        For example, "wait for me", "call when you arrive", or just say "no instructions".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
     </Gather>
-    <Redirect>/process_booking</Redirect>
 </Response>"""
         else:
             response = """<?xml version="1.0" encoding="UTF-8"?>
@@ -1454,6 +1455,42 @@ def process_booking():
     </Gather>
 </Response>"""
     
+elif current_step == "driver_instructions":
+    # Process driver instructions
+    instructions = speech_data.strip()
+    
+    # Check if they have instructions or said no
+    instructions_lower = instructions.lower()
+    if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
+        partial_booking["driver_instructions"] = ""
+        instructions_msg = ""
+    else:
+        partial_booking["driver_instructions"] = instructions
+        instructions_msg = f", with instructions: {instructions}"
+    
+    session["booking_step"] = "confirmation"
+    
+    # Build final confirmation
+    name = partial_booking['name']
+    confirmation_text = f"Perfect {name}! Let me confirm everything: "
+    confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+    confirmation_text += f"going to {partial_booking['destination']}, "
+    if partial_booking.get("pickup_time") == "ASAP":
+        confirmation_text += "right now"
+    else:
+        confirmation_text += f"on {partial_booking.get('pickup_date', '')} at {partial_booking.get('pickup_time', '')}"
+    confirmation_text += instructions_msg
+    
+    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            {confirmation_text}.
+            Is everything correct? Say yes to confirm or no to start over.
+        </Say>
+    </Gather>
+    <Redirect>/process_booking</Redirect>
+</Response>"""
     # Store session updates
     session["partial_booking"] = partial_booking
     user_sessions[call_sid] = session
