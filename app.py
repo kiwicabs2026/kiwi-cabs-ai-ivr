@@ -376,6 +376,41 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
+def extract_driver_instructions(raw_speech):
+    """Extract only driver-specific instructions from speech"""
+    if not raw_speech:
+        return ""
+    
+    speech_lower = raw_speech.lower()
+    instructions = []
+    
+    # Driver instruction patterns
+    instruction_keywords = {
+        "go all the way": "Go all the way",
+        "wait for me": "Wait for passenger", 
+        "call when you arrive": "Call on arrival",
+        "call me when": "Call on arrival",
+        "ring the doorbell": "Ring doorbell",
+        "ring doorbell": "Ring doorbell", 
+        "help with luggage": "Help with luggage",
+        "help with bags": "Help with luggage",
+        "wheelchair": "Wheelchair accessible required",
+        "waiting outside": "Passenger waiting outside",
+        "i'll be outside": "Passenger waiting outside",
+        "honk the horn": "Honk on arrival",
+        "don't honk": "No honking please"
+    }
+    
+    # Check for instruction keywords
+    for keyword, instruction in instruction_keywords.items():
+        if keyword in speech_lower:
+            instructions.append(instruction)
+    
+    # Return combined instructions or empty string
+    return "; ".join(instructions) if instructions else ""
+
+
+def send_booking_to_taxicaller(booking_data, caller_number):
 def send_booking_to_taxicaller(booking_data, caller_number):
     """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
@@ -502,7 +537,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 "coords": pickup_coords
                             },
                             "times": {"arrive": {"target": pickup_timestamp}},
-                            "info": {"all": ""},
+                            "info": {"all": extract_driver_instructions(booking_data.get("raw_speech", ""))},
                             "seq": 0
                         },
                         {
@@ -683,7 +718,6 @@ def parse_booking_speech(speech_text):
     # Extract pickup address - FIXED to completely remove "number" and clean addresses
     pickup_patterns = [
         # Match number + street name + street type (remove "number" word)
-        r"from\s+(?:number\s+)?(\d+\s+[A-Za-z]+(?:\s+(?:Street|Road|Avenue|Lane|Drive|Crescent|Way|Boulevard|Terrace)))",
         # Fallback patterns - UPDATED to handle "I am" as well as "I'm" and remove "number"
         r"(?:from|pick up from|pickup from)\s+(?:number\s+)?([^,]+?)(?:\s+(?:to|going|I'm|I am|and))",
         r"(?:from|pick up from|pickup from)\s+(?:number\s+)?([^,]+)$",
@@ -753,8 +787,7 @@ def parse_booking_speech(speech_text):
             destination = re.sub(r"\s+(at|around|by)\s+\d+", "", destination)
 
             # Smart destination mapping
-            if "hospital" in destination.lower():
-                destination = "Wellington Hospital"
+
             elif any(
                 airport_word in destination.lower()
                 for airport_word in [
@@ -870,11 +903,11 @@ def parse_booking_speech(speech_text):
                 # Convert to 24-hour format for timestamp calculation
                 if "PM" in time_str and not time_str.startswith("12"):
                     hour = int(time_str.split(":")[0])
-                    time_str = time_str.replace(f"{hour}:", f"{hour + 12}:").replace(" PM", "")
+                    time_str = time_str.replace(f"{hour}:", f"{hour + 12}:").replace("PM", "").replace(" PM", "").strip()
                 elif "AM" in time_str:
                     if time_str.startswith("12"):
                         time_str = time_str.replace("12:", "00:")
-                    time_str = time_str.replace(" AM", "")
+                    time_str = time_str.replace("AM", "").replace(" AM", "").strip()
                 
                 booking_data["pickup_time"] = time_str
                     break
