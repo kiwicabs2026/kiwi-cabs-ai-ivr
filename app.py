@@ -801,11 +801,23 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 booking_id = response_data.get("bookingId") or order_id
                                 
                                 # STORE ORDER ID for future cancellation  
-        # STORE ORDER ID for future cancellation  
-        booking_data["taxicaller_order_id"] = order_id
-        if caller_number not in booking_storage:
-            booking_storage[caller_number] = {}
-        booking_storage[caller_number]["taxicaller_order_id"] = order_id    
+                                booking_data["taxicaller_order_id"] = order_id
+                                if caller_number not in booking_storage:
+                                    booking_storage[caller_number] = {}
+                                booking_storage[caller_number]["taxicaller_order_id"] = order_id
+                                
+                                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
+                                return True, response_data
+                            except Exception as e:
+                                print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                                return True, {"status": "created", "response": response.text}
+                                except requests.exceptions.ConnectionError as e:
+                        print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+                        break  # Try next endpoint (no point trying other headers)
+                    except Exception as e:
+                        print(f"❌ ERROR for {endpoint}: {str(e)}")
+                        continue  # Try next header/endpoint
+
         try:
             conn = get_db_connection()
             if conn:
