@@ -381,8 +381,6 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
-
-# ADD CANCEL FUNCTION HERE ⬇️
 def cancel_taxicaller_booking(order_id):
     """Cancel booking using TaxiCaller API"""
     try:
@@ -418,9 +416,6 @@ def cancel_taxicaller_booking(order_id):
         return False
 
 def resolve_wellington_poi_to_address(place_name):
-    # ... your existing function continues
-
-def resolve_wellington_poi_to_address(place_name):
     """Convert Wellington POI names to exact addresses using Google Maps"""
     if not gmaps:
         return place_name
@@ -451,7 +446,13 @@ def resolve_wellington_poi_to_address(place_name):
                     place_actual_name = best_place.get('name', place_name)
                     
                     print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
-                    return place_address
+                    clean_address = clean_address_for_speech(place_address)
+                    return {
+                         "full_address": place_address,
+                         "poi_name": place_actual_name,
+                         "clean_address": clean_address,
+                         "speech": f"{place_actual_name} at {clean_address}"
+                    }
                     
             except Exception as e:
                 print(f"⚠️ Places search failed for {query}: {e}")
@@ -462,14 +463,30 @@ def resolve_wellington_poi_to_address(place_name):
         if geocode_result:
             address = geocode_result[0]['formatted_address']
             print(f"✅ GEOCODED: {place_name} → {address}")
-            return address
+            clean_address = clean_address_for_speech(address)
+            return {
+                "full_address": address,
+                "poi_name": place_name,
+                "clean_address": clean_address,
+                "speech": f"{place_name} at {clean_address}"
+            }
             
         print(f"❌ Could not resolve: {place_name}")
-        return place_name
+        return {
+            "full_address": place_name,
+            "poi_name": place_name,
+            "clean_address": place_name,
+            "speech": place_name
+        }
         
     except Exception as e:
         print(f"❌ POI resolution error: {e}")
-        return place_name
+        return {
+            "full_address": place_name,
+            "poi_name": place_name,
+            "clean_address": place_name,
+            "speech": place_name
+        }
 
 def extract_modification_intent_with_ai(speech_text, current_booking):
     """Use OpenAI to understand modification requests naturally with Wellington POI knowledge"""
@@ -1504,13 +1521,13 @@ def process_booking():
         resolved_destination = resolve_wellington_poi_to_address(destination)
         
         if len(resolved_destination) >= 3:
-            partial_booking["destination"] = resolved_destination
+            partial_booking["destination"] = resolved_destination["full_address"]
             session["booking_step"] = "time"
             
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! Going to {resolved_destination}.
+        Great! Going to {resolved_destination['speech']}.
         When do you need the taxi?
         You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
     </Say>
