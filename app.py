@@ -773,7 +773,9 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
             print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
             print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
-            
+        except Exception as e:
+            print(f"❌ Outer try error: {e}")
+   
             # Try multiple TaxiCaller endpoints
             for endpoint in possible_endpoints:
                 for headers in headers_options:
@@ -802,7 +804,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         # STORE ORDER ID for future cancellation  
         booking_data["taxicaller_order_id"] = order_id
         booking_storage[caller_number]["taxicaller_order_id"] = order_id
-        
+            
         try:
             conn = get_db_connection()
             if conn:
