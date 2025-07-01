@@ -392,7 +392,7 @@ def cancel_taxicaller_booking(order_id):
         token_data = json.loads(jwt_token)
         token = token_data['token']
         
-        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -811,7 +811,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                             except Exception as e:
                                 print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
                                 return True, {"status": "created", "response": response.text}
-                                except requests.exceptions.ConnectionError as e:
+                        except Exception as e:
                         print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
                         break  # Try next endpoint (no point trying other headers)
                     except Exception as e:
