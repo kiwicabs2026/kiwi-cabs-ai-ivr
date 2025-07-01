@@ -1,3 +1,4 @@
+
 import os
 import sys
 import requests
@@ -392,7 +393,7 @@ def cancel_taxicaller_booking(order_id):
         token_data = json.loads(jwt_token)
         token = token_data['token']
         
-        cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -773,9 +774,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
             print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
             print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
-        except Exception as e:
-            print(f"❌ Outer try error: {e}")
-   
+            
             # Try multiple TaxiCaller endpoints
             for endpoint in possible_endpoints:
                 for headers in headers_options:
@@ -801,70 +800,34 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 booking_id = response_data.get("bookingId") or order_id
                                 
                                 # STORE ORDER ID for future cancellation  
-                                booking_data["taxicaller_order_id"] = order_id
-                                if caller_number not in booking_storage:
-                                    booking_storage[caller_number] = {}
-                                booking_storage[caller_number]["taxicaller_order_id"] = order_id
+                                booking_data["taxicaller_order_id"] = order_id 
+                                booking_storage[caller_number]["taxicaller_order_id"] = order_id  # ← ADD THIS NEW LINE
                                 
                                 print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 return True, response_data
-                            except Exception as e:
+                            except:
                                 print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
                                 return True, {"status": "created", "response": response.text}
-                        except Exception as e:
+                        elif response.status_code == 401:
+                            print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+                            continue  # Try next header format
+                        elif response.status_code == 403:
+                            print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+                            continue  # Try next endpoint/header
+                        else:
+                            print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+                            continue  # Try next endpoint
+                            
+                    except requests.exceptions.ConnectionError as e:
                         print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
                         break  # Try next endpoint (no point trying other headers)
                     except Exception as e:
                         print(f"❌ ERROR for {endpoint}: {str(e)}")
                         continue  # Try next header/endpoint
-
-        try:
-            conn = get_db_connection()
-            if conn:
-                cur = conn.cursor()
-                cur.execute(
-                    """
-                    UPDATE bookings
-                    SET taxicaller_order_id = %s
-                    WHERE customer_phone = %s
-                    AND status = 'pending'
-                    ORDER BY booking_time DESC
-                    LIMIT 1
-                    """,
-                    (order_id, caller_number)
-                )
-                conn.commit()
-                cur.close()
-                conn.close()
-                 print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
-        except Exception as e:
-            print(f"❌ Error updating bookings table with order ID: {e}")
-
-        print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
-        return True, response_data
-    except:
-        print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
-        return True, {"status": "created", "response": response.text}
-elif response.status_code == 401:
-    print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
-    continue  # Try next header format
-elif response.status_code == 403:
-    print(f"🚫 FORBIDDEN - API key may not have booking permissions")
-    continue  # Try next endpoint/header
-else:
-    print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
-    continue  # Try next endpoint
-
-except requests.exceptions.ConnectionError as e:
-    print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-    break  # Try next endpoint (no point trying other headers)
-except Exception as e:
-    print(f"❌ ERROR for {endpoint}: {str(e)}")
-    continue  # Try next header/endpoint
-
-# If all endpoints failed
-print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
-return False, None
+            
+            # If all endpoints failed
+            print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
+            return False, None
 
         except Exception as e:
             print("⚠️ Error while defining endpoints or headers:", e)
@@ -1872,10 +1835,10 @@ def confirm_booking():
 
                 cur.execute(
                     """INSERT INTO bookings 
-                    (customer_phone, customer_name, pickup_location, dropoff_location, 
-                    scheduled_time, status, booking_reference, raw_speech, 
-                    pickup_date, pickup_time, created_via, taxicaller_order_id) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                       (customer_phone, customer_name, pickup_location, dropoff_location, 
+                        scheduled_time, status, booking_reference, raw_speech, 
+                        pickup_date, pickup_time, created_via) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         caller_number,
                         booking_data["name"],
@@ -1888,7 +1851,6 @@ def confirm_booking():
                         booking_data.get("pickup_date", ""),
                         booking_data.get("pickup_time", ""),
                         "ai_ivr",
-                        booking_data.get("taxicaller_order_id"),
                     ),
                 )
 
@@ -2049,13 +2011,12 @@ def modify_booking():
     # Check database first
     conn = get_db_connection()
     booking = None
-    taxicaller_order_id = None  # NEW
 
     if conn:
         try:
             cur = conn.cursor()
             cur.execute(
-                """SELECT *, taxicaller_order_id FROM bookings 
+                """SELECT * FROM bookings 
                    WHERE customer_phone = %s AND status = 'confirmed' 
                    ORDER BY booking_time DESC LIMIT 1""",
                 (caller_number,),
@@ -2072,41 +2033,11 @@ def modify_booking():
                     "status": db_booking["status"],
                     "booking_reference": db_booking["booking_reference"],
                 }
-                taxicaller_order_id = db_booking["taxicaller_order_id"]  # NEW
 
             cur.close()
             conn.close()
         except Exception as e:
             print(f"❌ Database error: {e}")
-
-        # NEW: Cancel old TaxiCaller booking if found
-        if taxicaller_order_id:
-            print(f"🛑 Cancelling previous TaxiCaller booking: {taxicaller_order_id}")
-            cancel_success = cancel_taxicaller_booking(taxicaller_order_id)
-            if cancel_success:
-                print("✅ Previous booking cancelled successfully.")
-            else:
-                print("❌ Failed to cancel previous booking.")
-        # Optional: Update booking status in DB to 'cancelled' after successful TaxiCaller cancellation
-        if taxicaller_order_id and cancel_success:
-            try:
-                conn = get_db_connection()
-                if conn:
-                    cur = conn.cursor()
-                    cur.execute(
-                        """
-                        UPDATE bookings
-                        SET status = 'cancelled'
-                        WHERE taxicaller_order_id = %s
-                        """
-                    (taxicaller_order_id,)
-                    )
-                    conn.commit()
-                    cur.close()
-                    conn.close()
-                print(f"✅ Booking status updated to 'cancelled' in DB for order: {taxicaller_order_id}")
-            except Exception as e:
-                print(f"❌ Error updating booking status in DB: {e}")
 
     # Fallback to memory storage
     if (
