@@ -2414,9 +2414,13 @@ if old_order_id:
                                 pass
 
                 # STEP 1: Cancel the old booking first
-                # STEP 1: Skip TaxiCaller cancellation (no proper cancel endpoint)
-                print("⚠️ BACKGROUND: Skipping TaxiCaller cancellation (will be replaced by new booking)")
-                cancel_success = True  # Assume success, let new booking replace old one
+                print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                cancel_success = cancel_taxicaller_booking(old_order_id)
+                if cancel_success:
+                    print("✅ BACKGROUND: Old booking cancelled successfully")
+                else:
+                    print("⚠️ BACKGROUND: Failed to cancel old booking - continuing with new booking")
+
 
                 # Send cancellation to TaxiCaller/API
                 # cancel_success, cancel_response = send_booking_to_api(old_booking, caller_number)  # DISABLED - prevents double booking
