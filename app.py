@@ -803,8 +803,9 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 # STORE ORDER ID for future cancellation  
         # STORE ORDER ID for future cancellation  
         booking_data["taxicaller_order_id"] = order_id
-        booking_storage[caller_number]["taxicaller_order_id"] = order_id
-            
+        if caller_number not in booking_storage:
+            booking_storage[caller_number] = {}
+        booking_storage[caller_number]["taxicaller_order_id"] = order_id    
         try:
             conn = get_db_connection()
             if conn:
