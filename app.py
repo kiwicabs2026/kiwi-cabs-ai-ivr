@@ -2151,12 +2151,12 @@ def process_modification_smart():
                     print("🔄 BACKGROUND: Starting AI modification...")
                     old_order_id = original_booking.get("taxicaller_order_id")
                     if old_order_id:
-                    print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
-                    cancel_success = cancel_taxicaller_booking(old_order_id)
-                    if cancel_success:
-                    print("✅ OLD BOOKING CANCELLED")
-                    else:
-                    print("❌ CANCEL FAILED - manual intervention needed")
+                        print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                        cancel_success = cancel_taxicaller_booking(old_order_id)
+                        if cancel_success:
+                            print("✅ OLD BOOKING CANCELLED")
+                        else:
+                            print("❌ CANCEL FAILED - manual intervention needed")
     
                     # Wait a moment for cancellation to process
                     import time
