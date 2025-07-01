@@ -665,14 +665,14 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         if gmaps:
             try:
                 # Get pickup coordinates
-                pickup_geocode = gmaps.geocode(booking_data.get('pickup_address', ''))
+                pickup_geocode = gmaps.geocode(booking_data.get('pickup_address', '') + ", Wellington, New Zealand", region="nz")
                 if pickup_geocode:
                     pickup_lat = pickup_geocode[0]['geometry']['location']['lat']
                     pickup_lng = pickup_geocode[0]['geometry']['location']['lng']
                     pickup_coords = [int(pickup_lng * 1000000), int(pickup_lat * 1000000)]
                 
                 # Get dropoff coordinates  
-                dropoff_geocode = gmaps.geocode(booking_data.get('destination', ''))
+                dropoff_geocode = gmaps.geocode(booking_data.get('destination', '') + ", Wellington, New Zealand", region="nz")
                 if dropoff_geocode:
                     dropoff_lat = dropoff_geocode[0]['geometry']['location']['lat']
                     dropoff_lng = dropoff_geocode[0]['geometry']['location']['lng']
@@ -1611,11 +1611,9 @@ def process_booking():
             session["booking_step"] = "driver_instructions"
             
             # Build confirmation message
-            confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
-            confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-            confirmation_text += f"going to {clean_address_for_speech(partial_booking['destination'])}, "
-            confirmation_text += f"{time_string}"
-            
+            # Simple transition to driver instructions  
+            instructions_prompt = f"Great {partial_booking['name']}! Your taxi is booked for {time_string}."    
+
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
