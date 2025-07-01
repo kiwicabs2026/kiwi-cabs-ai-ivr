@@ -2176,7 +2176,7 @@ def process_modification_smart():
                 
                 if old_order_id:
                     print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
-                        cancel_success = cancel_taxicaller_booking(old_order_id)
+                    cancel_success = cancel_taxicaller_booking(old_order_id)
                         if cancel_success:
                             print("✅ OLD BOOKING CANCELLED")
                         else:
