@@ -800,6 +800,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 
                                 # STORE ORDER ID for future cancellation  
                                 booking_data["taxicaller_order_id"] = order_id 
+                                booking_storage[caller_number]["taxicaller_order_id"] = order_id  # ← ADD THIS NEW LINE
                                 
                                 print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 return True, response_data
