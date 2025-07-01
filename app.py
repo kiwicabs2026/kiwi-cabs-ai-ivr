@@ -799,36 +799,31 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 booking_id = response_data.get("bookingId") or order_id
                                 
                                 # STORE ORDER ID for future cancellation  
-                                # STORE ORDER ID for future cancellation  
-booking_data["taxicaller_order_id"] = order_id 
-booking_storage[caller_number]["taxicaller_order_id"] = order_id
+        # STORE ORDER ID for future cancellation  
+        booking_data["taxicaller_order_id"] = order_id
+        booking_storage[caller_number]["taxicaller_order_id"] = order_id
+        try:
+            conn = get_db_connection()
+            if conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    UPDATE bookings
+                    SET taxicaller_order_id = %s
+                    WHERE customer_phone = %s
+                    AND status = 'pending'
+                    ORDER BY booking_time DESC
+                    LIMIT 1
+                    """,
+                    (order_id, caller_number)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+                print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
+        except Exception as e:
+            print(f"❌ Error updating bookings table with order ID: {e}")
 
-# ---- BEGIN PATCH: Store TaxiCaller Order ID in DB ----
-try:
-    conn = get_db_connection()
-    if conn:
-        cur = conn.cursor()
-        cur.execute(
-            """
-            UPDATE bookings
-            SET taxicaller_order_id = %s
-            WHERE customer_phone = %s
-            AND status = 'pending'
-            ORDER BY booking_time DESC
-            LIMIT 1
-            """,
-            (order_id, caller_number)
-        )
-        conn.commit()
-        cur.close()
-        conn.close()
-        print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
-except Exception as e:
-    print(f"❌ Error updating bookings table with order ID: {e}")
-# ---- END PATCH ----
-
-                                
-                                
                                 print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 return True, response_data
                             except:
