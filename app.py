@@ -415,6 +415,25 @@ def cancel_taxicaller_booking(order_id):
         print(f"❌ CANCEL ERROR: {e}")
         return False
 
+def clean_address_for_speech(address):
+    """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
+    if not address:
+        return address
+    
+    import re
+    # Remove postcodes (4-digit numbers)
+    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
+    
+    # Remove "Wellington" and "New Zealand" 
+    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
+    cleaned = cleaned.replace(", New Zealand", "").replace(" New Zealand", "")
+    
+    # Clean up extra commas and spaces
+    cleaned = re.sub(r',\s*,', ',', cleaned)
+    cleaned = cleaned.strip(', ')
+    
+    return cleaned
+
 def resolve_wellington_poi_to_address(place_name):
     """Convert Wellington POI names to exact addresses using Google Maps"""
     if not gmaps:
