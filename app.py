@@ -794,41 +794,32 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                         print(f"📥 RESPONSE BODY: {response.text}")
                         
                         # Log the API response and handle errors
-                       try:
+                        try:
     response = requests.post(endpoint, headers=headers, json=payload)
-
     if response.status_code in [200, 201]:
         try:
             response_data = response.json()
             order_id = response_data.get("order", {}).get("order_id", "Unknown")
             booking_id = response_data.get("bookingId") or order_id
-
             # STORE ORDER ID for future cancellation  
             booking_data["taxicaller_order_id"] = order_id
             if caller_number not in booking_storage:
                 booking_storage[caller_number] = {}
             booking_storage[caller_number]["taxicaller_order_id"] = order_id
-
             print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
             return True, response_data
-
         except Exception as e:
             print("✅ TAXICALLER BOOKING CREATED (no JSON response)")
             return True, {"status": "created", "response": response.text}
-
     else:
         print(f"⚠️ Unexpected status code {response.status_code}: {response.text}")
         continue  # if inside a loop
-
 except requests.exceptions.ConnectionError as e:
     print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-    break  # if inside a loop, break to avoid retrying same base URL
-
+    break  # if inside a loop
 except Exception as e:
     print(f"❌ ERROR for {endpoint}: {str(e)}")
-    continue  # if inside a loop, try next
-
-
+    continue  # if inside a loop
         try:
             conn = get_db_connection()
             if conn:
