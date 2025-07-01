@@ -799,8 +799,35 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 booking_id = response_data.get("bookingId") or order_id
                                 
                                 # STORE ORDER ID for future cancellation  
-                                booking_data["taxicaller_order_id"] = order_id 
-                                booking_storage[caller_number]["taxicaller_order_id"] = order_id  # ← ADD THIS NEW LINE
+                                # STORE ORDER ID for future cancellation  
+booking_data["taxicaller_order_id"] = order_id 
+booking_storage[caller_number]["taxicaller_order_id"] = order_id
+
+# ---- BEGIN PATCH: Store TaxiCaller Order ID in DB ----
+try:
+    conn = get_db_connection()
+    if conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE bookings
+            SET taxicaller_order_id = %s
+            WHERE customer_phone = %s
+            AND status = 'pending'
+            ORDER BY booking_time DESC
+            LIMIT 1
+            """,
+            (order_id, caller_number)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
+except Exception as e:
+    print(f"❌ Error updating bookings table with order ID: {e}")
+# ---- END PATCH ----
+
+                                
                                 
                                 print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 return True, response_data
@@ -2011,12 +2038,13 @@ def modify_booking():
     # Check database first
     conn = get_db_connection()
     booking = None
+    taxicaller_order_id = None  # NEW
 
     if conn:
         try:
             cur = conn.cursor()
             cur.execute(
-                """SELECT * FROM bookings 
+                """SELECT *, taxicaller_order_id FROM bookings 
                    WHERE customer_phone = %s AND status = 'confirmed' 
                    ORDER BY booking_time DESC LIMIT 1""",
                 (caller_number,),
@@ -2033,11 +2061,41 @@ def modify_booking():
                     "status": db_booking["status"],
                     "booking_reference": db_booking["booking_reference"],
                 }
+                taxicaller_order_id = db_booking["taxicaller_order_id"]  # NEW
 
             cur.close()
             conn.close()
         except Exception as e:
             print(f"❌ Database error: {e}")
+
+        # NEW: Cancel old TaxiCaller booking if found
+        if taxicaller_order_id:
+            print(f"🛑 Cancelling previous TaxiCaller booking: {taxicaller_order_id}")
+            cancel_success = cancel_taxicaller_booking(taxicaller_order_id)
+            if cancel_success:
+                print("✅ Previous booking cancelled successfully.")
+            else:
+                print("❌ Failed to cancel previous booking.")
+        # Optional: Update booking status in DB to 'cancelled' after successful TaxiCaller cancellation
+        if taxicaller_order_id and cancel_success:
+            try:
+                conn = get_db_connection()
+                if conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        UPDATE bookings
+                        SET status = 'cancelled'
+                        WHERE taxicaller_order_id = %s
+                        """
+                    (taxicaller_order_id,)
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+                print(f"✅ Booking status updated to 'cancelled' in DB for order: {taxicaller_order_id}")
+            except Exception as e:
+                print(f"❌ Error updating booking status in DB: {e}")
 
     # Fallback to memory storage
     if (
