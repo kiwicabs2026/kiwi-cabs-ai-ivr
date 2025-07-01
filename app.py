@@ -1834,10 +1834,10 @@ def confirm_booking():
 
                 cur.execute(
                     """INSERT INTO bookings 
-                       (customer_phone, customer_name, pickup_location, dropoff_location, 
-                        scheduled_time, status, booking_reference, raw_speech, 
-                        pickup_date, pickup_time, created_via) 
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (customer_phone, customer_name, pickup_location, dropoff_location, 
+                    scheduled_time, status, booking_reference, raw_speech, 
+                    pickup_date, pickup_time, created_via, taxicaller_order_id) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         caller_number,
                         booking_data["name"],
@@ -1850,6 +1850,7 @@ def confirm_booking():
                         booking_data.get("pickup_date", ""),
                         booking_data.get("pickup_time", ""),
                         "ai_ivr",
+                        booking_data.get("taxicaller_order_id"),
                     ),
                 )
 
