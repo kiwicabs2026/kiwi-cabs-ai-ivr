@@ -2168,6 +2168,14 @@ def process_modification_smart():
                 try:
                     print("🔄 BACKGROUND: Starting AI modification...")
                     old_order_id = original_booking.get("taxicaller_order_id")
+
+
+        # ADD THESE DEBUG LINES HERE:
+        print(f"🔍 DEBUG: original_booking keys: {list(original_booking.keys())}")
+        print(f"🔍 DEBUG: old_order_id retrieved: {old_order_id}")
+        print(f"🔍 DEBUG: booking_storage for {caller_number}: {booking_storage.get(caller_number, 'NOT FOUND')}")
+
+if old_order_id:
                     if old_order_id:
                         print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
                         cancel_success = cancel_taxicaller_booking(old_order_id)
