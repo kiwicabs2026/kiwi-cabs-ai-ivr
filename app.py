@@ -2149,7 +2149,6 @@ def process_modification_smart():
             def background_modification():
                 try:
                     print("🔄 BACKGROUND: Starting AI modification...")
-                    2134: print("🔄 BACKGROUND: Starting AI modification...")
                     old_order_id = original_booking.get("taxicaller_order_id")
                     if old_order_id:
                     print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
@@ -2164,7 +2163,6 @@ def process_modification_smart():
                     time.sleep(2)
 
                     # STEP 2: Create new booking
-                    2135: updated_booking["modified_at"] = datetime.now().isoformat()
                     updated_booking["modified_at"] = datetime.now().isoformat()
                     updated_booking["ai_modified"] = True
                     booking_storage[caller_number] = updated_booking
