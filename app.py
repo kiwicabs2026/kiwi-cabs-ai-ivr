@@ -823,35 +823,35 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 conn.commit()
                 cur.close()
                 conn.close()
-                print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
+                 print(f"✅ Updated bookings table with TaxiCaller order ID: {order_id}")
         except Exception as e:
             print(f"❌ Error updating bookings table with order ID: {e}")
 
-                                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
-                                return True, response_data
-                            except:
-                                print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
-                                return True, {"status": "created", "response": response.text}
-                        elif response.status_code == 401:
-                            print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
-                            continue  # Try next header format
-                        elif response.status_code == 403:
-                            print(f"🚫 FORBIDDEN - API key may not have booking permissions")
-                            continue  # Try next endpoint/header
-                        else:
-                            print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
-                            continue  # Try next endpoint
-                            
-                    except requests.exceptions.ConnectionError as e:
-                        print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-                        break  # Try next endpoint (no point trying other headers)
-                    except Exception as e:
-                        print(f"❌ ERROR for {endpoint}: {str(e)}")
-                        continue  # Try next header/endpoint
-            
-            # If all endpoints failed
-            print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
-            return False, None
+        print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
+        return True, response_data
+    except:
+        print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+        return True, {"status": "created", "response": response.text}
+elif response.status_code == 401:
+    print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+    continue  # Try next header format
+elif response.status_code == 403:
+    print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+    continue  # Try next endpoint/header
+else:
+    print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+    continue  # Try next endpoint
+
+except requests.exceptions.ConnectionError as e:
+    print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+    break  # Try next endpoint (no point trying other headers)
+except Exception as e:
+    print(f"❌ ERROR for {endpoint}: {str(e)}")
+    continue  # Try next header/endpoint
+
+# If all endpoints failed
+print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
+return False, None
 
         except Exception as e:
             print("⚠️ Error while defining endpoints or headers:", e)
