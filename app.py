@@ -1612,7 +1612,7 @@ def process_booking():
             # Build confirmation message
             confirmation_text = f"Let me confirm your booking details: {partial_booking['name']}, "
             confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-            confirmation_text += f"going to {partial_booking['destination']}, "
+            confirmation_text += f"going to {clean_address_for_speech(partial_booking['destination'])}, "
             confirmation_text += f"{time_string}"
             
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -1658,7 +1658,7 @@ def process_booking():
         name = partial_booking['name']
         confirmation_text = f"Perfect {name}! Let me confirm everything: "
         confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-        confirmation_text += f"going to {partial_booking['destination']}, "
+        confirmation_text += f"going to {clean_address_for_speech(partial_booking['destination'])}, "
         if partial_booking.get("pickup_time") == "ASAP":
             confirmation_text += "right now"
         else:
