@@ -2280,38 +2280,69 @@ def process_modification_smart():
     </Say>
     <Hangup/>
 </Response>"""
-    return Response(response, mimetype="text/xml")
+return Response(response, mimetype="text/xml")
+
+elif intent == "change_destination" and new_value:
+    # 🌟 SMART WELLINGTON POI RECOGNITION
+    print(f"🔍 Resolving Wellington POI: {new_value}")
+
+    try:
+        # Convert POI name to exact address
+        resolved_destination = resolve_wellington_poi_to_address(new_value)
         
-        elif intent == "change_destination" and new_value:
-            # 🌟 SMART WELLINGTON POI RECOGNITION
-            print(f"🔍 Resolving Wellington POI: {new_value}")
-            
-            # Convert POI name to exact address
-            resolved_destination = resolve_wellington_poi_to_address(new_value)
-            
-            # Get the actual address string
-            if isinstance(resolved_destination, dict):
-                exact_address = resolved_destination.get("full_address", new_value)
-                speech_address = resolved_destination.get("speech", exact_address)
-            else:
-                exact_address = resolved_destination
-                speech_address = exact_address
-            
-            updated_booking = original_booking.copy()
-            updated_booking["destination"] = exact_address
-            changes_made = [f"destination to {exact_address}"]
-            
-            # IMMEDIATE response - don't make customer wait
-            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # Add error handling for missing POI
+        if not resolved_destination:
+            raise ValueError(f"Failed to resolve destination for POI: {new_value}")
+        
+        # Get the actual address string
+        if isinstance(resolved_destination, dict):
+            exact_address = resolved_destination.get("full_address", new_value)
+            speech_address = resolved_destination.get("speech", exact_address)
+        else:
+            exact_address = resolved_destination
+            speech_address = exact_address
+        
+        # Update booking with new destination
+        updated_booking = original_booking.copy()
+        updated_booking["destination"] = exact_address
+        changes_made = [f"destination to {exact_address}"]
+
+        # IMMEDIATE response - don't make customer wait
+        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your destination to {speech_address}.
-        Your taxi will pick you up from {updated_booking['pickup_address']} 
-        and take you to {speech_address}.
-        We appreciate your booking with Kiwi Cabs. Have a great day.
+        Great! Your new destination is {speech_address}.
+        We'll update your booking immediately.
     </Say>
     <Hangup/>
 </Response>"""
+        
+        # Return the immediate response
+        return Response(immediate_response, mimetype="text/xml")
+
+    except ValueError as ve:
+        # Handle missing POI gracefully
+        print(f"❌ Error: {ve}")
+        error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, we couldn't update your destination. Please try again later.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(error_response, mimetype="text/xml")
+
+    except Exception as e:
+        # Handle unexpected errors
+        print(f"❌ Error resolving POI or updating booking: {str(e)}")
+        error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, something went wrong. Please try again later.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(error_response, mimetype="text/xml")
 
             # Background processing for destination change
             def background_destination_modification():
