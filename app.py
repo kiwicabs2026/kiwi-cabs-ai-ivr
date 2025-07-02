@@ -12,6 +12,10 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
+import pytz 
+
+# New Zealand timezone
+NZ_TZ = pytz.timezone('Pacific/Auckland')
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -92,13 +96,13 @@ def validate_and_format_address(address, address_type="general"):
     except Exception as e:
         print(f"❌ Google Maps error: {e}")
         return address
+
 # Configuration - STEP 1: Environment Variables (with fallback to your key)
 TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
-TAXICALLER_API_KEY = os.getenv(
-    "TAXICALLER_API_KEY", "c18afde179ec057037084b4daf10f01a"
-)  # Your TaxiCaller key
+TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RENDER_ENDPOINT = os.getenv(
-    "RENDER_ENDPOINT", "https://kiwi-cabs-ai-service.onrender.com/api/bookings"
+    "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
 )
 
 # Google Cloud and Twilio Configuration
@@ -256,45 +260,49 @@ def transcribe_with_google(audio_url):
             speech_contexts=[
                 speech.SpeechContext(
                     phrases=[
-                        "Willis Street",
-                        "Cuba Street",
-                        "Lambton Quay",
-                        "Courtenay Place",
-                        "Taranaki Street",
-                        "Victoria Street",
-                        "Manners Street",
-                        "Dixon Street",
-                        "Wakefield Street",
-                        "Cable Street",
-                        "Oriental Parade",
-                        "Kent Terrace",
-                        "Hobart Street",
-                        "Molesworth Street",
-                        "The Terrace",
-                        "Featherston Street",
-                        "Wellington",
-                        "Lower Hutt",
-                        "Upper Hutt",
-                        "Porirua",
-                        "Petone",
-                        "Island Bay",
-                        "Newtown",
-                        "Kilbirnie",
-                        "Miramar",
-                        "Karori",
-                        "Kelburn",
-                        "Thorndon",
-                        "Te Aro",
-                        "Mount Victoria",
-                        "Oriental Bay",
-                        "Airport",
-                        "Hospital",
-                        "Railway Station",
-                        "Train Station",
-                        "Te Papa",
-                        "Westpac Stadium",
-                        "Sky Stadium",
-                        "Wellington Zoo",
+                        # Wellington Streets
+                        "Willis Street", "Cuba Street", "Lambton Quay", "Courtenay Place",
+                        "Taranaki Street", "Victoria Street", "Manners Street", "Dixon Street",
+                        "Wakefield Street", "Cable Street", "Oriental Parade", "Kent Terrace",
+                        "Hobart Street", "Molesworth Street", "The Terrace", "Featherston Street",
+                        
+                        # Wellington Areas
+                        "Wellington", "Lower Hutt", "Upper Hutt", "Porirua", "Petone",
+                        "Island Bay", "Newtown", "Kilbirnie", "Miramar", "Karori", "Kelburn",
+                        "Thorndon", "Te Aro", "Mount Victoria", "Oriental Bay",
+                        
+                        # Major POIs & Landmarks
+                        "Airport", "Wellington Airport", "Railway Station", "Train Station",
+                        "Te Papa", "Te Papa Museum", "Westpac Stadium", "Sky Stadium",
+                        "Wellington Zoo", "Cable Car", "Wellington Cable Car",
+                        
+                        # Hospitals
+                        "Hospital", "Wellington Hospital", "Hutt Hospital", "Bowen Hospital",
+                        "Kenepuru Hospital", "Kapiti Hospital",
+                        
+                        # Hotels
+                        "James Cook Hotel", "InterContinental Wellington", "Bolton Hotel",
+                        "Copthorne Hotel", "Travelodge Wellington", "YHA Wellington",
+                        
+                        # Shopping Centers
+                        "Westfield", "Westfield Queensgate", "Lambton Quay", "Cuba Mall",
+                        "Johnsonville Mall", "Coastlands", "North City Shopping Centre",
+                        
+                        # Entertainment & Attractions
+                        "Weta Cave", "Weta Workshop", "Wellington Botanic Garden",
+                        "Mount Victoria Lookout", "Carter Observatory", "City Gallery",
+                        "National Library", "Parliament", "Parliament Buildings",
+                        
+                        # Restaurants & Bars (popular ones)
+                        "Logan Brown", "Charley Noble", "Molly Malone's", "Shed 5",
+                        "Ortega Fish Shack", "Noble Rot Wine Bar", "Havana Coffee Works",
+                        
+                        # Universities & Schools
+                        "Victoria University", "Massey University", "Whitireia",
+                        
+                        # Transport Hubs
+                        "Wellington Station", "Waterloo Station", "Petone Station",
+                        "Lower Hutt Station", "Upper Hutt Station", "Johnsonville Station"
                     ],
                     boost=20.0,
                 )
@@ -326,7 +334,7 @@ def transcribe_with_google(audio_url):
 
 
 def get_taxicaller_jwt():
-    """Legacy JWT function - kept for compatibility but not used in v2 API"""
+    print("🚀 Starting get_taxicaller_jwt()")
     if (
         TAXICALLER_JWT_CACHE["token"]
         and time.time() < TAXICALLER_JWT_CACHE["expires_at"]
@@ -339,19 +347,17 @@ def get_taxicaller_jwt():
         return None
 
     try:
-        # Try multiple possible JWT endpoints
         jwt_endpoints = [
-            "https://api.taxicaller.net/v1/jwt/for-key",
-            "https://api.taxicaller.net/jwt/for-key",
-            "https://api.taxicaller.net/api/v1/jwt/for-key",
+            "https://api-rc.taxicaller.net/api/v1/jwt/for-key",
         ]
-
         params = {"key": TAXICALLER_API_KEY, "sub": "*", "ttl": "900"}
 
         for jwt_url in jwt_endpoints:
             print(f"🔑 Trying JWT endpoint: {jwt_url}")
             try:
                 response = requests.get(jwt_url, params=params, timeout=5)
+                print(f"🌐 Status Code: {response.status_code}")
+                print(f"📥 Raw Response: {response.text}")
 
                 if response.status_code == 200:
                     jwt_token = response.text.strip()
@@ -365,22 +371,332 @@ def get_taxicaller_jwt():
                 print(f"❌ JWT endpoint {jwt_url} error: {str(e)}")
                 continue
 
-        print(f"❌ All JWT endpoints failed - using v2 API instead")
+        print("❌ All JWT endpoints failed")
         return None
 
     except Exception as e:
         print(f"❌ Error generating JWT: {str(e)}")
         return None
 
+# ✅ Call it
+get_taxicaller_jwt()
+
+def cancel_taxicaller_booking(order_id):
+    """Cancel booking using TaxiCaller API"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            return False
+            
+        import json
+        token_data = json.loads(jwt_token)
+        token = token_data['token']
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"🗑️ CANCELLING ORDER: {order_id}")
+        response = requests.post(cancel_url, headers=headers, timeout=10)
+        
+        print(f"📥 CANCEL RESPONSE: {response.status_code} - {response.text}")
+        
+        if response.status_code in [200, 201, 204]:
+            print(f"✅ ORDER CANCELLED: {order_id}")
+            return True
+        else:
+            print(f"❌ CANCEL FAILED: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ CANCEL ERROR: {e}")
+        return False
+
+def edit_taxicaller_booking(order_id, new_time_str, booking_data):
+    """Edit existing booking using TaxiCaller EDIT endpoint (recommended approach)"""
+    try:
+        jwt_token = get_taxicaller_jwt()
+        if not jwt_token:
+            return False
+            
+        import json
+        token_data = json.loads(jwt_token)
+        token = token_data['token']
+        
+        # Convert time string to Unix timestamp
+        unix_timestamp = 0
+        if new_time_str and new_time_str != "ASAP":
+            try:
+                from datetime import datetime
+                import pytz
+                
+                # Parse the time string (e.g., "3:00 PM", "15:00")
+                if "AM" in new_time_str or "PM" in new_time_str:
+                    time_obj = datetime.strptime(new_time_str, "%I:%M %p").time()
+                else:
+                    time_obj = datetime.strptime(new_time_str, "%H:%M").time()
+                
+                # Get the date (today or from booking_data)
+                pickup_date = booking_data.get("pickup_date")
+                if pickup_date:
+                    date_parts = pickup_date.split("/")
+                    year, month, day = int(date_parts[2]), int(date_parts[1]), int(date_parts[0])
+                    target_datetime = datetime.combine(
+                        datetime(year, month, day).date(), 
+                        time_obj
+                    )
+                else:
+                    # Default to today
+                    target_datetime = datetime.combine(datetime.now().date(), time_obj)
+                
+                # Convert to Unix timestamp
+                nz_tz = pytz.timezone('Pacific/Auckland')
+                unix_timestamp = int(nz_tz.localize(target_datetime).timestamp())
+                
+            except Exception as e:
+                print(f"❌ TIME PARSING ERROR: {e}")
+                return False
+        
+        # Build edit payload according to TaxiCaller docs
+        edit_payload = {
+            "route": {
+                "nodes": [{
+                    "times": {
+                        "arrive": {
+                            "target": unix_timestamp
+                        }
+                    }
+                }]
+            }
+        }
+        
+        edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"✏️ EDITING ORDER: {order_id}")
+        print(f"📅 NEW TIME: {new_time_str} → Unix: {unix_timestamp}")
+        
+        response = requests.post(edit_url, json=edit_payload, headers=headers, timeout=10)
+        
+        print(f"📥 EDIT RESPONSE: {response.status_code} - {response.text}")
+        
+        if response.status_code in [200, 201, 204]:
+            print(f"✅ ORDER EDITED: {order_id}")
+            return True
+        else:
+            print(f"❌ EDIT FAILED: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ EDIT ERROR: {e}")
+        return False
+
+def clean_address_for_speech(address):
+    """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
+    if not address:
+        return address
+    
+    import re
+    # Remove postcodes (4-digit numbers)
+    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
+    
+    # Remove "Wellington" and "New Zealand" 
+    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
+    cleaned = cleaned.replace(", New Zealand", "").replace(" New Zealand", "")
+    
+    # Clean up extra commas and spaces
+    cleaned = re.sub(r',\s*,', ',', cleaned)
+    cleaned = cleaned.strip(', ')
+    
+    return cleaned
+
+def resolve_wellington_poi_to_address(place_name):
+    """Convert Wellington POI names to exact addresses using Google Maps"""
+    if not gmaps:
+        return place_name
+    
+    try:
+        print(f"🔍 Resolving Wellington POI: {place_name}")
+        
+        # Try multiple search strategies
+        search_queries = [
+            f"{place_name}, Wellington, New Zealand",
+            f"{place_name}, Lower Hutt, New Zealand", 
+            f"{place_name}, Upper Hutt, New Zealand",
+            f"{place_name}, Porirua, New Zealand"
+        ]
+        
+        for query in search_queries:
+            try:
+                # First try Places API for businesses/landmarks
+                places_result = gmaps.places(
+                    query=query,
+                    radius=50000,  # 50km radius
+                    location=(-41.2924, 174.7787)  # Wellington coordinates
+                )
+                
+                if places_result.get('results'):
+                    best_place = places_result['results'][0]
+                    place_address = best_place.get('formatted_address', '')
+                    place_actual_name = best_place.get('name', place_name)
+                    
+                    print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
+                    clean_address = clean_address_for_speech(place_address)
+                    return {
+                         "full_address": place_address,
+                         "poi_name": place_actual_name,
+                         "clean_address": clean_address,
+                         "speech": f"{place_actual_name} at {clean_address}"
+                    }
+                    
+            except Exception as e:
+                print(f"⚠️ Places search failed for {query}: {e}")
+                continue
+        
+        # Fallback to geocoding
+        geocode_result = gmaps.geocode(f"{place_name}, Wellington, New Zealand")
+        if geocode_result:
+            address = geocode_result[0]['formatted_address']
+            print(f"✅ GEOCODED: {place_name} → {address}")
+            clean_address = clean_address_for_speech(address)
+            return {
+                "full_address": address,
+                "poi_name": place_name,
+                "clean_address": clean_address,
+                "speech": f"{place_name} at {clean_address}"
+            }
+            
+        print(f"❌ Could not resolve: {place_name}")
+        return {
+            "full_address": place_name,
+            "poi_name": place_name,
+            "clean_address": place_name,
+            "speech": place_name
+        }
+        
+    except Exception as e:
+        print(f"❌ POI resolution error: {e}")
+        return {
+            "full_address": place_name,
+            "poi_name": place_name,
+            "clean_address": place_name,
+            "speech": place_name
+        }
+
+def extract_modification_intent_with_ai(speech_text, current_booking):
+    """Use OpenAI to understand modification requests naturally with Wellington POI knowledge"""
+    
+    if not OPENAI_API_KEY:
+        print("⚠️ No OpenAI API key - falling back to basic parsing")
+        return None
+    
+    try:
+        prompt = f"""You are a Wellington, New Zealand taxi dispatcher AI with comprehensive local knowledge.
+
+CURRENT BOOKING:
+- Pickup: {current_booking.get('pickup_address', 'Unknown')}
+- Destination: {current_booking.get('destination', 'Unknown')}
+- Time: {current_booking.get('pickup_time', 'Unknown')}
+
+CUSTOMER SAID: "{speech_text}"
+
+Extract what they want to change. Use your knowledge of Wellington landmarks, businesses, hospitals, hotels, restaurants, attractions, and POIs.
+
+WELLINGTON POI EXAMPLES:
+- Hospitals: "Hutt Hospital", "Wellington Hospital", "Bowen Hospital", "Kenepuru Hospital"
+- Hotels: "James Cook Hotel", "InterContinental Wellington", "Bolton Hotel"
+- Attractions: "Te Papa", "Weta Cave", "Wellington Zoo", "Cable Car", "Sky Stadium"
+- Shopping: "Westfield Queensgate", "Lambton Quay", "Cuba Mall"
+- Transport: "Wellington Airport", "Wellington Station", "Railway Station"
+- Areas: "Lower Hutt", "Upper Hutt", "Miramar", "Kelburn", "Newtown"
+
+What does the customer want to change? Respond ONLY with JSON:
+{{"intent": "change_pickup|change_destination|change_time|cancel|no_change", "new_value": "exact place name or time", "confidence": 0.95}}
+
+Examples:
+"change destination to Hutt Hospital" → {{"intent": "change_destination", "new_value": "Hutt Hospital", "confidence": 0.95}}
+"go to Weta Cave instead" → {{"intent": "change_destination", "new_value": "Weta Cave", "confidence": 0.92}}
+"pick me up from James Cook Hotel" → {{"intent": "change_pickup", "new_value": "James Cook Hotel", "confidence": 0.90}}"""
+
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.1
+        )
+        
+        ai_response = response.choices[0].message.content.strip()
+        print(f"🤖 AI PARSED: {ai_response}")
+        
+        import json
+        return json.loads(ai_response)
+        
+    except Exception as e:
+        print(f"❌ AI parsing error: {e}")
+        return None
+
+def extract_driver_instructions(raw_speech):
+    """Extract only driver-specific instructions from speech"""
+    if not raw_speech:
+        return ""
+    
+    speech_lower = raw_speech.lower()
+    instructions = []
+    
+    # Driver instruction patterns
+    instruction_keywords = {
+        "go all the way": "Go all the way",
+        "wait for me": "Wait for passenger", 
+        "call when you arrive": "Call on arrival",
+        "call me when": "Call on arrival",
+        "ring the doorbell": "Ring doorbell",
+        "ring doorbell": "Ring doorbell", 
+        "help with luggage": "Help with luggage",
+        "help with bags": "Help with luggage",
+        "wheelchair": "Wheelchair accessible required",
+        "waiting outside": "Passenger waiting outside",
+        "i'll be outside": "Passenger waiting outside",
+        "honk the horn": "Honk on arrival",
+        "don't honk": "No honking please"
+    }
+    
+    # Check for instruction keywords
+    for keyword, instruction in instruction_keywords.items():
+        if keyword in speech_lower:
+            instructions.append(instruction)
+    
+    # Return combined instructions or empty string
+    return "; ".join(instructions) if instructions else ""
 
 def send_booking_to_taxicaller(booking_data, caller_number):
-    """STEP 2: Send booking to TaxiCaller API using the correct v2 endpoint"""
+    """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
+        # Get environment variables
+        TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+        COMPANY_ID = os.getenv("COMPANY_ID", "")
+        USER_ID = os.getenv("USER_ID", "")  # Optional
+
         if not TAXICALLER_API_KEY:
             print("❌ No TaxiCaller API key available")
             return False, None
 
-        print(f"🔑 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+        # 🔑 FIX: generate the JWT token
+        jwt_token = get_taxicaller_jwt()  # ← Add this line here
+
+        print(f"🔐 Using TaxiCaller API Key: {TAXICALLER_API_KEY[:8]}...")
+        print(f"🔑 JWT Token: {jwt_token[:20]}...")
+
+        if COMPANY_ID:
+            print(f"🏢 Company ID: {COMPANY_ID}")
 
         # Format time to ISO format with NZ timezone as per your instructions
         is_immediate = booking_data.get("pickup_time", "").upper() in [
@@ -403,7 +719,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     day = int(date_parts[0])
                 else:
                     # Default to today
-                    today = datetime.now()
+                    today = datetime.now(NZ_TZ)
                     year, month, day = today.year, today.month, today.day
 
                 # Parse time
@@ -418,120 +734,210 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 )
             except Exception as e:
                 print(f"❌ Error parsing date/time: {e}, using current time + 1 hour")
-                pickup_datetime = datetime.now() + timedelta(hours=1)
+                pickup_datetime = datetime.now(NZ_TZ) + timedelta(hours=1)
 
-        # Format to ISO with NZ timezone as per your instructions
+        # Format to ISO format WITHOUT timezone as per guide
         pickup_time_iso = pickup_datetime.strftime("%Y-%m-%dT%H:%M:%S+12:00")
 
-        # Create payload according to your step-by-step instructions
+
+        # Get coordinates for pickup and destination using Google Maps
+        pickup_coords = [0, 0]  # Default fallback
+        dropoff_coords = [0, 0]  # Default fallback
+        
+        if gmaps:
+            try:
+                # Get pickup coordinates
+                pickup_geocode = gmaps.geocode(booking_data.get('pickup_address', '') + ", Wellington, New Zealand", region="nz")
+                if pickup_geocode:
+                    pickup_lat = pickup_geocode[0]['geometry']['location']['lat']
+                    pickup_lng = pickup_geocode[0]['geometry']['location']['lng']
+                    pickup_coords = [int(pickup_lng * 1000000), int(pickup_lat * 1000000)]
+                
+                # Get dropoff coordinates  
+                dropoff_geocode = gmaps.geocode(booking_data.get('destination', '') + ", Wellington, New Zealand", region="nz")
+                if dropoff_geocode:
+                    dropoff_lat = dropoff_geocode[0]['geometry']['location']['lat']
+                    dropoff_lng = dropoff_geocode[0]['geometry']['location']['lng']
+                    dropoff_coords = [int(dropoff_lng * 1000000), int(dropoff_lat * 1000000)]
+            except Exception as e:
+                print(f"⚠️ Geocoding error: {e}")
+
+        # Convert pickup time to Unix timestamp
+        pickup_timestamp = 0  # Default for ASAP
+        if not is_immediate:
+            pickup_timestamp = int(NZ_TZ.localize(pickup_datetime).timestamp())
+
+        # Create TaxiCaller compliant payload
+        # Convert only NZ international numbers to local format
+        nz_local_phone = caller_number
+        if caller_number.startswith("+64"):
+            nz_local_phone = "0" + caller_number[3:]  # +64220881234 → 0220881234
+        elif caller_number.startswith("64") and len(caller_number) == 11:  # Ensure it's NZ format
+            nz_local_phone = "0" + caller_number[2:]  # 64220881234 → 0220881234
         booking_payload = {
-            "apiKey": TAXICALLER_API_KEY,
-            "customerPhone": caller_number,
-            "customerName": booking_data["name"],
-            "pickup": booking_data["pickup_address"],
-            "dropoff": booking_data["destination"],
-            "time": pickup_time_iso,  # Format: '2025-05-29T15:30:00+12:00'
-            "notes": f"AI IVR Booking - {booking_data.get('raw_speech', '')}",
-            "source": "AI_IVR",
-        }
-
-        # Try multiple TaxiCaller endpoints - UPDATED with potentially correct endpoints
-        possible_endpoints = [
-            "https://api-rc.taxicaller.net/api/v1/booker/order",
-            "https://portal.taxicaller.net/api/v1/bookings",  # Portal-based endpoint
-            "https://api.taxicaller.net/v1/bookings/create",   # V1 endpoint (more likely to exist)
-            "https://api.taxicaller.net/api/v1/bookings",     # Alternative V1 endpoint
-            "https://api.taxicaller.net/v2/bookings/create",   # Keep v2 as fallback
-            "https://api.taxicaller.net/api/v2/bookings/create",
-        ]
-
-        # IMPORTANT: Try with different HTTP methods and headers
-        headers_options = [
-            {
-                "Content-Type": "application/json",
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
-                "Authorization": f"Bearer {TAXICALLER_API_KEY}",  # Try Bearer token
-            },
-            {
-                "Content-Type": "application/json", 
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
-                "X-API-Key": TAXICALLER_API_KEY,  # Try X-API-Key header
-            },
-            {
-                "Content-Type": "application/json",
-                "User-Agent": "KiwiCabs-AI-IVR/2.1",
+            "order": {
+                "company_id": 8257,
+                "provider_id": 0,
+                "items": [
+                    {
+                        "@type": "passengers",
+                        "seq": 0,
+                        "passenger": {
+                            "name": booking_data.get('name', 'Customer'),
+                            "email": "customer@kiwicabs.co.nz",
+                            "phone": nz_local_phone
+                        },
+                        "client_id": 0,
+                        "account": {"id": 0},
+                        "require": {"seats": 1, "wc": 0, "bags": 1},
+                        "pay_info": [{"@t": 0, "data": None}]
+                    }
+                ],
+                "route": {
+                    "meta": {"est_dur": "600", "dist": "5000"},
+                    "nodes": [
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
+                            "location": {
+                                "name": booking_data.get('pickup_address', ''),
+                                "coords": pickup_coords
+                            },
+                            "times": {"arrive": {"target": pickup_timestamp}},
+                            "info": {"all": booking_data.get("driver_instructions", "")},
+                            "seq": 0
+                        },
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "out"}],
+                            "location": {
+                                "name": booking_data.get('destination', ''),
+                                "coords": dropoff_coords
+                            },
+                            "seq": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "pts": pickup_coords + dropoff_coords,
+                            "meta": {"dist": "5000", "est_dur": "600"},
+                            "from_seq": 0,
+                            "to_seq": 1
+                        }
+                    ]
+                }
             }
-        ]
+        }
+        
 
-        booking_url = possible_endpoints[0]  # Start with most likely
+        # Define endpoints and headers for the loop
+        try:
+            # Force token extraction to trigger KeyError if jwt_token is missing
+            import json
+            token_data = json.loads(jwt_token)
+            token = token_data['token']
+            possible_endpoints = [
+                "https://api-rc.taxicaller.net/api/v1/booker/order",  # Fallback
+            ]
+            headers_options = [
+                {
+                    "Content-Type": "application/json",
+                    "User-Agent": "KiwiCabs-AI-IVR/2.1"
+                },
+                {   "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "KiwiCabs-AI-IVR/2.1"
+                }
+            ]
+            
+            print(f"📤 SENDING TO TAXICALLER V2:")
+            print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
+            print(f"   Customer: {booking_payload['order']['items'][0]['passenger']['name']}")
+            print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone']}")
+            print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
+            print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
+            print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
+            
+            # Try multiple TaxiCaller endpoints
+            for endpoint in possible_endpoints:
+                for headers in headers_options:
+                    try:
+                        print(f"📤 TRYING ENDPOINT: {endpoint}")
+                        print(f"📤 TRYING HEADERS: {headers}")
+                        
+                        response = requests.post(
+                            endpoint,
+                            json=booking_payload,
+                            timeout=3,  # Quick timeout - don't make customer wait
+                            headers=headers,
+                        )
+                        
+                        print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
+                        print(f"📥 RESPONSE BODY: {response.text}")
+                        
+                        # FIXED: Log the API response and handle errors
+                        if response.status_code in [200, 201]:
+                            try:
+                                response_data = response.json()
+                                order_id = response_data.get("order", {}).get("order_id", "Unknown")
+                                booking_id = response_data.get("bookingId") or order_id
+                                
+                                # FIXED: STORE ORDER ID for future cancellation/editing
+                                booking_data["taxicaller_order_id"] = order_id 
+                                
+                                # FIXED: Ensure booking_storage exists for this caller
+                                if caller_number not in booking_storage:
+                                    booking_storage[caller_number] = {}
+                                
+                                # Update the stored booking with order ID
+                                booking_storage[caller_number].update(booking_data)
+                                booking_storage[caller_number]["taxicaller_order_id"] = order_id
+                                
+                                print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
+                                print(f"🔗 ORDER ID STORED in booking_storage[{caller_number}]")
+                                return True, response_data
+                            except:
+                                print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
+                                return True, {"status": "created", "response": response.text}
+                        elif response.status_code == 401:
+                            print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
+                            continue  # Try next header format
+                        elif response.status_code == 403:
+                            print(f"🚫 FORBIDDEN - API key may not have booking permissions")
+                            continue  # Try next endpoint/header
+                        else:
+                            print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
+                            continue  # Try next endpoint
+                            
+                    except requests.exceptions.ConnectionError as e:
+                        print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
+                        break  # Try next endpoint (no point trying other headers)
+                    except Exception as e:
+                        print(f"❌ ERROR for {endpoint}: {str(e)}")
+                        continue  # Try next header/endpoint
+            
+            # If all endpoints failed
+            print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
+            return False, None
 
-        print(f"📤 SENDING TO TAXICALLER V2:")
-        print(f"   URL: {booking_url}")
-        print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
-        print(f"   Customer: {booking_payload['customerName']}")
-        print(f"   Phone: {booking_payload['customerPhone']}")
-        print(f"   Pickup: {booking_payload['pickup']}")
-        print(f"   Dropoff: {booking_payload['dropoff']}")
-        print(f"   Time: {booking_payload['time']}")
-        print(f"   Payload: {json.dumps(booking_payload, indent=2)}")
-
-        # Try multiple TaxiCaller endpoints since the original doesn't exist
-        for endpoint in possible_endpoints:
-            for headers in headers_options:
-                try:
-                    print(f"📤 TRYING ENDPOINT: {endpoint}")
-                    print(f"📤 TRYING HEADERS: {headers}")
-
-                    response = requests.post(
-                        endpoint,
-                        json=booking_payload,
-                        timeout=3,  # Quick timeout - don't make customer wait
-                        headers=headers,
-                    )
-
-                    print(f"📥 TAXICALLER RESPONSE: {response.status_code}")
-                    print(f"📥 RESPONSE BODY: {response.text}")
-
-                    # STEP 4: Log the API response and handle errors
-                    if response.status_code in [200, 201]:
-                        try:
-                            response_data = response.json()
-                            booking_id = response_data.get(
-                                "bookingId", response_data.get("id", "Unknown")
-                            )
-                            print(f"✅ TAXICALLER BOOKING CREATED: {booking_id}")
-                            return True, response_data
-                        except:
-                            print(f"✅ TAXICALLER BOOKING CREATED (no JSON response)")
-                            return True, {"status": "created", "response": response.text}
-                    elif response.status_code == 401:
-                        print(f"🔑 AUTHENTICATION ERROR - API key may be invalid or need different format")
-                        continue  # Try next header format
-                    elif response.status_code == 403:
-                        print(f"🚫 FORBIDDEN - API key may not have booking permissions")
-                        continue  # Try next endpoint/header
-                    else:
-                        print(f"❌ ENDPOINT {endpoint} FAILED: {response.status_code}")
-                        continue  # Try next endpoint
-
-                except requests.exceptions.ConnectionError as e:
-                    print(f"❌ CONNECTION ERROR for {endpoint}: Domain doesn't exist")
-                    break  # Try next endpoint (no point trying other headers)
-                except Exception as e:
-                    print(f"❌ ERROR for {endpoint}: {str(e)}")
-                    continue  # Try next header/endpoint
-
-        # If all endpoints failed
-        print(f"❌ ALL TAXICALLER ENDPOINTS FAILED")
-        return False, None
+        except Exception as e:
+            print("⚠️ Error while defining endpoints or headers:", e)
+            try:
+                print(f"📤 SENDING TO TAXICALLER V2:")
+                print(f"   URL: https://api-rc.taxicaller.net/api/v1/booker/order")
+                print(f"   API Key: {TAXICALLER_API_KEY[:8]}...")
+                print(f"   Customer: {booking_payload['order']['items'][0]['passenger']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name'] if 'booking_payload' in locals() else 'Not available'}")
+                print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target'] if 'booking_payload' in locals() else 'Not available'}")
+            except Exception as debug_err:
+                print("⚠️ Debug info not available:", debug_err)
+            return False, None
 
     except Exception as e:
         print(f"❌ TAXICALLER API ERROR: {str(e)}")
         import traceback
-
         traceback.print_exc()
         return False, None
-
 
 def parse_booking_speech(speech_text):
     """STEP 3: Parse booking details from speech input"""
@@ -592,7 +998,6 @@ def parse_booking_speech(speech_text):
     # Extract pickup address - FIXED to completely remove "number" and clean addresses
     pickup_patterns = [
         # Match number + street name + street type (remove "number" word)
-        r"from\s+(?:number\s+)?(\d+\s+[A-Za-z]+(?:\s+(?:Street|Road|Avenue|Lane|Drive|Crescent|Way|Boulevard|Terrace)))",
         # Fallback patterns - UPDATED to handle "I am" as well as "I'm" and remove "number"
         r"(?:from|pick up from|pickup from)\s+(?:number\s+)?([^,]+?)(?:\s+(?:to|going|I'm|I am|and))",
         r"(?:from|pick up from|pickup from)\s+(?:number\s+)?([^,]+)$",
@@ -661,21 +1066,19 @@ def parse_booking_speech(speech_text):
             destination = destination.replace("wellington wellington", "wellington")
             destination = re.sub(r"\s+(at|around|by)\s+\d+", "", destination)
 
-            # Smart destination mapping
-            if "hospital" in destination.lower():
+            # FIXED Smart destination mapping - ONLY for generic terms
+            if destination.lower() in ["hospital", "the hospital"]:
                 destination = "Wellington Hospital"
-            elif any(
-                airport_word in destination.lower()
-                for airport_word in [
-                    "airport", "the airport", "domestic airport", "international airport",
-                    "steward duff", "stewart duff", "wlg airport", "wellington airport"
-                ]
-            ):
+            elif any(airport_word in destination.lower() for airport_word in [
+                "airport", "the airport", "domestic airport", "international airport", 
+                "steward duff", "stewart duff", "wlg airport", "wellington airport"
+            ]):
                 destination = "Wellington Airport"
-            elif "station" in destination.lower() or "railway" in destination.lower():
+            elif destination.lower() in ["station", "railway station", "train station", "the station"]:
                 destination = "Wellington Railway Station"
             elif "te papa" in destination.lower():
                 destination = "Te Papa Museum"
+            # For specific hospitals like "Hutt Hospital", "Bowen Hospital" - keep as-is!
 
         booking_data["destination"] = destination
         # AI Smart Cleaning - Remove time from destination
@@ -687,7 +1090,7 @@ def parse_booking_speech(speech_text):
             booking_data["destination"] = dest.strip()
         break
 
-    # Extract date - IMPROVED TO HANDLE SPECIFIC DATES LIKE 22nd, 23rd
+    # Extract date - FIXED DATE PARSING BUG
     immediate_keywords = [
         "right now", "now", "asap", "as soon as possible", "immediately", "straight away",
     ]
@@ -706,20 +1109,23 @@ def parse_booking_speech(speech_text):
     date_match = re.search(date_pattern, speech_text)
 
     if any(keyword in speech_text.lower() for keyword in immediate_keywords):
-        current_time = datetime.now()
+        current_time = datetime.now(NZ_TZ)
         booking_data["pickup_date"] = current_time.strftime("%d/%m/%Y")
         booking_data["pickup_time"] = "ASAP"
     elif any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
         # Handle "after tomorrow" - add 2 days
         after_tomorrow = datetime.now() + timedelta(days=2)
         booking_data["pickup_date"] = after_tomorrow.strftime("%d/%m/%Y")
+    elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
+        # Handle "tomorrow" - add 1 day
+        tomorrow = datetime.now(NZ_TZ) + timedelta(days=1)
+        booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
     elif date_match:
-        # Customer specified a specific date number
+        # Customer specified a specific date number - FIXED BUG HERE
         day = int(date_match.group(1))
-        current_date = datetime.now()
+        current_date = datetime.now(NZ_TZ)
         current_month = current_date.month
         current_year = current_date.year
-
         # If the day has already passed this month, assume next month
         if day < current_date.day:
             if current_month == 12:
@@ -727,35 +1133,65 @@ def parse_booking_speech(speech_text):
                 current_year += 1
             else:
                 current_month += 1
-
-        booking_data["pickup_date"] = f"{day:02d}/{current_month:02d}/{current_year}"
-    elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
-        tomorrow = datetime.now() + timedelta(days=1)
-        booking_data["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
+        # FIXED: Use the correct variables for the date
+        booking_data["pickup_date"] = datetime(current_year, current_month, day).strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in today_keywords):
-        today = datetime.now()
+        today = datetime.now(NZ_TZ)
         booking_data["pickup_date"] = today.strftime("%d/%m/%Y")
 
     # Extract time
     time_patterns = [
+        r"in\s+(\d+)\s+minutes?",  # NEW: matches "in 30 minutes"
+        r"in\s+(\d+)\s+hours?",    # NEW: matches "in 2 hours"
         r"time\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"at\s+(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
         r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
     ]
 
-    if not any(keyword in speech_text.lower() for keyword in immediate_keywords):
+    # Add special handling for "half hour" BEFORE the pattern matching
+    if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
+        booking_time = datetime.now(NZ_TZ) + timedelta(minutes=30)
+        booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+        booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+    elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
+        # Then do the pattern matching
         for pattern in time_patterns:
             match = re.search(pattern, speech_text, re.IGNORECASE)
             if match:
-                time_str = match.group(1).strip()
-                time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
+                if pattern == r"in\s+(\d+)\s+minutes?":
+                    minutes = int(match.group(1))
+                    booking_time = datetime.now(NZ_TZ) + timedelta(minutes=minutes)
+                    time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+                    break
+                elif pattern == r"in\s+(\d+)\s+hours?":
+                    hours = int(match.group(1))
+                    booking_time = datetime.now(NZ_TZ) + timedelta(hours=hours)
+                    time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
+                    booking_data["pickup_time"] = time_str
+                    booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+                    break
+                else:
+                    # Handle regular time patterns (4 PM, etc.)
+                    time_str = match.group(1).strip()
+                    time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
                 if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(
-                        " PM", ":00 PM"
-                    )
-                updated_booking["pickup_time"] = time_str
+                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")  # ← ADD 4 SPACES HERE
+                
+                # Convert to 24-hour format for timestamp calculation
+                if "PM" in time_str and not time_str.startswith("12"):
+                    hour = int(time_str.split(":")[0])
+                    time_str = time_str.replace(f"{hour}:", f"{hour + 12}:").replace("PM", "").replace(" PM", "").strip()
+                elif "AM" in time_str:
+                    if time_str.startswith("12"):
+                        time_str = time_str.replace("12:", "00:")
+                    time_str = time_str.replace("AM", "").replace(" AM", "").strip()
+                
+                booking_data["pickup_time"] = time_str
                 break
-                # Clean temporal words from addresses
+    
+    # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
     
     # Clean and validate pickup address
@@ -788,13 +1224,10 @@ def parse_booking_speech(speech_text):
     
     return booking_data
 
-    return booking_data
-
-
 
 def send_booking_to_api(booking_data, caller_number):
     """STEP 2 & 3: Send booking to TaxiCaller dispatch system with reduced timeout"""
-
+    
     # STEP 3: Format the input data - ensure we extract name, pickup, dropoff, time/date
     enhanced_booking_data = {
         "customer_name": booking_data.get("name", ""),
@@ -812,10 +1245,9 @@ def send_booking_to_api(booking_data, caller_number):
         "number_of_passengers": 1,
         "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
         "created_at": datetime.now().isoformat(),
-        "is_immediate": booking_data.get("pickup_time", "").upper()
-        in ["ASAP", "NOW", "IMMEDIATELY"],
+        "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]
     }
-
+    
     print(f"📤 QUICK BOOKING SUBMISSION:")
     print(f"   Name: {enhanced_booking_data['customer_name']}")
     print(f"   From: {enhanced_booking_data['pickup_address']}")
@@ -919,6 +1351,7 @@ def index():
             "fast_confirmation",
             "clean_addresses",
             "database_storage",
+            "smart_wellington_poi_recognition"
         ],
     }, 200
 
@@ -979,24 +1412,38 @@ def menu():
 
 @app.route("/book_taxi", methods=["POST"])
 def book_taxi():
-    """Start taxi booking process"""
+    """Start taxi booking process - STEP-BY-STEP FLOW"""
     call_sid = request.form.get("CallSid", "")
-    print(f"🚖 Starting booking for call: {call_sid}")
-
+    caller_number = request.form.get("From", "")
+    print(f"🚖 Starting step-by-step booking for call: {call_sid}")
+    
+    # Initialize session for this call
+    if call_sid not in user_sessions:
+        user_sessions[call_sid] = {
+            "booking_step": "name",
+            "partial_booking": {
+                "name": "",
+                "pickup_address": "",
+                "destination": "",
+                "pickup_time": "",
+                "pickup_date": "",
+                "raw_speech": ""
+            },
+            "caller_number": caller_number
+        }
+    
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! I'll help you book your taxi.
-        Please tell me your name, pickup address, destination, date, and time.
-        For example, you can say:
-        My name is James Smith, from 63 Hobart Street to Wellington Airport, tomorrow at 9 AM.
+        Please tell me your name.
     </Say>
     <Gather input="speech" 
             action="/process_booking" 
             method="POST" 
-            timeout="20" 
+            timeout="10" 
             language="en-NZ" 
-            speechTimeout="2" 
+            speechTimeout="1" 
             finishOnKey="" 
             enhanced="true">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
@@ -1008,7 +1455,7 @@ def book_taxi():
 
 @app.route("/process_booking", methods=["POST"])
 def process_booking():
-    """Process booking speech input"""
+    """Process booking speech input - STEP-BY-STEP LOGIC"""
     speech_data = request.form.get("SpeechResult", "")
     confidence = float(request.form.get("Confidence", "0"))
     call_sid = request.form.get("CallSid", "")
@@ -1031,155 +1478,315 @@ def process_booking():
         except Exception as e:
             print(f"❌ Error saving conversation: {e}")
 
-    # If low confidence and Google available, try recording
-    if GOOGLE_SPEECH_AVAILABLE and confidence < 0.7 and speech_data.strip():
-        print(f"⚠️ Low confidence - trying Google Speech")
-        if call_sid not in user_sessions:
-            user_sessions[call_sid] = {}
-        user_sessions[call_sid]["caller_number"] = caller_number
-
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I didn't catch that clearly. Please repeat your booking details.
-    </Say>
-    <Record action="/process_booking_with_google" 
-            method="POST" 
-            maxLength="30" 
-            timeout="5"
-            finishOnKey="#"
-            playBeep="false"/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-
-    # Get existing session data
-    existing_data = {}
-    if call_sid in user_sessions:
-        existing_data = user_sessions[call_sid].get("partial_booking", {})
-
-    # Parse speech
-    booking_data = parse_booking_speech(speech_data)
-
-    # Merge with existing data
-    merged_booking = {
-        "name": booking_data["name"] or existing_data.get("name", ""),
-        "pickup_address": booking_data["pickup_address"]
-        or existing_data.get("pickup_address", ""),
-        "destination": booking_data["destination"]
-        or existing_data.get("destination", ""),
-        "pickup_time": booking_data["pickup_time"]
-        or existing_data.get("pickup_time", ""),
-        "pickup_date": booking_data["pickup_date"]
-        or existing_data.get("pickup_date", ""),
-        "raw_speech": f"{existing_data.get('raw_speech', '')} {speech_data}".strip(),
-    }
-
-    # Store in session
+    # Get or create session
     if call_sid not in user_sessions:
-        user_sessions[call_sid] = {}
-    user_sessions[call_sid]["partial_booking"] = merged_booking
-    user_sessions[call_sid]["caller_number"] = caller_number
-
-    print(
-        f"📋 BOOKING DATA: Name={merged_booking['name']}, From={merged_booking['pickup_address']}, To={merged_booking['destination']}"
-    )
-
-    # Validate required fields
-    missing_items = []
-    if not merged_booking["name"].strip() or len(merged_booking["name"].strip()) < 2:
-        missing_items.append("your name")
-    if (
-        not merged_booking["pickup_address"].strip()
-        or len(merged_booking["pickup_address"].strip()) < 5
-    ):
-        missing_items.append("your pickup address")
-    if (
-        not merged_booking["destination"].strip()
-        or len(merged_booking["destination"].strip()) < 3
-    ):
-        missing_items.append("your destination")
-        # IMPORTANT: Always ask for time if not provided
-    if not merged_booking["pickup_time"].strip() and not merged_booking["pickup_date"].strip():
-        missing_items.append("please tell me when you need the taxi - you can say now, or any time like today at 3 PM or tomorrow morning")
-
-    if missing_items:
-        missing_text = " and ".join(missing_items)
-        print(f"❌ Missing: {missing_text}")
-
-        return Response(
-            f"""<?xml version="1.0" encoding="UTF-8"?>
+        user_sessions[call_sid] = {
+            "booking_step": "name",
+            "partial_booking": {
+                "name": "",
+                "pickup_address": "",
+                "destination": "",
+                "pickup_time": "",
+                "pickup_date": "",
+                "raw_speech": ""
+            },
+            "caller_number": caller_number
+        }
+    
+    session = user_sessions[call_sid]
+    current_step = session.get("booking_step", "name")
+    partial_booking = session.get("partial_booking", {})
+    
+    # Add current speech to raw speech
+    partial_booking["raw_speech"] = f"{partial_booking.get('raw_speech', '')} {speech_data}".strip()
+    
+    print(f"📋 CURRENT STEP: {current_step}")
+    
+    # Process based on current step
+    if current_step == "name":
+        # Extract name from speech
+        name = speech_data.strip()
+        
+        # Clean common phrases
+        name_lower = name.lower()
+        if name_lower.startswith("my name is "):
+            name = name[11:].strip()
+        elif name_lower.startswith("i am "):
+            name = name[5:].strip()
+        elif name_lower.startswith("i'm "):
+            name = name[4:].strip()
+        elif name_lower.startswith("it's "):
+            name = name[5:].strip()
+        elif name_lower.startswith("this is "):
+            name = name[8:].strip()
+        
+        # Capitalize properly
+        name = ' '.join(word.capitalize() for word in name.split())
+        
+        if len(name) >= 2 and not any(char.isdigit() for char in name):
+            partial_booking["name"] = name
+            session["booking_step"] = "pickup"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I need {missing_text} to complete your booking. Please provide the missing information.
+        Nice to meet you {name}! 
+        What's your pickup address?
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me where to pick you up.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch your name. Could you please tell me your name?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Check for airport pickup
-    pickup_address = merged_booking.get("pickup_address", "").lower()
-    if any(keyword in pickup_address for keyword in ["airport", "terminal"]):
-        print(f"✈️ Airport pickup detected - rejecting")
-        return Response(
-            """<?xml version="1.0" encoding="UTF-8"?>
+</Response>"""
+    
+    elif current_step == "pickup":
+        # Process pickup address
+        pickup = speech_data.strip()
+        
+        # Clean common prefixes
+        pickup_lower = pickup.lower()
+        if pickup_lower.startswith("from "):
+            pickup = pickup[5:].strip()
+        elif pickup_lower.startswith("at "):
+            pickup = pickup[3:].strip()
+        elif pickup_lower.startswith("pickup from "):
+            pickup = pickup[12:].strip()
+        elif pickup_lower.startswith("pick me up at "):
+            pickup = pickup[14:].strip()
+        elif pickup_lower.startswith("pick me up from "):
+            pickup = pickup[16:].strip()
+        
+        # Remove "number" word
+        pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
+        
+        if len(pickup) >= 5:
+            # Check for airport pickup
+            if any(keyword in pickup.lower() for keyword in ["airport", "terminal"]):
+                response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         You don't need to book a taxi from the airport as we have taxis waiting at the airport rank.
-        We appreciate your booking with Kiwi Cabs. Have a great day. Goodbye
+        We appreciate your booking with Kiwi Cabs. Have a great day. Goodbye!
     </Say>
     <Hangup/>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Check outside Wellington
-    outside_cities = ["melbourne", "sydney", "auckland", "christchurch"]
-    if any(city in pickup_address for city in outside_cities):
-        print(f"🚫 Outside pickup detected")
-        return Response(
-            """<?xml version="1.0" encoding="UTF-8"?>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+            
+            # Validate with Google Maps if available
+            if gmaps:
+                pickup = validate_and_format_address(pickup, "pickup")
+            
+            partial_booking["pickup_address"] = pickup
+            session["booking_step"] = "destination"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, Kiwi Cabs operates only in the Wellington region.
-        Thank you for calling!
+        Perfect! I have your pickup at {pickup}.
+        Where would you like to go?
     </Say>
-    <Hangup/>
-</Response>""",
-            mimetype="text/xml",
-        )
-
-    # Store for confirmation
-    user_sessions[call_sid]["pending_booking"] = merged_booking
-
-    # Create confirmation
-    confirmation_parts = []
-    if merged_booking["name"]:
-        confirmation_parts.append(merged_booking["name"])
-    if merged_booking["pickup_address"]:
-        confirmation_parts.append(f"from {merged_booking['pickup_address']}")
-    if merged_booking["destination"]:
-        confirmation_parts.append(f"to {merged_booking['destination']}")
-    if merged_booking["pickup_date"]:
-        confirmation_parts.append(merged_booking["pickup_date"])
-    if merged_booking["pickup_time"]:
-        confirmation_parts.append(merged_booking["pickup_time"])
-
-    confirmation_text = ", ".join(confirmation_parts)
-    print(f"❓ Confirming: {confirmation_text}")
-
-    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your destination.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Could you please tell me your pickup address?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    elif current_step == "destination":
+        # Process destination using AI POI resolution
+        destination = speech_data.strip()
+        
+        # Clean common prefixes
+        dest_lower = destination.lower()
+        if dest_lower.startswith("to "):
+            destination = destination[3:].strip()
+        elif dest_lower.startswith("going to "):
+            destination = destination[9:].strip()
+        elif dest_lower.startswith("take me to "):
+            destination = destination[11:].strip()
+        elif dest_lower.startswith("i'm going to "):
+            destination = destination[13:].strip()
+        elif dest_lower.startswith("i am going to "):
+            destination = destination[14:].strip()
+        
+        # SMART WELLINGTON POI RESOLUTION
+        print(f"🔍 Resolving destination POI: {destination}")
+        resolved_destination = resolve_wellington_poi_to_address(destination)
+        
+        if len(resolved_destination) >= 3:
+            partial_booking["destination"] = resolved_destination["full_address"]
+            session["booking_step"] = "time"
+            
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! Going to {resolved_destination['speech']}.
+        When do you need the taxi?
+        You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me when you need the taxi.</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Where would you like to go?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    elif current_step == "time":
+        # Process time
+        time_text = speech_data.lower().strip()
+        time_string = ""
+        valid_time = False
+        
+        # Check for immediate booking
+        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
+        if any(keyword in time_text for keyword in immediate_keywords):
+            partial_booking["pickup_time"] = "ASAP"
+            partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+            time_string = "right now"
+            valid_time = True
+        else:
+            # Parse time using existing logic
+            parsed_booking = parse_booking_speech(speech_data)
+            
+            if parsed_booking.get("pickup_time"):
+                partial_booking["pickup_time"] = parsed_booking["pickup_time"]
+                if parsed_booking.get("pickup_date"):
+                    partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                    time_string = f"on {parsed_booking['pickup_date']} at {parsed_booking['pickup_time']}"
+                else:
+                    # Default to today if no date specified
+                    partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    time_string = f"today at {parsed_booking['pickup_time']}"
+                valid_time = True
+            elif parsed_booking.get("pickup_date"):
+                # Date specified but no time - ask for time
+                partial_booking["pickup_date"] = parsed_booking["pickup_date"]
+                response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What time on {parsed_booking['pickup_date']} would you like the taxi?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
+    </Gather>
+</Response>"""
+                return Response(response, mimetype="text/xml")
+        
+        if valid_time:
+            session["booking_step"] = "driver_instructions"
+            
+            # Build confirmation message
+            # Simple transition to driver instructions  
+            instructions_prompt = f"Great {partial_booking['name']}! Your taxi is booked for {time_string}."    
+
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great {partial_booking['name']}! Your taxi is booked for {time_string}.
+        Do you have any special instructions for the driver?
+        For example, "wait for me", "call when you arrive", or just say "no instructions".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
+    </Gather>
+</Response>"""
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. 
+        Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+    elif current_step == "driver_instructions":
+        # Process driver instructions
+        instructions = speech_data.strip()
+
+        # Check if they have instructions or said no
+        instructions_lower = instructions.lower()
+        if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
+            partial_booking["driver_instructions"] = ""
+            instructions_msg = ""
+        else:
+            partial_booking["driver_instructions"] = instructions
+            instructions_msg = f", with instructions: {instructions}"
+
+        session["booking_step"] = "confirmation"
+        
+        # Build final confirmation
+        name = partial_booking['name']
+        confirmation_text = f"Perfect {name}! Let me confirm everything: "
+        confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
+        confirmation_text += f"going to {clean_address_for_speech(partial_booking['destination'])}, "
+        if partial_booking.get("pickup_time") == "ASAP":
+            confirmation_text += "right now"
+        else:
+            confirmation_text += f"on {partial_booking.get('pickup_date', '')} at {partial_booking.get('pickup_time', '')}"
+        confirmation_text += instructions_msg
+
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Lovely! Let me just double-check that for you: {confirmation_text}.
-            Does that sound right? Just say yes to confirm, or no if you'd like to make any changes.
+            {confirmation_text}.
+            Is everything correct? Say yes to confirm or no to start over.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
 </Response>"""
+    else:
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. 
+        Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+    
+
+    # Store session updates
+    session["partial_booking"] = partial_booking
+    user_sessions[call_sid] = session
+    
+    # Store in pending for confirmation step
+    if current_step == "time" and valid_time:
+        user_sessions[call_sid]["pending_booking"] = partial_booking
+        user_sessions[call_sid]["caller_number"] = caller_number
+    
     return Response(response, mimetype="text/xml")
 
 
@@ -1230,7 +1837,7 @@ def process_booking_with_google():
         Sorry, I'm having trouble understanding. Let me transfer you to our team.
     </Say>
     <Dial>
-        <Number>+6489661566</Number>
+        <Number>+6448966156</Number>
     </Dial>
 </Response>""",
             mimetype="text/xml",
@@ -1428,38 +2035,52 @@ def confirm_booking():
             # Start background thread for non-urgent bookings
             threading.Thread(target=background_api, daemon=True).start()
 
+        # Clear session
+        if call_sid in user_sessions:
+            del user_sessions[call_sid]
+
         return Response(immediate_response, mimetype="text/xml")
 
-    elif any(word in speech_result for word in ["no", "wrong", "change", "different"]):
+    elif any(word in speech_result for word in ["no", "wrong", "change", "different", "start over"]):
         print("❌ Booking rejected - starting over")
+        
+        # Reset session to start from name
+        if call_sid in user_sessions:
+            user_sessions[call_sid] = {
+                "booking_step": "name",
+                "partial_booking": {
+                    "name": "",
+                    "pickup_address": "",
+                    "destination": "",
+                    "pickup_time": "",
+                    "pickup_date": "",
+                    "raw_speech": ""
+                },
+                "caller_number": caller_number
+            }
+        
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No problem. Let's start over.
-        Please tell me your corrected booking details.
+        Please tell me your name.
     </Say>
-    <Gather input="speech" action="/process_booking" method="POST" timeout="20" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/process_booking" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
     </Gather>
 </Response>"""
     else:
         print("❓ Unclear response - asking again with simpler question")
-        confirmation_parts = []
-        if booking_data.get("name"):
-            confirmation_parts.append(booking_data["name"])
-        if booking_data.get("pickup_address"):
-            confirmation_parts.append(f"from {booking_data['pickup_address']}")
-        if booking_data.get("destination"):
-            confirmation_parts.append(f"to {booking_data['destination']}")
-
-        confirmation_text = ", ".join(confirmation_parts)
-
+        
+        # Build simple confirmation
+        booking = session_data.get("pending_booking", {})
+        simple_confirm = f"Is this booking correct? {booking.get('name')}, from {booking.get('pickup_address')} to {booking.get('destination')}"
+        
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Is this booking correct: {confirmation_text}?
-            Say YES or NO.
+            {simple_confirm}? Say YES or NO.
         </Say>
     </Gather>
     <Redirect>/confirm_booking</Redirect>
@@ -1551,7 +2172,7 @@ def modify_booking():
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="3">
+            speechTimeout="1">
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
@@ -1562,7 +2183,7 @@ def modify_booking():
         I couldn't find any active booking for your phone number.
         Would you like to make a new booking?
     </Say>
-    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
     </Gather>
 </Response>"""
 
@@ -1584,19 +2205,20 @@ def process_modification_smart():
 
     original_booking = booking_storage[caller_number].copy()
 
-    # Check for cancellation first
-    if any(
-        word in speech_result.lower()
-        for word in ["cancel", "delete", "don't need", "not going"]
-    ):
-        return redirect_to("/cancel_booking")
-
-    # Check if they want no changes
-    if any(
-        word in speech_result.lower()
-        for word in ["nothing", "no change", "keep it", "fine", "good", "same"]
-    ):
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+    # 🧠 TRY AI FIRST FOR NATURAL LANGUAGE UNDERSTANDING
+    ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
+    
+    if ai_intent and ai_intent.get("confidence", 0) > 0.7:
+        intent = ai_intent["intent"]
+        new_value = ai_intent["new_value"]
+        
+        print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
+        
+        if intent == "cancel":
+            return redirect_to("/cancel_booking")
+        
+        elif intent == "no_change":
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! Your booking remains unchanged.
@@ -1604,8 +2226,237 @@ def process_modification_smart():
     </Say>
     <Hangup/>
 </Response>"""
-        return Response(response, mimetype="text/xml")
+            return Response(response, mimetype="text/xml")
+        
+        elif intent == "change_destination" and new_value:
+            # 🌟 SMART WELLINGTON POI RECOGNITION
+            print(f"🔍 Resolving Wellington POI: {new_value}")
+            
+            # Convert POI name to exact address
+            resolved_destination = resolve_wellington_poi_to_address(new_value)
+            
+            # Get the actual address string
+            if isinstance(resolved_destination, dict):
+                exact_address = resolved_destination.get("full_address", new_value)
+                speech_address = resolved_destination.get("speech", exact_address)
+            else:
+                exact_address = resolved_destination
+                speech_address = exact_address
+            
+            updated_booking = original_booking.copy()
+            updated_booking["destination"] = exact_address
+            changes_made = [f"destination to {exact_address}"]
+            
+            # IMMEDIATE response - don't make customer wait
+            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your destination to {speech_address}.
+        Your taxi will pick you up from {updated_booking['pickup_address']} 
+        and take you to {speech_address}.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
 
+            # Background processing for destination change
+            def background_destination_modification():
+                try:
+                    print("🔄 BACKGROUND: Starting destination modification...")
+                    
+                    # Get order ID from storage
+                    stored_booking = booking_storage.get(caller_number, {})
+                    old_order_id = stored_booking.get("taxicaller_order_id")
+                    
+                    if not old_order_id:
+                        old_order_id = original_booking.get("taxicaller_order_id")
+                    
+                    print(f"🔍 DEBUG: old_order_id for destination change: {old_order_id}")
+                    
+                    if old_order_id:
+                        # For destination changes, we need to cancel and recreate
+                        # (TaxiCaller EDIT endpoint is mainly for time changes)
+                        print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                        cancel_success = cancel_taxicaller_booking(old_order_id)
+                        
+                        if cancel_success:
+                            print("✅ OLD BOOKING CANCELLED")
+                            import time
+                            time.sleep(2)
+                            
+                            # Create new booking with new destination
+                            updated_booking["modified_at"] = datetime.now().isoformat()
+                            updated_booking["ai_modified"] = True
+                            booking_storage[caller_number] = updated_booking
+                            success, response = send_booking_to_api(updated_booking, caller_number)
+                            
+                            if success:
+                                print("✅ NEW BOOKING CREATED with new destination")
+                            else:
+                                print("❌ NEW BOOKING FAILED")
+                        else:
+                            print("❌ CANCEL FAILED - manual intervention needed")
+                    else:
+                        print("❌ NO ORDER ID FOUND for destination change")
+                    
+                    print("✅ BACKGROUND: Destination modification completed")
+                except Exception as e:
+                    print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
+
+            # Start background thread
+            threading.Thread(target=background_destination_modification, daemon=True).start()
+            return Response(immediate_response, mimetype="text/xml")
+        
+        elif intent == "change_time" and new_value:
+            updated_booking = original_booking.copy()
+            updated_booking["pickup_time"] = new_value
+            changes_made = [f"time to {new_value}"]
+            
+            # IMMEDIATE response - don't make customer wait
+            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your time to {new_value}.
+        Your taxi will pick you up from {updated_booking['pickup_address']} 
+        at {new_value}.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
+
+            # FIXED: Background processing using EDIT instead of cancel+create
+            def background_time_modification():
+                try:
+                    print("🔄 BACKGROUND: Starting time modification...")
+                    
+                    # Get order ID from booking storage (more reliable)
+                    stored_booking = booking_storage.get(caller_number, {})
+                    old_order_id = stored_booking.get("taxicaller_order_id")
+                    
+                    # Fallback to original booking if not in storage
+                    if not old_order_id:
+                        old_order_id = original_booking.get("taxicaller_order_id")
+                    
+                    print(f"🔍 DEBUG: stored_booking keys: {list(stored_booking.keys())}")
+                    print(f"🔍 DEBUG: original_booking keys: {list(original_booking.keys())}")
+                    print(f"🔍 DEBUG: old_order_id retrieved: {old_order_id}")
+                    
+                    if old_order_id:
+                        # Use EDIT instead of cancel+create (TaxiCaller recommended approach)
+                        print(f"✏️ EDITING BOOKING TIME: {old_order_id} → {new_value}")
+                        edit_success = edit_taxicaller_booking(old_order_id, new_value, updated_booking)
+                        
+                        if edit_success:
+                            print("✅ BOOKING TIME EDITED SUCCESSFULLY")
+                            # Update local storage
+                            updated_booking["modified_at"] = datetime.now().isoformat()
+                            updated_booking["ai_modified"] = True
+                            booking_storage[caller_number] = updated_booking
+                        else:
+                            print("❌ EDIT FAILED - falling back to cancel+create")
+                            # Fallback to old method if edit fails
+                            cancel_success = cancel_taxicaller_booking(old_order_id)
+                            if cancel_success:
+                                print("✅ OLD BOOKING CANCELLED - creating new one")
+                                import time
+                                time.sleep(2)
+                                updated_booking["modified_at"] = datetime.now().isoformat()
+                                updated_booking["ai_modified"] = True
+                                booking_storage[caller_number] = updated_booking
+                                success, response = send_booking_to_api(updated_booking, caller_number)
+                                print("✅ NEW BOOKING CREATED" if success else "❌ NEW BOOKING FAILED")
+                            else:
+                                print("❌ FALLBACK FAILED - manual intervention needed")
+                    else:
+                        print("❌ NO ORDER ID FOUND - cannot modify booking")
+                        print(f"🔍 Available booking keys: {list(original_booking.keys())}")
+                        print(f"🔍 Storage keys: {list(stored_booking.keys()) if stored_booking else 'No storage'}")
+                    
+                    print("✅ BACKGROUND: Time modification completed")
+                except Exception as e:
+                    print(f"❌ BACKGROUND: Time modification error: {str(e)}")
+
+            # Start background thread OUTSIDE the if block
+            threading.Thread(target=background_time_modification, daemon=True).start()
+            return Response(immediate_response, mimetype="text/xml")
+        
+        elif intent == "change_pickup" and new_value:
+            # Smart POI resolution for pickup changes
+            resolved_pickup = resolve_wellington_poi_to_address(new_value)
+            
+            # Get the actual address string
+            if isinstance(resolved_pickup, dict):
+                exact_address = resolved_pickup.get("full_address", new_value)
+                speech_address = resolved_pickup.get("speech", exact_address)
+            else:
+                exact_address = resolved_pickup
+                speech_address = exact_address
+            
+            updated_booking = original_booking.copy()
+            updated_booking["pickup_address"] = exact_address
+            
+            # IMMEDIATE response
+            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Perfect! I've updated your pickup to {speech_address}.
+        Your taxi will now pick you up from {speech_address} 
+        and take you to {updated_booking['destination']}.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
+
+            # Background processing for pickup change
+            def background_pickup_modification():
+                try:
+                    print("🔄 BACKGROUND: Starting pickup modification...")
+                    
+                    # Get order ID from storage
+                    stored_booking = booking_storage.get(caller_number, {})
+                    old_order_id = stored_booking.get("taxicaller_order_id")
+                    
+                    if not old_order_id:
+                        old_order_id = original_booking.get("taxicaller_order_id")
+                    
+                    print(f"🔍 DEBUG: old_order_id for pickup change: {old_order_id}")
+                    
+                    if old_order_id:
+                        # Cancel and recreate for pickup changes
+                        print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                        cancel_success = cancel_taxicaller_booking(old_order_id)
+                        
+                        if cancel_success:
+                            print("✅ OLD BOOKING CANCELLED")
+                            import time
+                            time.sleep(2)
+                            
+                            # Create new booking with new pickup
+                            updated_booking["modified_at"] = datetime.now().isoformat()
+                            updated_booking["ai_modified"] = True
+                            booking_storage[caller_number] = updated_booking
+                            success, response = send_booking_to_api(updated_booking, caller_number)
+                            
+                            if success:
+                                print("✅ NEW BOOKING CREATED with new pickup")
+                            else:
+                                print("❌ NEW BOOKING FAILED")
+                        else:
+                            print("❌ CANCEL FAILED - manual intervention needed")
+                    else:
+                        print("❌ NO ORDER ID FOUND for pickup change")
+                    
+                    print("✅ BACKGROUND: Pickup modification completed")
+                except Exception as e:
+                    print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
+
+            # Start background thread
+            threading.Thread(target=background_pickup_modification, daemon=True).start()
+            return Response(immediate_response, mimetype="text/xml")
+    
+    print("🤖 AI parsing failed or low confidence - using fallback logic")
+    
+    # FALLBACK: Continue with existing logic below...
     # Create updated booking starting with original data
     updated_booking = original_booking.copy()
     changes_made = []
@@ -1703,17 +2554,16 @@ def process_modification_smart():
     # Check for date keywords only if time was found
     if time_found:
         if "tomorrow" in speech_result.lower():
-            tomorrow = datetime.now() + timedelta(days=1)
+            tomorrow = datetime.now(NZ_TZ) + timedelta(days=1)
             updated_booking["pickup_date"] = tomorrow.strftime("%d/%m/%Y")
             changes_made.append(f"time to tomorrow at {time_str}")
         elif "today" in speech_result.lower():
-            today = datetime.now()
+            today = datetime.now(NZ_TZ)
             updated_booking["pickup_date"] = today.strftime("%d/%m/%Y")
             changes_made.append(f"time to today at {time_str}")
         else:
-            Pass 
+            pass
             # Just time change, keep original date
-
         changes_made.append(f"time to {time_str}")
     # If changes were made, update the booking
     if changes_made:
@@ -1728,6 +2578,7 @@ def process_modification_smart():
         if not pickup_str and original_booking.get("pickup_address"):
             pickup_str = original_booking["pickup_address"]
             updated_booking["pickup_address"] = original_booking["pickup_address"]
+
 
         dest_str = updated_booking["destination"]
         dest_str = updated_booking["destination"]
@@ -1784,14 +2635,17 @@ def process_modification_smart():
                                 pass
 
                 # STEP 1: Cancel the old booking first
-                print("❌ BACKGROUND: Cancelling old booking")
-                cancel_booking = original_booking.copy()
-                cancel_booking["status"] = "cancelled"
-                cancel_booking["cancelled_at"] = datetime.now().isoformat()
-                cancel_booking["cancellation_reason"] = "Customer modified booking"
+                old_order_id = original_booking.get("taxicaller_order_id")
+                print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
+                cancel_success = cancel_taxicaller_booking(old_order_id)
+                if cancel_success:
+                    print("✅ BACKGROUND: Old booking cancelled successfully")
+                else:
+                    print("⚠️ BACKGROUND: Failed to cancel old booking - continuing with new booking")
+
 
                 # Send cancellation to TaxiCaller/API
-                cancel_success, cancel_response = send_booking_to_api(cancel_booking, caller_number)
+                # cancel_success, cancel_response = send_booking_to_api(old_booking, caller_number)  # DISABLED - prevents double booking
                 if cancel_success:
                     print("✅ BACKGROUND: Old booking cancelled successfully")
                 else:
@@ -1857,17 +2711,12 @@ def process_modification_smart():
             match = re.search(pattern, speech_result, re.IGNORECASE)
             if match:
                 new_dest = match.group(1).strip()
-                # Smart destination mapping
-                if "hospital" in new_dest.lower():
-                    new_dest = "Wellington Hospital"
-                elif "airport" in new_dest.lower():
-                    new_dest = "Wellington Airport"
-                elif "station" in new_dest.lower():
-                    new_dest = "Wellington Railway Station"
-
-                if new_dest and new_dest != original_booking["destination"]:
-                    updated_booking["destination"] = new_dest
-                    changes_made.append(f"destination to {new_dest}")
+                # Use smart POI resolution for destinations in fallback too
+                resolved_dest = resolve_wellington_poi_to_address(new_dest)
+                
+                if resolved_dest and resolved_dest != original_booking["destination"]:
+                    updated_booking["destination"] = resolved_dest
+                    changes_made.append(f"destination to {resolved_dest}")
                 break
 
         # Extract new time if mentioned
@@ -1934,7 +2783,7 @@ def process_modification_smart():
         Please tell me clearly what you'd like to update - for example:
         "Change pickup to 45 Willis Street" or "Change time to 3 PM tomorrow".
     </Say>
-    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="3">
+    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="20" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what to change.</Say>
     </Gather>
 </Response>"""
@@ -1970,7 +2819,7 @@ def cancel_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Just to confirm - you want to cancel your taxi booking?
     </Say>
-    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="2">
+    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Say yes to cancel, or no to keep it.</Say>
     </Gather>
     <Redirect>/modify_booking</Redirect>
@@ -2036,7 +2885,7 @@ def team():
         Please hold while I transfer you to our team.
     </Say>
     <Dial>
-        <Number>+6489661566</Number>
+        <Number>+6448966156</Number>
     </Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
@@ -2103,10 +2952,7 @@ def test_taxicaller():
             if TAXICALLER_API_KEY
             else None,
             "endpoints_tried": [
-                "https://api.taxicaller.net/v2/bookings/create",
-                "https://api.taxicaller.net/api/v2/bookings/create",
-                "https://api.taxicaller.net/booking/create",
-                "https://taxicaller.net/api/v2/bookings/create",
+                "https://api-rc.taxicaller.net/api/v1/booker/order",
             ],
             "immediate_dispatch": "enabled for urgent bookings",
         }, 200
@@ -2192,4 +3038,5 @@ if __name__ == "__main__":
     )
     print(f"🚨 IMMEDIATE DISPATCH: Enabled for urgent bookings (right now, ASAP)")
     print(f"📅 SCHEDULED DISPATCH: Background processing for future bookings")
+    print(f"🧠 SMART WELLINGTON POI: AI recognizes all Wellington landmarks by name")
     app.run(host="0.0.0.0", port=port, debug=True)
