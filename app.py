@@ -2280,9 +2280,9 @@ def process_modification_smart():
     </Say>
     <Hangup/>
 </Response>"""
-return Response(response, mimetype="text/xml")
 
-elif intent == "change_destination" and new_value:
+return Response(response, mimetype="text/xml")
+        if intent == "change_destination" and new_value:
     # 🌟 SMART WELLINGTON POI RECOGNITION
     print(f"🔍 Resolving Wellington POI: {new_value}")
 
