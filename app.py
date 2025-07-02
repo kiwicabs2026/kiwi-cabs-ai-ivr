@@ -2198,7 +2198,7 @@ def process_modification_smart():
             threading.Thread(target=background_modification, daemon=True).start()
             return Response(immediate_response, mimetype="text/xml")
         
-        elif intent == "change_pickup" and new_value:
+        if intent == "change_pickup" and new_value:
             # Same smart POI resolution for pickup changes
             exact_address = resolve_wellington_poi_to_address(new_value)
             
