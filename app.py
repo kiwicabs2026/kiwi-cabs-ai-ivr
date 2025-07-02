@@ -2344,19 +2344,19 @@ if intent == "change_destination" and new_value:
 </Response>"""
         return Response(error_response, mimetype="text/xml")
 
-            # Background processing for destination change
-            def background_destination_modification():
-                try:
-                    print("🔄 BACKGROUND: Starting destination modification...")
-                    
-                    # Get order ID from storage
-                    stored_booking = booking_storage.get(caller_number, {})
-                    old_order_id = stored_booking.get("taxicaller_order_id")
-                    
-                    if not old_order_id:
-                        old_order_id = original_booking.get("taxicaller_order_id")
-                    
-                    print(f"🔍 DEBUG: old_order_id for destination change: {old_order_id}")
+# Background processing for destination change
+def background_destination_modification():
+    try:
+        print("🔄 BACKGROUND: Starting destination modification...")
+
+        # Get order ID from storage
+        stored_booking = booking_storage.get(caller_number, {})
+        old_order_id = stored_booking.get("taxicaller_order_id")
+
+        if not old_order_id:
+            old_order_id = original_booking.get("taxicaller_order_id")
+
+        print(f"🛠️ DEBUG: old_order_id for destination change: {old_order_id}")
                     
                     if old_order_id:
                         # For destination changes, we need to cancel and recreate
