@@ -2282,9 +2282,9 @@ def process_modification_smart():
 </Response>"""
 
 return Response(response, mimetype="text/xml")
-    if intent == "change_destination" and new_value:
-        # 🌟 SMART WELLINGTON POI RECOGNITION
-        print(f"🔍 Resolving Wellington POI: {new_value}")
+if intent == "change_destination" and new_value:
+    # 🌟 SMART WELLINGTON POI RECOGNITION
+    print(f"🔍 Resolving Wellington POI: {new_value}")
 
     try:
         # Convert POI name to exact address
