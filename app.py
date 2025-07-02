@@ -2181,19 +2181,19 @@ def process_modification_smart():
                         print("✅ OLD BOOKING CANCELLED")
                     else:
                         print("❌ CANCEL FAILED - manual intervention needed")
-    
-                    # Wait a moment for cancellation to process
-                    import time
-                    time.sleep(2)
-
-                    # STEP 2: Create new booking
-                    updated_booking["modified_at"] = datetime.now().isoformat()
-                    updated_booking["ai_modified"] = True
-                    booking_storage[caller_number] = updated_booking
-                    success, response = send_booking_to_api(updated_booking, caller_number)
-                    print("✅ BACKGROUND: AI modification completed")
-                except Exception as e:
-                    print(f"❌ BACKGROUND: AI modification error: {str(e)}")
+                
+                # Wait a moment for cancellation to process
+                import time
+                time.sleep(2)
+                
+                # STEP 2: Create new booking
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["ai_modified"] = True
+                booking_storage[caller_number] = updated_booking
+                success, response = send_booking_to_api(updated_booking, caller_number)
+                print("✅ BACKGROUND: AI modification completed")
+            except Exception as e:
+                print(f"❌ BACKGROUND: AI modification error: {str(e)}")
 
             threading.Thread(target=background_modification, daemon=True).start()
             return Response(immediate_response, mimetype="text/xml")
