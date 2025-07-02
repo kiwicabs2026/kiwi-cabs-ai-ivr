@@ -2237,7 +2237,28 @@ def process_modification_smart():
         
         print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
-        if intent == "cancel":
+        if intent == "change_time":
+            # Cancel the old booking
+            order_id = original_booking.get("order_id")
+            job_id = original_booking.get("taxicaller_job_id")
+
+            canceled = cancel_taxicaller_booking(order_id=order_id, original_booking={"taxicaller_job_id": job_id})
+            if not canceled:
+                print(f"❌ Failed to cancel existing booking for {caller_number}")
+                return redirect_to("/modify_booking")  # Redirect with error message
+            
+            print(f"✅ Old booking canceled successfully for {caller_number}")
+
+            # Create new booking with updated time
+            new_booking = create_taxicaller_booking(caller_number, new_value)
+            if not new_booking:
+                print(f"❌ Failed to create new booking for {caller_number}")
+                return redirect_to("/modify_booking")  # Redirect with error message
+            
+            print(f"✅ New booking created successfully for {caller_number}")
+            return redirect_to("/booking_success")
+
+        elif intent == "cancel":
             return redirect_to("/cancel_booking")
         
         elif intent == "no_change":
@@ -2250,6 +2271,16 @@ def process_modification_smart():
     <Hangup/>
 </Response>"""
             return Response(response, mimetype="text/xml")
+    
+    # Fallback response if AI fails
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't understand your request. Please try again.
+    </Say>
+    <Hangup/>
+</Response>"""
+    return Response(response, mimetype="text/xml")
         
         elif intent == "change_destination" and new_value:
             # 🌟 SMART WELLINGTON POI RECOGNITION
