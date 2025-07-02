@@ -381,83 +381,106 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
-def cancel_taxicaller_booking(order_id):
+def cancel_taxicaller_booking(order_id, original_booking=None):
     """Cancel booking using TaxiCaller API"""
     try:
         jwt_token = get_taxicaller_jwt()
         if not jwt_token:
             return False
-            
+
         import json
         token_data = json.loads(jwt_token)
         token = token_data['token']
-        cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
-        
+
+        # Add fallback for job_id
+        if order_id:
+            cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
+        elif original_booking and (job_id := original_booking.get("taxicaller_job_id")):
+            cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/job_{job_id}/cancel"
+        else:
+            print("❌ No order_id or job_id found for cancellation")
+            return False
+
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-        
-        print(f"🗑️ CANCELLING ORDER: {order_id}")
+
+        print(f"🗑️ CANCELLING ORDER: {order_id if order_id else job_id}")
         response = requests.post(cancel_url, headers=headers, timeout=10)
-        
+
         print(f"📥 CANCEL RESPONSE: {response.status_code} - {response.text}")
-        
+
         if response.status_code in [200, 201, 204]:
-            print(f"✅ ORDER CANCELLED: {order_id}")
+            print(f"✅ ORDER CANCELLED: {order_id if order_id else job_id}")
             return True
         else:
             print(f"❌ CANCEL FAILED: {response.text}")
             return False
-            
+
     except Exception as e:
         print(f"❌ CANCEL ERROR: {e}")
         return False
 
-def edit_taxicaller_booking(order_id, new_time_str, booking_data):
+def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
     """Edit existing booking using TaxiCaller EDIT endpoint (recommended approach)"""
     try:
         jwt_token = get_taxicaller_jwt()
         if not jwt_token:
             return False
-            
+
         import json
         token_data = json.loads(jwt_token)
         token = token_data['token']
-        
-        # Convert time string to Unix timestamp
-        unix_timestamp = 0
-        if new_time_str and new_time_str != "ASAP":
-            try:
-                from datetime import datetime
-                import pytz
-                
-                # Parse the time string (e.g., "3:00 PM", "15:00")
-                if "AM" in new_time_str or "PM" in new_time_str:
-                    time_obj = datetime.strptime(new_time_str, "%I:%M %p").time()
-                else:
-                    time_obj = datetime.strptime(new_time_str, "%H:%M").time()
-                
-                # Get the date (today or from booking_data)
-                pickup_date = booking_data.get("pickup_date")
-                if pickup_date:
-                    date_parts = pickup_date.split("/")
-                    year, month, day = int(date_parts[2]), int(date_parts[1]), int(date_parts[0])
-                    target_datetime = datetime.combine(
-                        datetime(year, month, day).date(), 
-                        time_obj
-                    )
-                else:
-                    # Default to today
-                    target_datetime = datetime.combine(datetime.now().date(), time_obj)
-                
-                # Convert to Unix timestamp
-                nz_tz = pytz.timezone('Pacific/Auckland')
-                unix_timestamp = int(nz_tz.localize(target_datetime).timestamp())
-                
-            except Exception as e:
-                print(f"❌ TIME PARSING ERROR: {e}")
-                return False
+
+        # Add fallback for job_id
+        if order_id:
+            edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+        elif booking_data and (job_id := booking_data.get("taxicaller_job_id")):
+            edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/job_{job_id}"
+        else:
+            print("❌ No order_id or job_id found for editing")
+            return False
+
+        # Convert new time to Unix timestamp
+        from datetime import datetime
+        new_time_unix = int(datetime.strptime(new_time_str, "%Y-%m-%d %H:%M:%S").timestamp())
+
+        # Prepare payload for editing booking
+        payload = {
+            "route": {
+                "nodes": [
+                    {
+                        "times": {
+                            "arrive": {
+                                "target": new_time_unix
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        print(f"✏️ EDITING BOOKING: {order_id if order_id else job_id}")
+        response = requests.put(edit_url, headers=headers, json=payload, timeout=10)
+
+        print(f"📥 EDIT RESPONSE: {response.status_code} - {response.text}")
+
+        if response.status_code in [200, 204]:
+            print(f"✅ BOOKING UPDATED: {order_id if order_id else job_id}")
+            return True
+        else:
+            print(f"❌ EDIT FAILED: {response.text}")
+            return False
+
+    except Exception as e:
+        print(f"❌ EDIT ERROR: {e}")
+        return False
         
         # Build edit payload according to TaxiCaller docs
         edit_payload = {
@@ -2842,11 +2865,25 @@ def confirm_cancellation():
             # Send cancellation to API
             cancelled_booking = booking_storage[caller_number].copy()
             cancelled_booking["status"] = "cancelled"
-            send_booking_to_api(cancelled_booking, caller_number)
+            # REMOVE THIS LINE (line 2845):
+send_booking_to_api(cancelled_booking, caller_number)
 
-            # Remove from active bookings
-            del booking_storage[caller_number]
-
+# REPLACE WITH THIS:
+order_id = cancelled_booking.get('taxicaller_order_id')
+if order_id:
+    # Get JWT token
+    jwt_token = get_taxicaller_jwt()
+    
+    # Call TaxiCaller cancellation API
+    cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+    headers = {
+        'Authorization': f'Bearer {jwt_token}',
+        'Content-Type': 'application/json'
+    }
+    response = requests.delete(cancel_url, headers=headers)
+    print(f"🗑️ CANCELLATION RESULT: {response.status_code}")
+    print(f"📥 RESPONSE: {response.text}")
+    
             response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
