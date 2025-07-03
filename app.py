@@ -2476,30 +2476,78 @@ def background_time_modification():
             print(f"🛠️ DEBUG: Available booking keys: {list(original_booking.keys())}")
             print(f"🛠️ DEBUG: Storage keys: {list(stored_booking.keys()) if stored_booking else 'No storage'}")
 
+# Background processing for time modification
+def background_time_modification():
+    try:
         print("✅ BACKGROUND: Time modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Time modification error: {str(e)}")
-            # Start background thread OUTSIDE the if block
-            threading.Thread(target=background_time_modification, daemon=True).start()
-            return Response(immediate_response, mimetype="text/xml")
-        
-        elif intent == "change_pickup" and new_value:
-            # Smart POI resolution for pickup changes
-            resolved_pickup = resolve_wellington_poi_to_address(new_value)
-            
-            # Get the actual address string
-            if isinstance(resolved_pickup, dict):
-                exact_address = resolved_pickup.get("full_address", new_value)
-                speech_address = resolved_pickup.get("speech", exact_address)
+
+# Background processing for pickup change
+def background_pickup_modification():
+    try:
+        print("✅ BACKGROUND: Starting pickup modification...")
+
+        # Get order ID from storage
+        stored_booking = booking_storage.get(caller_number, {})
+        old_order_id = stored_booking.get("taxicaller_order_id")
+
+        # Fallback to original booking if not in storage
+        if not old_order_id:
+            old_order_id = original_booking.get("taxicaller_order_id")
+
+        print(f"🛠️ DEBUG: old_order_id for pickup change: {old_order_id}")
+
+        if old_order_id:
+            # Cancel and recreate for pickup changes
+            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
+            cancel_success = cancel_taxicaller_booking(old_order_id)
+
+            if cancel_success:
+                print("✅ OLD BOOKING CANCELLED")
+                time.sleep(2)  # Adding delay after cancellation
+
+                # Create new booking with new pickup
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["ai_modified"] = True
+                booking_storage[caller_number] = updated_booking
+                success, response = send_booking_to_api(updated_booking, caller_number)
+
+                if success:
+                    print("✅ NEW BOOKING CREATED with new pickup")
+                else:
+                    print("❌ NEW BOOKING FAILED")
             else:
-                exact_address = resolved_pickup
-                speech_address = exact_address
-            
-            updated_booking = original_booking.copy()
-            updated_booking["pickup_address"] = exact_address
-            
-            # IMMEDIATE response
-            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+                print("❌ CANCEL FAILED - manual intervention needed")
+        else:
+            print("❌ NO ORDER ID FOUND for pickup change")
+
+        print("✅ BACKGROUND: Pickup modification completed")
+    except Exception as e:
+        print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
+
+# Start background threads
+threading.Thread(target=background_time_modification, daemon=True).start()
+threading.Thread(target=background_pickup_modification, daemon=True).start()
+
+# Handle intent for pickup change
+if intent == "change_pickup" and new_value:
+    # Smart POI resolution for pickup changes
+    resolved_pickup = resolve_wellington_poi_to_address(new_value)
+
+    # Get the actual address string
+    if isinstance(resolved_pickup, dict):
+        exact_address = resolved_pickup.get("full_address", new_value)
+        speech_address = resolved_pickup.get("speech", exact_address)
+    else:
+        exact_address = resolved_pickup
+        speech_address = exact_address
+
+    updated_booking = original_booking.copy()
+    updated_booking["pickup_address"] = exact_address
+
+    # IMMEDIATE response
+    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your pickup to {speech_address}.
@@ -2509,6 +2557,8 @@ def background_time_modification():
     </Say>
     <Hangup/>
 </Response>"""
+
+    return Response(immediate_response, mimetype="text/xml")
 
 # Background processing for pickup change
 def background_pickup_modification():
