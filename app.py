@@ -2442,19 +2442,16 @@ def background_time_modification():
         print(f"🛠️ DEBUG: old_order_id retrieved: {old_order_id}")
 
         if old_order_id:
-            # Use EDIT instead of cancel+create (TaxiCaller: recommended approach)
             print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
             edit_success = edit_taxicaller_booking(old_order_id, new_value, updated_booking)
 
             if edit_success:
                 print("✅ BOOKING TIME EDITED SUCCESSFULLY")
-                # Update local storage
                 updated_booking["modified_at"] = datetime.now().isoformat()
                 updated_booking["ai_modified"] = True
                 booking_storage[caller_number] = updated_booking
             else:
                 print("❌ EDIT FAILED - falling back to cancel+create")
-                # Fallback to old method if edit fails
                 cancel_success = cancel_taxicaller_booking(old_order_id)
 
                 if cancel_success:
@@ -2476,6 +2473,8 @@ def background_time_modification():
             print(f"🛠️ DEBUG: Available booking keys: {list(original_booking.keys())}")
             print(f"🛠️ DEBUG: Storage keys: {list(stored_booking.keys()) if stored_booking else 'No storage'}")
 
+    except Exception as e:
+        print(f"❌ BACKGROUND: Time modification error: {str(e)}")
 
 # Background processing for time modification
 def background_time_modification():
