@@ -2272,6 +2272,7 @@ def process_modification_smart():
 </Response>"""
             return Response(response, mimetype="text/xml")
     
+def fallback_response(intent, new_value):
     # Fallback response if AI fails
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -2279,12 +2280,14 @@ def process_modification_smart():
         Sorry, I couldn't understand your request. Please try again.
     </Say>
     <Hangup/>
-</Response>"""
+</Response>
+"""
 
-return Response(response, mimetype="text/xml")
-if intent == "change_destination" and new_value:
-    # 🌟 SMART WELLINGTON POI RECOGNITION
-    print(f"🔍 Resolving Wellington POI: {new_value}")
+    return Response(response, mimetype="text/xml")
+
+    # SMART WELLINGTON POI RECOGNITION
+    if intent == "change_destination" and new_value:
+        print(f"🔍 Resolving Wellington POI: {new_value}")
 
     try:
         # Convert POI name to exact address
