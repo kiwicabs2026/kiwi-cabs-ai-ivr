@@ -3007,44 +3007,64 @@ if order_id:
     # Get JWT token
     jwt_token = get_taxicaller_jwt()
     
-    # Call TaxiCaller cancellation API
-    cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
-    headers = {
-        'Authorization': f'Bearer {jwt_token}',
-        'Content-Type': 'application/json'
-    }
-    response = requests.delete(cancel_url, headers=headers)
-    print(f"🗑️ CANCELLATION RESULT: {response.status_code}")
-    print(f"📥 RESPONSE: {response.text}")
-    
-            response = """<?xml version="1.0" encoding="UTF-8"?>
+# Call TaxiCaller cancellation API
+cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+headers = {
+    'Authorization': f'Bearer {jwt_token}',
+    'Content-Type': 'application/json'
+}
+
+# Validate JWT token
+if not jwt_token:
+    raise ValueError("JWT token is missing or invalid.")
+
+response = requests.delete(cancel_url, headers=headers)
+
+# Log API call details
+print(f"🛠️ DEBUG: API URL: {cancel_url}")
+print(f"🛠️ DEBUG: Headers: {headers}")
+print(f"🛠️ DEBUG: Response Status Code: {response.status_code}")
+print(f"🛠️ DEBUG: Response Text: {response.text}")
+
+# Handle response status codes
+if response.status_code == 200:
+    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! I've cancelled your booking. 
-        Thanks for letting us know!
+        No worries! I've cancelled your booking. Thanks for letting us know!
     </Say>
     <Hangup/>
-</Response>"""
-        else:
-            response = """<?xml version="1.0" encoding="UTF-8"?>
+</Response>
+"""
+elif response.status_code == 404:
+    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I couldn't find your booking to cancel.
     </Say>
     <Hangup/>
-</Response>"""
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
+</Response>
+"""
+elif response.status_code == 403:
+    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! Your booking is still active. 
-        See you at pickup time!
+        Great! Your booking is still active. See you at pickup time!
     </Say>
     <Hangup/>
-</Response>"""
+</Response>
+"""
+else:
+    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, something went wrong while processing your request.
+    </Say>
+    <Hangup/>
+</Response>
+"""
 
-    return Response(response, mimetype="text/xml")
-
+return Response(response_xml, mimetype="text/xml")
 
 @app.route("/team", methods=["POST"])
 def team():
