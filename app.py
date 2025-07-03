@@ -2390,25 +2390,36 @@ def background_destination_modification():
     except Exception as e:
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
 
-# Start background thread
-threading.Thread(target=background_destination_modification, daemon=True).start()
-return Response(immediate_response, mimetype="text/xml")
+def process_request():
+    # Start background thread
+    threading.Thread(target=background_destination_modification, daemon=True).start()
 
-if intent == "change_pickup" and new_value:
-    updated_booking = original_booking.copy()
-    updated_booking["pickup_address"] = new_value
-    changes_made = [f"pickup address to {new_value}"]
+    if intent == "change_pickup" and new_value:
+        updated_booking = original_booking.copy()
+        updated_booking["pickup_address"] = new_value
+        changes_made = [f"pickup address to {new_value}"]
 
-    # IMMEDIATE response - don't make customer wait
-    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your pickup address to {new_value}.
-        Your taxi will pick you up from {new_value}.
+        Perfect! I've updated your pickup address to: {new_value}.
+        Your taxi will pick you up from: {new_value}.
         We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
-</Response>"""
+</Response>
+"""
+    else:
+        immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't understand your request. Please try again.
+    </Say>
+    <Hangup/>
+</Response>
+"""
+
+    return Response(immediate_response, mimetype="text/xml")  # <-- Move return down here!
 
 elif intent == "change_time" and new_value:
     updated_booking = original_booking.copy()
