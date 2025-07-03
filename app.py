@@ -2606,55 +2606,61 @@ return Response(immediate_response, mimetype="text/xml")
 
 print("❌ AI parsing failed or low confidence — using fallback logic")
     
-    # FALLBACK: Continue with existing logic below...
-    # Create updated booking starting with original data
-    updated_booking = original_booking.copy()
-    changes_made = []
+# Fallback logic for AI parsing
+print("❌ AI parsing failed - low confidence. Using fallback logic")
 
-    # Check if speech mentions address/location keywords
-    has_pickup_keywords = any(
-        word in speech_result.lower()
-        for word in ["pickup", "pick up", "from", "address", "pick me"]
-    )
-    has_destination_keywords = any(
-        word in speech_result.lower()
-        for word in ["destination", "drop", "take me to", "going to"]
-    )
+# Fallback: Continue with existing logic below...
+# Create updated booking starting with original data
+updated_booking = original_booking.copy()
+changes_made = []
 
-    # Only parse for full booking details if they're changing addresses
-    if has_pickup_keywords or has_destination_keywords:
-        modification_data = parse_booking_speech(speech_result)
+# Check if speech mentions address/location keywords
+has_pickup_keywords = any(
+    word in speech_result.lower()
+    for word in ["pickup", "pick up", "from", "address", "pick me"]
+)
+has_destination_keywords = any(
+    word in speech_result.lower()
+    for word in ["destination", "drop", "take me to", "going to"]
+)
 
-        # Update pickup if provided and different
-        if has_pickup_keywords and modification_data["pickup_address"]:
-            # Skip if the parsed "pickup address" is actually a time
-            if any(time_word in modification_data["pickup_address"].lower() for time_word in ["a.m.", "p.m.", "am", "pm", "o'clock"]):
-                modification_data["pickup_address"] = ""  # Clear it - it's not an address
-            # CHECK FOR AIRPORT PICKUP
-            if any(
-                keyword in modification_data["pickup_address"].lower()
-                for keyword in ["airport", "terminal"]
-            ):
-                print(f"✈️ Airport pickup modification rejected")
-                response = """<?xml version="1.0" encoding="UTF-8"?>
+# Only parse for full booking details if they're changing addresses
+if has_pickup_keywords or has_destination_keywords:
+    modification_data = parse_booking_speech(speech_result)
+
+    # Update pickup if provided and is different
+    if has_pickup_keywords and modification_data.get("pickup_address"):
+        # Skip if the parsed "pickup address" is actually a time
+        if any(time_word in modification_data["pickup_address"].lower() for time_word in ["a.m.", "p.m.", "am", "pm", "o'clock"]):
+            modification_data["pickup_address"] = ""  # Clear it - it's not an address
+
+        # Check for airport pickup
+        if any(
+            keyword in modification_data["pickup_address"].lower()
+            for keyword in ["airport", "terminal"]
+        ):
+            print("✈️ Airport pickup modification rejected")
+            response = """
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, you don't need to book a taxi from the airport as we have taxis queuing at the airport rank.
-        Just walk to the rank and catch any Kiwi Cabs in the rank.
+        Sorry, you don't need to book a taxi from the airport as we have taxis queuing at the airport rank. Just walk to the rank and catch any Kiwi Cabs in the rank.
     </Say>
     <Hangup/>
-</Response>"""
-                return Response(response, mimetype="text/xml")
+</Response>
+"""
+            return Response(response, mimetype="text/xml")
 
-            updated_booking["pickup_address"] = modification_data["pickup_address"]
-            changes_made.append(
-                f"pickup address to {modification_data['pickup_address']}"
-            )
+        updated_booking["pickup_address"] = modification_data["pickup_address"]
+        changes_made.append(f"Pickup address to: {modification_data['pickup_address']}")
 
-        # Update destination if provided and different
-        if has_destination_keywords and modification_data["destination"]:
-            updated_booking["destination"] = modification_data["destination"]
-            changes_made.append(f"destination to {modification_data['destination']}")
+    # Update destination if provided and is different
+    if has_destination_keywords and modification_data.get("destination"):
+        updated_booking["destination"] = modification_data["destination"]
+        changes_made.append(f"Destination to: {modification_data['destination']}")
+    # Update destination if provided and is different
+    if has_destination_keywords and modification_data["destination"]:
+        updated_booking["destination"] = modification_data["destination"]
+        changes_made.append(f"Destination to: {modification_data['destination']}")
 
     # IMPROVED TIME PARSING - More flexible patterns
     time_patterns = [
