@@ -3260,11 +3260,7 @@ def update_taxicaller_booking(order_id, payload):
         print(f"❌ Error updating booking: {e}")
         return False
 
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    
-    # The rest of your code remains unchanged
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
