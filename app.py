@@ -2231,34 +2231,34 @@ def process_modification_smart():
     # 🧠 TRY AI FIRST FOR NATURAL LANGUAGE UNDERSTANDING
     ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
     
-if ai_intent and ai_intent.get("confidence", 0) > 0.7:
-    intent = ai_intent["intent"]
-    new_value = ai_intent["new_value"]
-    
-    print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
-    
-    if intent == "change_time":
-        # Get the existing booking IDs
-        order_id = original_booking.get("order_id")
+    if ai_intent and ai_intent.get("confidence", 0) > 0.7:
+        intent = ai_intent["intent"]
+        new_value = ai_intent["new_value"]
         
-        # Convert new_value (e.g. "11 p.m.") to Unix timestamp
-        new_time_unix = convert_time_to_unix(new_value)
+        print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
-        # Prepare the payload for updating just the time
-        update_payload = {
-            "route": {
-                "nodes": [{
-                    "times": {
-                        "arrive": {
-                            "target": new_time_unix
+        if intent == "change_time":
+            # Get the existing booking IDs
+            order_id = original_booking.get("order_id")
+            
+            # Convert new_value (e.g. "11 p.m.") to Unix timestamp
+            new_time_unix = convert_time_to_unix(new_value)
+            
+            # Prepare the payload for updating just the time
+            update_payload = {
+                "route": {
+                    "nodes": [{
+                        "times": {
+                            "arrive": {
+                                "target": new_time_unix
+                            }
                         }
-                    }
-                }]
+                    }]
+                }
             }
-        }
-        
-        # Call TaxiCaller edit endpoint
-        update_success = update_taxicaller_booking(order_id, update_payload)
+            
+            # Call TaxiCaller edit endpoint
+            update_success = update_taxicaller_booking(order_id, update_payload)
         
 def process_booking_intent(update_success, caller_number, intent, new_value=None, original_booking=None):
     # Handle destination changes
