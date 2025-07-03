@@ -2237,37 +2237,37 @@ def process_modification_smart():
         
         print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
-if intent == "change_time":
-    # Get the existing booking IDs
-    order_id = original_booking.get("order_id")
+    if intent == "change_time":
+        # Get the existing booking IDs
+        order_id = original_booking.get("order_id")
     
-    # Convert new_value (e.g. "11 p.m.") to Unix timestamp
-    new_time_unix = convert_time_to_unix(new_value)
+        # Convert new_value (e.g. "11 p.m.") to Unix timestamp
+        new_time_unix = convert_time_to_unix(new_value)
     
-    # Prepare the payload for updating just the time
-    update_payload = {
-        "route": {
-            "nodes": [{
-                "times": {
-                    "arrive": {
-                        "target": new_time_unix
+        # Prepare the payload for updating just the time
+        update_payload = {
+            "route": {
+                "nodes": [{
+                    "times": {
+                        "arrive": {
+                            "target": new_time_unix
+                        }
                     }
-                }
-            }]
+                }]
+            }
         }
-    }
     
-    # Call TaxiCaller edit endpoint
-    update_success = update_taxicaller_booking(order_id, update_payload)
+        # Call TaxiCaller edit endpoint
+        update_success = update_taxicaller_booking(order_id, update_payload)
     
-    if not update_success:
-        print(f"❌ Failed to update booking time for {caller_number}")
-        return redirect_to("/modify_booking")  # Redirect with error message
+        if not update_success:
+            print(f"❌ Failed to update booking time for {caller_number}")
+            return redirect_to("/modify_booking")  # Redirect with error message
     
-    print(f"✅ Booking time updated successfully for {caller_number}")
-    return redirect_to("/booking_success")
-        elif intent == "cancel":
-            return redirect_to("/cancel_booking")
+        print(f"✅ Booking time updated successfully for {caller_number}")
+        return redirect_to("/booking_success")
+    elif intent == "cancel":
+        return redirect_to("/cancel_booking")
         
         elif intent == "no_change":
             response = """<?xml version="1.0" encoding="UTF-8"?>
