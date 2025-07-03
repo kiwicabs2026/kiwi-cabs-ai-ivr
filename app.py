@@ -2476,6 +2476,7 @@ def background_time_modification():
             print(f"🛠️ DEBUG: Available booking keys: {list(original_booking.keys())}")
             print(f"🛠️ DEBUG: Storage keys: {list(stored_booking.keys()) if stored_booking else 'No storage'}")
 
+
 # Background processing for time modification
 def background_time_modification():
     try:
@@ -2483,34 +2484,35 @@ def background_time_modification():
     except Exception as e:
         print(f"❌ BACKGROUND: Time modification error: {str(e)}")
 
-# Background processing for pickup change
-
+# Background processing for pickup modification
 def background_pickup_modification():
     try:
         print("✅ BACKGROUND: Starting pickup modification...")
-
+        
         # Get order ID from storage
         stored_booking = booking_storage.get(caller_number, {})
         old_order_id = stored_booking.get("taxicaller_order_id")
-
+        
         # Fallback to original booking if not in storage
         if not old_order_id:
             old_order_id = original_booking.get("taxicaller_order_id")
-
-        print(f"🛠️ DEBUG: old_order_id for pickup change: {old_order_id}")
+            print(f"⚠️ DEBUG: old_order_id for pickup change: {old_order_id}")
 
         if old_order_id:
             # Cancel and recreate for pickup changes
             print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
-
+            
             if cancel_success:
                 print("✅ OLD BOOKING CANCELLED")
                 time.sleep(2)  # Adding delay after cancellation
-
+                
                 # Create new booking with new pickup
-                updated_booking["modified_at"] = datetime.now().isoformat()
-                updated_booking["ai_modified"] = True
+                updated_booking = {
+                    "modified_at": datetime.now().isoformat(),
+                    "ai_modified": True
+                }
+                updated_booking["taxicaller_order_id"] = old_order_id
                 booking_storage[caller_number] = updated_booking
                 success, response = send_booking_to_api(updated_booking, caller_number)
 
@@ -2523,13 +2525,8 @@ def background_pickup_modification():
         else:
             print("❌ NO ORDER ID FOUND for pickup change")
 
-        print("✅ BACKGROUND: Pickup modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
-
-# Start background threads
-threading.Thread(target=background_time_modification, daemon=True).start()
-threading.Thread(target=background_pickup_modification, daemon=True).start()
 
 # Handle intent for pickup change
 if intent == "change_pickup" and new_value:
