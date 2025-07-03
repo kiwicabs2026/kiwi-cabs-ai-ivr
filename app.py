@@ -2237,27 +2237,35 @@ def process_modification_smart():
         
         print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
-        if intent == "change_time":
-            # Cancel the old booking
-            order_id = original_booking.get("order_id")
-            job_id = original_booking.get("taxicaller_job_id")
-
-            canceled = cancel_taxicaller_booking(order_id=order_id, original_booking={"taxicaller_job_id": job_id})
-            if not canceled:
-                print(f"❌ Failed to cancel existing booking for {caller_number}")
-                return redirect_to("/modify_booking")  # Redirect with error message
-            
-            print(f"✅ Old booking canceled successfully for {caller_number}")
-
-            # Create new booking with updated time
-            new_booking = create_taxicaller_booking(caller_number, new_value)
-            if not new_booking:
-                print(f"❌ Failed to create new booking for {caller_number}")
-                return redirect_to("/modify_booking")  # Redirect with error message
-            
-            print(f"✅ New booking created successfully for {caller_number}")
-            return redirect_to("/booking_success")
-
+if intent == "change_time":
+    # Get the existing booking IDs
+    order_id = original_booking.get("order_id")
+    
+    # Convert new_value (e.g. "11 p.m.") to Unix timestamp
+    new_time_unix = convert_time_to_unix(new_value)
+    
+    # Prepare the payload for updating just the time
+    update_payload = {
+        "route": {
+            "nodes": [{
+                "times": {
+                    "arrive": {
+                        "target": new_time_unix
+                    }
+                }
+            }]
+        }
+    }
+    
+    # Call TaxiCaller edit endpoint
+    update_success = update_taxicaller_booking(order_id, update_payload)
+    
+    if not update_success:
+        print(f"❌ Failed to update booking time for {caller_number}")
+        return redirect_to("/modify_booking")  # Redirect with error message
+    
+    print(f"✅ Booking time updated successfully for {caller_number}")
+    return redirect_to("/booking_success")
         elif intent == "cancel":
             return redirect_to("/cancel_booking")
         
@@ -3196,7 +3204,68 @@ def test_db():
             return {"database": "error", "message": str(e)}, 500
     return {"database": "not connected"}, 500
 
+# Helper functions for booking modifications
+def convert_time_to_unix(time_str):
+    """Convert a time string like '11 p.m.' to Unix timestamp"""
+    from datetime import datetime, time
+    import re
+    
+    # Parse time from the string (e.g., "11 p.m.")
+    hour = 0
+    minute = 0
+    
+    # Extract hour and check for AM/PM
+    hour_match = re.search(r'(\d{1,2})(?::(\d{1,2}))?\s*(a\.?m\.?|p\.?m\.?)?', time_str, re.IGNORECASE)
+    
+    if hour_match:
+        hour = int(hour_match.group(1))
+        minute = int(hour_match.group(2)) if hour_match.group(2) else 0
+        
+        # Handle PM times
+        if hour_match.group(3) and hour_match.group(3).lower().startswith('p') and hour < 12:
+            hour += 12
+        # Handle AM for 12 AM (midnight)
+        elif hour_match.group(3) and hour_match.group(3).lower().startswith('a') and hour == 12:
+            hour = 0
+    
+    # Use today's date with the specified time
+    current_date = datetime.now().date()
+    time_obj = time(hour=hour, minute=minute)
+    datetime_obj = datetime.combine(current_date, time_obj)
+    
+    # Convert to Unix timestamp (seconds)
+    return int(datetime_obj.timestamp())
 
+def update_taxicaller_booking(order_id, payload):
+    """Update an existing booking using TaxiCaller edit endpoint"""
+    import requests
+    
+    endpoint = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+    
+    # Get the JWT token using your existing method
+    jwt_token = get_jwt_token()  # Assuming this function exists
+    
+    headers = {
+        'Authorization': f'Bearer {jwt_token}',
+        'Content-Type': 'application/json',
+        'User-Agent': 'KiwiCabs-AI-IVR/2.1'  # Match your existing user agent
+    }
+    
+    try:
+        response = requests.post(endpoint, json=payload, headers=headers, timeout=3)
+        print(f"📤 SENT TO TAXICALLER: {endpoint}")
+        print(f"📤 PAYLOAD: {payload}")
+        print(f"📥 RESPONSE: {response.status_code} - {response.text}")
+        return response.status_code == 200
+    except Exception as e:
+        print(f"❌ Error updating booking: {e}")
+        return False
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    
+    # The rest of your code remains unchanged
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
