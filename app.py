@@ -2494,54 +2494,54 @@ def background_time_modification():
     <Hangup/>
 </Response>"""
 
-            # Background processing for pickup change
-            def background_pickup_modification():
-                try:
-                    print("🔄 BACKGROUND: Starting pickup modification...")
-                    
-                    # Get order ID from storage
-                    stored_booking = booking_storage.get(caller_number, {})
-                    old_order_id = stored_booking.get("taxicaller_order_id")
-                    
-                    if not old_order_id:
-                        old_order_id = original_booking.get("taxicaller_order_id")
-                    
-                    print(f"🔍 DEBUG: old_order_id for pickup change: {old_order_id}")
-                    
-                    if old_order_id:
-                        # Cancel and recreate for pickup changes
-                        print(f"🗑️ CANCELLING OLD BOOKING: {old_order_id}")
-                        cancel_success = cancel_taxicaller_booking(old_order_id)
-                        
-                        if cancel_success:
-                            print("✅ OLD BOOKING CANCELLED")
-                            import time
-                            time.sleep(2)
-                            
-                            # Create new booking with new pickup
-                            updated_booking["modified_at"] = datetime.now().isoformat()
-                            updated_booking["ai_modified"] = True
-                            booking_storage[caller_number] = updated_booking
-                            success, response = send_booking_to_api(updated_booking, caller_number)
-                            
-                            if success:
-                                print("✅ NEW BOOKING CREATED with new pickup")
-                            else:
-                                print("❌ NEW BOOKING FAILED")
-                        else:
-                            print("❌ CANCEL FAILED - manual intervention needed")
-                    else:
-                        print("❌ NO ORDER ID FOUND for pickup change")
-                    
-                    print("✅ BACKGROUND: Pickup modification completed")
-                except Exception as e:
-                    print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
+# Background processing for pickup change
+def background_pickup_modification():
+    try:
+        print("✅ BACKGROUND: Starting pickup modification...")
 
-            # Start background thread
-            threading.Thread(target=background_pickup_modification, daemon=True).start()
-            return Response(immediate_response, mimetype="text/xml")
-    
-    print("🤖 AI parsing failed or low confidence - using fallback logic")
+        # Get order ID from storage
+        stored_booking = booking_storage.get(caller_number, {})
+        old_order_id = stored_booking.get("taxicaller_order_id")
+
+        # Fallback to original booking if not in storage
+        if not old_order_id:
+            old_order_id = original_booking.get("taxicaller_order_id")
+
+        print(f"🛠️ DEBUG: old_order_id for pickup change: {old_order_id}")
+
+        if old_order_id:
+            # Cancel and recreate for pickup changes
+            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
+            cancel_success = cancel_taxicaller_booking(old_order_id)
+
+            if cancel_success:
+                print("✅ OLD BOOKING CANCELLED")
+                time.sleep(2)  # Adding delay after cancellation
+
+                # Create new booking with new pickup
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["ai_modified"] = True
+                booking_storage[caller_number] = updated_booking
+                success, response = send_booking_to_api(updated_booking, caller_number)
+
+                if success:
+                    print("✅ NEW BOOKING CREATED with new pickup")
+                else:
+                    print("❌ NEW BOOKING FAILED")
+            else:
+                print("❌ CANCEL FAILED - manual intervention needed")
+        else:
+            print("❌ NO ORDER ID FOUND for pickup change")
+
+        print("✅ BACKGROUND: Pickup modification completed")
+    except Exception as e:
+        print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
+
+# Start background thread
+threading.Thread(target=background_pickup_modification, daemon=True).start()
+return Response(immediate_response, mimetype="text/xml")
+
+print("❌ AI parsing failed or low confidence — using fallback logic")
     
     # FALLBACK: Continue with existing logic below...
     # Create updated booking starting with original data
