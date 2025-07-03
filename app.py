@@ -2,7 +2,7 @@ import os
 import sys
 import requests
 import json
-from flask import Flask, request, Response, jsonify
+from flask import Flask, request, Response, jsonify, redirect
 from datetime import datetime, timedelta
 import re
 import urllib.parse
@@ -2262,7 +2262,7 @@ if ai_intent and ai_intent.get("confidence", 0) > 0.7:
         
         if not update_success:
             print(f"❌ Failed to update booking time for {caller_number}")
-            return redirect_to("/modify_booking")  # Redirect with error message
+            return redirect("/modify_booking")  # Redirect with error message
         
         print(f"✅ Booking time updated successfully for {caller_number}")
         return redirect_to("/booking_success")
