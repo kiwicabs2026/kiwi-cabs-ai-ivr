@@ -2394,12 +2394,12 @@ def process_request():
     # Start background thread
     threading.Thread(target=background_destination_modification, daemon=True).start()
 
-    if intent == "change_pickup" and new_value:
-        updated_booking = original_booking.copy()
-        updated_booking["pickup_address"] = new_value
-        changes_made = [f"pickup address to {new_value}"]
+if intent == "change_pickup" and new_value:
+    updated_booking = original_booking.copy()
+    updated_booking["pickup_address"] = new_value
+    changes_made = [f"pickup address to {new_value}"]
 
-        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your pickup address to: {new_value}.
@@ -2409,24 +2409,11 @@ def process_request():
     <Hangup/>
 </Response>
 """
-    else:
-        immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't understand your request. Please try again.
-    </Say>
-    <Hangup/>
-</Response>
-"""
-
-    return Response(immediate_response, mimetype="text/xml")  # <-- Move return down here!
-
 elif intent == "change_time" and new_value:
     updated_booking = original_booking.copy()
     updated_booking["pickup_time"] = new_value
     changes_made = [f"time to {new_value}"]
 
-    # IMMEDIATE response - don't make customer wait
     immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
@@ -2437,6 +2424,17 @@ elif intent == "change_time" and new_value:
     </Say>
     <Hangup/>
 </Response>"""
+else:
+    immediate_response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't understand your request. Please try again.
+    </Say>
+    <Hangup/>
+</Response>
+"""
+
+return Response(immediate_response, mimetype="text/xml")
 
 # FIXED: Background processing using EDIT instead of cancel+create
 def background_time_modification():
