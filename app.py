@@ -2232,18 +2232,18 @@ def process_modification_smart():
     ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
     
     if ai_intent and ai_intent.get("confidence", 0) > 0.7:
-        intent = ai_intent["intent"]
-        new_value = ai_intent["new_value"]
-        
-        print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
-        
+    intent = ai_intent["intent"]
+    new_value = ai_intent["new_value"]
+    
+    print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
+    
     if intent == "change_time":
         # Get the existing booking IDs
         order_id = original_booking.get("order_id")
-    
+        
         # Convert new_value (e.g. "11 p.m.") to Unix timestamp
         new_time_unix = convert_time_to_unix(new_value)
-    
+        
         # Prepare the payload for updating just the time
         update_payload = {
             "route": {
@@ -2256,29 +2256,28 @@ def process_modification_smart():
                 }]
             }
         }
-    
+        
         # Call TaxiCaller edit endpoint
         update_success = update_taxicaller_booking(order_id, update_payload)
-    
+        
         if not update_success:
             print(f"❌ Failed to update booking time for {caller_number}")
             return redirect_to("/modify_booking")  # Redirect with error message
-    
+        
         print(f"✅ Booking time updated successfully for {caller_number}")
         return redirect_to("/booking_success")
     elif intent == "cancel":
         return redirect_to("/cancel_booking")
-        
-        elif intent == "no_change":
-            response = """<?xml version="1.0" encoding="UTF-8"?>
+    elif intent == "no_change":
+        response = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! Your booking remains unchanged.
         We'll see you at your scheduled pickup time.
     </Say>
     <Hangup/>
-</Response>"""
-            return Response(response, mimetype="text/xml")
+</Response>'''
+        return Response(response, mimetype="text/xml")
     
 def fallback_response(intent, new_value):
     # Fallback response if AI fails
