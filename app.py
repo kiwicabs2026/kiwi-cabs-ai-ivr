@@ -2358,34 +2358,34 @@ def background_destination_modification():
 
         print(f"🛠️ DEBUG: old_order_id for destination change: {old_order_id}")
                     
-if old_order_id:
-    # For destination changes, we need to cancel and recreate
-    # (TaxiCaller.EDIT endpoint is mainly for time changes)
-    print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
-    cancel_success = cancel_taxicaller_booking(old_order_id)
+        if old_order_id:
+            # For destination changes, we need to cancel and recreate
+            # (TaxiCaller.EDIT endpoint is mainly for time changes)
+            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
+            cancel_success = cancel_taxicaller_booking(old_order_id)
 
-    if cancel_success:
-        print("✅ OLD BOOKING CANCELLED")
-        time.sleep(2)  # Adding delay after cancellation
+            if cancel_success:
+                print("✅ OLD BOOKING CANCELLED")
+                time.sleep(2)  # Adding delay after cancellation
 
-        # Create new booking with new destination
-        updated_booking["modified_at"] = datetime.now().isoformat()
-        updated_booking["ai_modified"] = True
-        booking_storage[caller_number] = updated_booking
-        success, response = send_booking_to_api(updated_booking, caller_number)
+                # Create new booking with new destination
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["ai_modified"] = True
+                booking_storage[caller_number] = updated_booking
+                success, response = send_booking_to_api(updated_booking, caller_number)
 
-        if success:
-            print("✅ NEW BOOKING CREATED with new destination")
+                if success:
+                    print("✅ NEW BOOKING CREATED with new destination")
+                else:
+                    print("❌ NEW BOOKING FAILED")
+            else:
+                print("❌ CANCEL FAILED - manual intervention needed")
         else:
-            print("❌ NEW BOOKING FAILED")
-    else:
-        print("❌ CANCEL FAILED - manual intervention needed")
-else:
-    print("❌ NO ORDER ID FOUND for destination change")
+            print("❌ NO ORDER ID FOUND for destination change")
 
-print("✅ BACKGROUND: Destination modification completed")
-except Exception as e:
-    print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
+        print("✅ BACKGROUND: Destination modification completed")
+    except Exception as e:
+        print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
 
             # Start background thread
             threading.Thread(target=background_destination_modification, daemon=True).start()
