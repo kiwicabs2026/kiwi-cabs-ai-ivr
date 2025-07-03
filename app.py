@@ -2396,7 +2396,7 @@ if intent == "change_pickup" and new_value:
     updated_booking["pickup_address"] = new_value
     changes_made = [f"pickup address to {new_value}"]
 
-    # Immediate response - don't make customer wait
+    # IMMEDIATE response - don't make customer wait
     immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
@@ -2412,7 +2412,7 @@ elif intent == "change_time" and new_value:
     updated_booking["pickup_time"] = new_value
     changes_made = [f"time to {new_value}"]
 
-    # Immediate response - don't make customer wait
+    # IMMEDIATE response - don't make customer wait
     immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
