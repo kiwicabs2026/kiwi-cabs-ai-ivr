@@ -2387,17 +2387,17 @@ def background_destination_modification():
     except Exception as e:
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
 
-            # Start background thread
-            threading.Thread(target=background_destination_modification, daemon=True).start()
-            return Response(immediate_response, mimetype="text/xml")
-        
-        elif intent == "change_time" and new_value:
-            updated_booking = original_booking.copy()
-            updated_booking["pickup_time"] = new_value
-            changes_made = [f"time to {new_value}"]
-            
-            # IMMEDIATE response - don't make customer wait
-            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+# Start background thread
+threading.Thread(target=background_destination_modification, daemon=True).start()
+return Response(immediate_response, mimetype="text/xml")
+
+elif intent == "change_time" and new_value:
+    updated_booking = original_booking.copy()
+    updated_booking["pickup_time"] = new_value
+    changes_made = [f"time to {new_value}"]
+
+    # IMMEDIATE response - don't make customer wait
+    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your time to {new_value}.
