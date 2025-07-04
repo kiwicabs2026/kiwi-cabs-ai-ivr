@@ -2722,7 +2722,7 @@ def handle_taxicaller_cancel_response(response):
 """
         return False, response_xml
 
-        else:
+    else:
         print("❌ Cancellation failed with unexpected error.")
         response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
