@@ -1176,7 +1176,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
 
         print(f"🛠️ DEBUG: old_order_id retrieved: {old_order_id}")
 
-                if old_order_id:
+        if old_order_id:
             print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
             # Format the datetime string properly for API
             current_date = datetime.now().strftime("%Y-%m-%d")
@@ -1233,9 +1233,14 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                     else:
                         print("❌ NEW BOOKING FAILED")
                 else:
-                    print("❌ FALLBACK FAILED - manual intervention needed")
+                    print("❌ Cannot find order ID for time modification")
         else:
             print("❌ NO ORDER ID FOUND - cannot modify booking")
+            
+        return True
+    except Exception as e:
+        print(f"❌ ERROR in time modification: {str(e)}")
+        return False
 
         print("✅ BACKGROUND: Time modification completed")
     except Exception as e:
