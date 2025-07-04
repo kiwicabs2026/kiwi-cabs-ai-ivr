@@ -1184,7 +1184,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                             # Fix time format - ensure leading zeros and add seconds
                 try:
                     # Get current UTC time and calculate NZ time
-                    from datetime import datetime, timedelta
+                    # Already imported at top of file - no need to import again
                     
                     now_utc = datetime.now()
                     now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
