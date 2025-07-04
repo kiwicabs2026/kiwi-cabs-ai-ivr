@@ -1176,14 +1176,41 @@ def background_time_modification(caller_number, updated_booking, original_bookin
 
         print(f"🛠️ DEBUG: old_order_id retrieved: {old_order_id}")
 
-        if old_order_id:
+                if old_order_id:
             print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
             # Format the datetime string properly for API
             current_date = datetime.now().strftime("%Y-%m-%d")
-            time_str = f"{current_date} {new_value}"
+            
+            # Fix time format - ensure leading zeros and add seconds
+            try:
+                # Try to parse the time value
+                if ":" in new_value:
+                    time_parts = new_value.split(":")
+                    hour = int(time_parts[0])
+                    minute = 0
+                    
+                    if len(time_parts) > 1:
+                        # Handle "5:30" or "5:30 AM" format
+                        minute_part = time_parts[1].split()
+                        minute = int(minute_part[0])
+                        
+                        # Handle AM/PM
+                        if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
+                            hour += 12
+                else:
+                    # Handle simple hour format like "5"
+                    hour = int(new_value)
+                    minute = 0
+                            
+                # Create properly formatted time string with leading zeros and seconds
+                time_str = f"{current_date} {hour:02d}:{minute:02d}:00"
+                print(f"🛠️ Formatted time string: {time_str}")
+            except Exception as parse_error:
+                print(f"⚠️ Time parsing error: {parse_error}, using default format")
+                # Fallback in case of parsing error
+                time_str = f"{current_date} {new_value.strip()}:00" if ":" in new_value else f"{current_date} {new_value.strip()}:00:00"
             
             edit_success = edit_taxicaller_booking(old_order_id, time_str, updated_booking)
-
             if edit_success:
                 print("✅ BOOKING TIME EDITED SUCCESSFULLY")
                 updated_booking["modified_at"] = datetime.now().isoformat()
