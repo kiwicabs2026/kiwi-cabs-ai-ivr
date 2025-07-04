@@ -2227,6 +2227,24 @@ def process_modification_smart():
         return redirect_to("/modify_booking")
 
     original_booking = booking_storage[caller_number].copy()
+        # Robustly get the order ID for modification
+    order_id = (
+        original_booking.get("taxicaller_order_id")
+        or original_booking.get("order_id")
+    )
+    print(f"DEBUG: order_id for modification: {order_id}")
+
+    # If we can't find a valid order ID, abort and inform the user
+    if not order_id:
+        print("❌ NO ORDER ID FOUND - cannot modify booking")
+        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't find your booking reference to modify. Please contact our team.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(error_xml, mimetype="text/xml")
 
     # 🧠 TRY AI FIRST FOR NATURAL LANGUAGE UNDERSTANDING
     ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
