@@ -381,6 +381,10 @@ def get_taxicaller_jwt():
 # ✅ Call it
 get_taxicaller_jwt()
 
+import json
+import requests
+from datetime import datetime
+
 def cancel_taxicaller_booking(order_id, original_booking=None):
     """Cancel booking using TaxiCaller API"""
     try:
@@ -388,15 +392,16 @@ def cancel_taxicaller_booking(order_id, original_booking=None):
         if not jwt_token:
             return False
 
-        import json
         token_data = json.loads(jwt_token)
         token = token_data['token']
 
-        # Add fallback for job_id
-        if order_id:
+        # Add fallback for job_id, and guard for string "None"
+        if order_id and order_id != "None":
             cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
-        elif original_booking and (job_id := original_booking.get("taxicaller_job_id")):
+            ref_id = order_id
+        elif original_booking and (job_id := original_booking.get("taxicaller_job_id")) and job_id != "None":
             cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/job_{job_id}/cancel"
+            ref_id = job_id
         else:
             print("❌ No order_id or job_id found for cancellation")
             return False
@@ -405,40 +410,37 @@ def cancel_taxicaller_booking(order_id, original_booking=None):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-
-        print(f"🗑️ CANCELLING ORDER: {order_id if order_id else job_id}")
-        response = requests.post(cancel_url, headers=headers, timeout=10)
-
-        print(f"📥 CANCEL RESPONSE: {response.status_code} - {response.text}")
-
-        if response.status_code in [200, 201, 204]:
-            print(f"✅ ORDER CANCELLED: {order_id if order_id else job_id}")
+        print(f"🛠️ DEBUG: Sending TaxiCaller cancel request to: {cancel_url}")
+        response = requests.delete(cancel_url, headers=headers)
+        print(f"🛠️ DEBUG: Response status: {response.status_code}, text: {response.text}")
+        if response.status_code == 200:
+            print(f"✅ ORDER CANCELLED: {ref_id}")
             return True
         else:
-            print(f"❌ CANCEL FAILED: {response.text}")
+            print(f"❌ Cancellation failed: {response.text}")
             return False
 
     except Exception as e:
-        print(f"❌ CANCEL ERROR: {e}")
+        print(f"❌ Exception during TaxiCaller cancellation: {e}")
         return False
+
 def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
-    if not order_id:
+    """Edit existing booking using TaxiCaller EDIT endpoint (recommended approach)"""
+    if not order_id or order_id == "None":
         print("❌ No valid order_id provided to edit_taxicaller_booking")
         return False
-    """Edit existing booking using TaxiCaller EDIT endpoint (recommended approach)"""
+
     try:
         jwt_token = get_taxicaller_jwt()
         if not jwt_token:
             return False
 
-        import json
         token_data = json.loads(jwt_token)
         token = token_data['token']
 
         edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
 
         # Convert new time to Unix timestamp
-        from datetime import datetime
         new_time_unix = int(datetime.strptime(new_time_str, "%Y-%m-%d %H:%M:%S").timestamp())
 
         # Prepare payload for editing booking
@@ -2637,28 +2639,54 @@ def confirm_cancellation():
                 # Get JWT token
                 jwt_token = get_taxicaller_jwt()
                 
-                # Call TaxiCaller cancellation API
-                cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
-                headers = {
-                    'Authorization': f'Bearer {jwt_token}',
-                    'Content-Type': 'application/json'
-                }
+import requests
+import json
 
-                # Validate JWT token
-                if not jwt_token:
-                    raise ValueError("JWT token is missing or invalid.")
+def cancel_taxicaller_booking(order_id, jwt_token):
+    """
+    Cancel a booking using the TaxiCaller API.
+    Returns True if successful, False otherwise.
+    """
+    # Validate order_id before proceeding
+    if not order_id or order_id == "None":
+        print("❌ No valid order_id provided for cancellation!")
+        return False
 
-                response = requests.delete(cancel_url, headers=headers)
+    # Validate JWT token
+    if not jwt_token:
+        raise ValueError("JWT token is missing or invalid.")
 
-                # Log API call details
-                print(f"🛠️ DEBUG: API URL: {cancel_url}")
-                print(f"🛠️ DEBUG: Headers: {headers}")
-                print(f"🛠️ DEBUG: Response Status Code: {response.status_code}")
-                print(f"🛠️ DEBUG: Response Text: {response.text}")
+    # Construct cancellation URL
+    cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
 
-                # Handle response status codes
-                if response.status_code == 200:
-                    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    # Set up headers
+    headers = {
+        'Authorization': f'Bearer {jwt_token}',
+        'Content-Type': 'application/json'
+    }
+
+    # Make the DELETE request
+    try:
+        response = requests.delete(cancel_url, headers=headers)
+
+        # Log API call details
+        print(f"🛠️ DEBUG: API URL: {cancel_url}")
+        print(f"🛠️ DEBUG: Headers: {headers}")
+        print(f"🛠️ DEBUG: Response Status Code: {response.status_code}")
+        print(f"🛠️ DEBUG: Response Text: {response.text}")
+
+        # Handle response status codes
+        if response.status_code == 200:
+            print("✅ Cancellation successful!")
+            # Place further logic here if needed
+            return True
+        else:
+            print("❌ Cancellation failed.")
+            return False
+
+    except Exception as e:
+        print(f"❌ Exception during TaxiCaller cancellation: {e}")
+        return False
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No worries! I've cancelled your booking. Thanks for letting us know!
