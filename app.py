@@ -2046,8 +2046,8 @@ def process_modification_smart(request):
         return Response(error_xml, mimetype="text/xml")
         
         # Handle cancellation requests
-        elif intent == "cancel":
-            return redirect_to("/cancel_booking")
+     elif intent == "cancel":
+        return redirect_to("/cancel_booking")
         
         # Handle "no change" intent
         elif intent == "no_change":
