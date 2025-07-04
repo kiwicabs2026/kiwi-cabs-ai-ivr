@@ -1181,70 +1181,68 @@ def background_time_modification(caller_number, updated_booking, original_bookin
             # Format the datetime string properly for API
             current_date = datetime.now().strftime("%Y-%m-%d")
             
-                            # Fix time format - ensure leading zeros and add seconds
-                try:
-                    # Get current UTC time and calculate NZ time
-                    # Already imported at top of file - no need to import again
+                        # Fix time format - ensure leading zeros and add seconds
+            try:
+                # Get current UTC time and calculate NZ time
+                now_utc = datetime.now()
+                now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
+                
+                print(f"🕒 Current UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"🕒 Current NZ: {now_nz.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # Parse the time value
+                if ":" in new_value:
+                    time_parts = new_value.split(":")
+                    hour = int(time_parts[0])
+                    minute = 0
                     
-                    now_utc = datetime.now()
-                    now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
-                    
-                    print(f"🕒 Current UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
-                    print(f"🕒 Current NZ: {now_nz.strftime('%Y-%m-%d %H:%M:%S')}")
-                    
-                    # Parse the time value
-                    if ":" in new_value:
-                        time_parts = new_value.split(":")
-                        hour = int(time_parts[0])
-                        minute = 0
+                    if len(time_parts) > 1:
+                        # Handle "5:30" or "5:30 AM" format
+                        minute_part = time_parts[1].split()
+                        minute = int(minute_part[0])
                         
-                        if len(time_parts) > 1:
-                            # Handle "5:30" or "5:30 AM" format
-                            minute_part = time_parts[1].split()
-                            minute = int(minute_part[0])
-                            
-                            # Handle AM/PM
-                            if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
-                                hour += 12
-                    else:
-                        # Handle simple hour format like "5"
-                        hour = int(new_value)
-                        minute = 0
-                    
-                    # Set date for booking in NZ time
-                    booking_date_nz = now_nz.strftime('%Y-%m-%d')
-                    
-                    # Create booking time in NZ
-                    booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
-                    
-                    # If time is in the past for today in NZ, assume tomorrow
-                    if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
-                        booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
-                        print(f"⏰ Time appears to be for tomorrow")
-                    
-                    # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
-                    booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
-                    
-                    # Format times for display and API
-                    time_str = booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
-                    print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
-                    print(f"🛠️ UTC for API: {time_str}")
-                    
-                    # Check if booking has sufficient notice (20+ minutes)
-                    time_diff_minutes = (booking_time_nz_naive - now_nz).total_seconds() / 60
-                    
-                    if time_diff_minutes < 20:
-                        print(f"⚠️ Notice too short: {time_diff_minutes:.1f} min (min 20 min)")
-                        adjusted_time_nz = now_nz + timedelta(minutes=25)
-                        adjusted_time_utc = adjusted_time_nz - timedelta(hours=12)
-                        time_str = adjusted_time_utc.strftime('%Y-%m-%d %H:%M:%S')
-                        print(f"🛠️ Adjusted to: {time_str}")
-                except Exception as parse_error:
-                    print(f"⚠️ Time parsing error: {parse_error}, using default format")
-                    # Fallback in case of parsing error
-                    time_str = f"{current_date} {new_value.strip()}:00" if ":" in new_value else f"{current_date} {new_value.strip()}:00:00"
+                        # Handle AM/PM
+                        if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
+                            hour += 12
+                else:
+                    # Handle simple hour format like "5"
+                    hour = int(new_value)
+                    minute = 0
+                
+                # Set date for booking in NZ time
+                booking_date_nz = now_nz.strftime('%Y-%m-%d')
+                
+                # Create booking time in NZ
+                booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
+                
+                # If time is in the past for today in NZ, assume tomorrow
+                if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
+                    booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
+                    print(f"⏰ Time appears to be for tomorrow")
+                
+                # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
+                booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
+                
+                # Format times for display and API
+                time_str = booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')
+                
+                print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
+                print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"🛠️ UTC for API: {time_str}")
+                
+                # Check if booking has sufficient notice (20+ minutes)
+                time_diff_minutes = (booking_time_nz_naive - now_nz).total_seconds() / 60
+                
+                if time_diff_minutes < 20:
+                    print(f"⚠️ Notice too short: {time_diff_minutes:.1f} min (min 20 min)")
+                    adjusted_time_nz = now_nz + timedelta(minutes=25)
+                    adjusted_time_utc = adjusted_time_nz - timedelta(hours=12)
+                    time_str = adjusted_time_utc.strftime('%Y-%m-%d %H:%M:%S')
+                    print(f"🛠️ Adjusted to: {time_str}")
+            except Exception as parse_error:
+                print(f"⚠️ Time parsing error: {parse_error}, using default format")
+                # Fallback in case of parsing error
+                time_str = f"{current_date} {new_value.strip()}:00" if ":" in new_value else f"{current_date} {new_value.strip()}:00:00"
             
             edit_success = edit_taxicaller_booking(old_order_id, time_str, updated_booking)
             if edit_success:
