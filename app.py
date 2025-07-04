@@ -2046,19 +2046,20 @@ def process_modification_smart(request):
         return Response(error_xml, mimetype="text/xml")
         
         # Handle cancellation requests
-if intent == "cancel":
-    return redirect_to("/cancel_booking")
+def handle_intent(intent):
+    if intent == "cancel":
+        return redirect_to("/cancel_booking")
         
-    # Handle "no change" intent
+        # Handle "no change" intent
     if intent == "no_change":
         response = f'''<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-        <Say voice="Polly.Aria-Neural" language="en-NZ">
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! Your booking remains unchanged.
         We'll see you at your scheduled pickup time.
-        </Say>
-        <Hangup/>
-        </Response>'''
+    </Say>
+    <Hangup/>
+</Response>'''
         return Response(response, mimetype="text/xml")
     
     # If AI couldn't understand the request with high confidence
