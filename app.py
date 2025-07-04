@@ -1118,7 +1118,195 @@ def background_destination_modification(caller_number, updated_booking, original
         print("✅ BACKGROUND: Destination modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
-
+def cancel_and_recreate_booking(old_order_id, new_time, phone):
+    """Cancel existing booking and create new one with updated time"""
+    print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new time {new_time}")
+    
+    # Get existing booking details from TaxiCaller
+    try:
+        jwt_token = get_taxicaller_jwt()
+        try:
+            token_data = json.loads(jwt_token)
+            token = token_data['token']
+        except (json.JSONDecodeError, KeyError):
+            token = jwt_token
+            
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {token}',
+            'User-Agent': 'KiwiCabs-AI-IVR/2.1'
+        }
+        
+        # Get the details of the existing booking
+        get_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{old_order_id}"
+        get_response = requests.get(get_url, headers=headers)
+        
+        if get_response.status_code != 200:
+            print(f"⚠️ ERROR: Failed to get booking details from TaxiCaller: {get_response.status_code}")
+            return None
+        
+        booking_data = get_response.json()
+        print(f"📑 RETRIEVED BOOKING DETAILS: {old_order_id}")
+        
+        # Extract important details
+        customer_name = booking_data['order']['items'][0]['passenger']['name']
+        pickup_address = booking_data['order']['route']['nodes'][0]['location']['name']
+        dropoff_address = booking_data['order']['route']['nodes'][1]['location']['name']
+        pickup_coords = booking_data['order']['route']['nodes'][0]['location'].get('coords', [0, 0])
+        dropoff_coords = booking_data['order']['route']['nodes'][1]['location'].get('coords', [0, 0])
+        driver_instructions = booking_data['order']['route']['nodes'][0].get('info', {}).get('all', '')
+        
+        print(f"📋 BOOKING DETAILS: {customer_name} from {pickup_address} to {dropoff_address}")
+        
+        # Step 1: Cancel the existing booking
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{old_order_id}/cancel"
+        cancel_data = {"cancel_reason": "Customer changed booking time"}
+        
+        cancel_response = requests.post(cancel_url, headers=headers, json=cancel_data)
+        print(f"🗑️ CANCEL RESPONSE: {cancel_response.status_code}")
+        
+        if cancel_response.status_code not in [200, 202, 204]:
+            print(f"⚠️ WARNING: Failed to cancel booking: {cancel_response.text}")
+        
+        # Step 2: Format the new time properly
+        now_utc = datetime.now()
+        now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
+        
+        # Parse the time value
+        try:
+            if ":" in new_time:
+                time_parts = new_time.split(":")
+                hour = int(time_parts[0])
+                minute = 0
+                
+                if len(time_parts) > 1:
+                    # Handle "5:30" or "5:30 AM" format
+                    minute_part = time_parts[1].split()
+                    minute = int(minute_part[0])
+                    
+                    # Handle AM/PM
+                    if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
+                        hour += 12
+            else:
+                # Handle simple hour format like "5"
+                hour = int(new_time)
+                minute = 0
+            
+            # Set date for booking in NZ time
+            booking_date_nz = now_nz.strftime('%Y-%m-%d')
+            
+            # Create booking time in NZ
+            booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
+            
+            # If time is in the past for today in NZ, assume tomorrow
+            if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
+                booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
+                print(f"⏰ Time appears to be for tomorrow")
+            
+            # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
+            booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
+            
+            # Format times for display and API
+            unix_time = int(booking_time_utc.timestamp())
+            
+            print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
+            print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"🛠️ UTC for API: {booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"🛠️ Unix timestamp: {unix_time}")
+        
+        except Exception as parse_error:
+            print(f"⚠️ Time parsing error: {parse_error}, using simple approach")
+            # Fallback in case of parsing error
+            unix_time = int(datetime.now().timestamp()) + 3600  # Default to 1 hour from now
+        
+        # Step 3: Create new booking
+        # Format phone number appropriately
+        nz_local_phone = phone
+        if phone.startswith("+64"):
+            nz_local_phone = "0" + phone[3:]  # +64220881234 → 0220881234
+        elif phone.startswith("64") and len(phone) == 11:  # Ensure it's NZ format
+            nz_local_phone = "0" + phone[2:]  # 64220881234 → 0220881234
+        
+        create_payload = {
+            "order": {
+                "company_id": 8257,
+                "provider_id": 0,
+                "items": [
+                    {
+                        "@type": "passengers",
+                        "seq": 0,
+                        "passenger": {
+                            "name": customer_name,
+                            "email": "customer@kiwicabs.co.nz",
+                            "phone": nz_local_phone
+                        },
+                        "client_id": 0,
+                        "account": {"id": 0},
+                        "require": {"seats": 1, "wc": 0, "bags": 1},
+                        "pay_info": [{"@t": 0, "data": None}]
+                    }
+                ],
+                "route": {
+                    "meta": {"est_dur": "600", "dist": "5000"},
+                    "nodes": [
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
+                            "location": {
+                                "name": pickup_address,
+                                "coords": pickup_coords
+                            },
+                            "times": {"arrive": {"target": unix_time}},
+                            "info": {"all": driver_instructions},
+                            "seq": 0
+                        },
+                        {
+                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "out"}],
+                            "location": {
+                                "name": dropoff_address,
+                                "coords": dropoff_coords
+                            },
+                            "seq": 1
+                        }
+                    ],
+                    "legs": [
+                        {
+                            "pts": pickup_coords + dropoff_coords,
+                            "meta": {"dist": "5000", "est_dur": "600"},
+                            "from_seq": 0,
+                            "to_seq": 1
+                        }
+                    ]
+                }
+            }
+        }
+        
+        create_url = "https://api-rc.taxicaller.net/api/v1/booker/order"
+        create_response = requests.post(create_url, headers=headers, json=create_payload)
+        
+        if create_response.status_code == 200:
+            new_booking = create_response.json()
+            new_order_id = new_booking['order']['order_id']
+            print(f"✅ NEW BOOKING CREATED: {new_order_id}")
+            
+            # Update booking storage
+            if phone in booking_storage:
+                if isinstance(booking_storage[phone], dict):
+                    booking_storage[phone]["taxicaller_order_id"] = new_order_id
+                else:
+                    booking_storage[phone] = new_order_id
+                print(f"🔄 UPDATED ORDER ID in booking_storage: {phone} -> {new_order_id}")
+            
+            return new_order_id
+        else:
+            print(f"❌ FAILED TO CREATE NEW BOOKING: {create_response.text}")
+            return None
+        
+    except Exception as e:
+        print(f"⚠️ ERROR IN CANCEL AND RECREATE: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+        
 def background_pickup_modification(caller_number, updated_booking, original_booking=None):
     """Background process to modify pickup location"""
     try:
@@ -1819,28 +2007,43 @@ def process_modification_smart(request):
         
         # Handle time changes
         elif intent == "change_time" and new_value:
-            updated_booking = original_booking.copy()
-            updated_booking["pickup_time"] = new_value
-
-            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+            print(f"✅ BOOKING TIME CHANGE REQUEST: {order_id}, new_value: {new_value}")
+            
+            # Call our new function to cancel and create a new booking
+            new_order_id = cancel_and_recreate_booking(order_id, new_value, caller_number)
+            
+            if new_order_id:
+                immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your time to {new_value}.
-        Your taxi will pick you up from {updated_booking.get('pickup_address', '')} 
-        at {new_value}.
+        Your taxi will pick you up at {new_value}.
+        Your new booking reference is {new_order_id[-6:]}.
         We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
 </Response>"""
-
-            # Start background thread
-            threading.Thread(
-                target=background_time_modification,
-                args=(caller_number, updated_booking, original_booking, new_value),
-                daemon=True
-            ).start()
-
-            return Response(immediate_response, mimetype="text/xml")
+                return Response(immediate_response, mimetype="text/xml")
+            else:
+                # Handle error in creating new booking
+                error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
+    </Say>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+                return Response(error_xml, mimetype="text/xml")
+    else:
+        # Handle error in creating new booking
+        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
+    </Say>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+        return Response(error_xml, mimetype="text/xml")
         
         # Handle cancellation requests
         elif intent == "cancel":
