@@ -2050,7 +2050,7 @@ if intent == "cancel":
     return redirect_to("/cancel_booking")
         
     # Handle "no change" intent
-    elif intent == "no_change":
+    if intent == "no_change":
         response = f'''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
         <Say voice="Polly.Aria-Neural" language="en-NZ">
