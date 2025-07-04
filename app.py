@@ -2675,7 +2675,13 @@ def cancel_taxicaller_booking(order_id, jwt_token):
         print(f"🛠️ DEBUG: Response Status Code: {response.status_code}")
         print(f"🛠️ DEBUG: Response Text: {response.text}")
 
-    def handle_taxicaller_cancel_response(response):
+        # You can process response here or call another function to handle XML etc.
+        return response
+    except Exception as e:
+        print(f"❌ Exception during TaxiCaller cancellation: {e}")
+        return None  # or False, depending on your needs
+
+def handle_taxicaller_cancel_response(response):
     """
     Handles the TaxiCaller cancellation API response,
     returning a tuple: (success: bool, response_xml: str)
