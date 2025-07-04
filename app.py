@@ -2722,7 +2722,7 @@ def handle_taxicaller_cancel_response(response):
 """
         return False, response_xml
 
-    else:
+        else:
         print("❌ Cancellation failed with unexpected error.")
         response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -2734,7 +2734,7 @@ def handle_taxicaller_cancel_response(response):
 """
         return False, response_xml
 
-                return Response(response_xml, mimetype="text/xml")
+    return Response(response_xml, mimetype="text/xml")
             
     # If we get here, either there was no booking to cancel or the user said "no"
     response = """<?xml version="1.0" encoding="UTF-8"?>
@@ -2746,7 +2746,6 @@ def handle_taxicaller_cancel_response(response):
 </Response>
 """
     return Response(response, mimetype="text/xml")
-
 
 @app.route("/team", methods=["POST"])
 def team():
