@@ -174,6 +174,7 @@ def init_db():
                     booking_reference VARCHAR(100),
                     raw_speech TEXT,
                     pickup_date VARCHAR(20),
+                    order_id VARCHAR(20),
                     pickup_time VARCHAR(20),
                     created_via VARCHAR(20) DEFAULT 'ai_ivr'
                 )
