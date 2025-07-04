@@ -2675,18 +2675,14 @@ def cancel_taxicaller_booking(order_id, jwt_token):
         print(f"🛠️ DEBUG: Response Status Code: {response.status_code}")
         print(f"🛠️ DEBUG: Response Text: {response.text}")
 
-        # Handle response status codes
-        if response.status_code == 200:
-            print("✅ Cancellation successful!")
-            # Place further logic here if needed
-            return True
-        else:
-            print("❌ Cancellation failed.")
-            return False
-
-    except Exception as e:
-        print(f"❌ Exception during TaxiCaller cancellation: {e}")
-        return False
+    def handle_taxicaller_cancel_response(response):
+    """
+    Handles the TaxiCaller cancellation API response,
+    returning a tuple: (success: bool, response_xml: str)
+    """
+    if response.status_code == 200:
+        print("✅ Cancellation successful!")
+        response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         No worries! I've cancelled your booking. Thanks for letting us know!
@@ -2694,8 +2690,11 @@ def cancel_taxicaller_booking(order_id, jwt_token):
     <Hangup/>
 </Response>
 """
-                elif response.status_code == 404:
-                    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
+        return True, response_xml
+
+    elif response.status_code == 404:
+        print("❌ Booking not found for cancellation.")
+        response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I couldn't find your booking to cancel.
@@ -2703,8 +2702,11 @@ def cancel_taxicaller_booking(order_id, jwt_token):
     <Hangup/>
 </Response>
 """
-                elif response.status_code == 403:
-                    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
+        return False, response_xml
+
+    elif response.status_code == 403:
+        print("ℹ️ Booking already cancelled or not allowed.")
+        response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! Your booking is still active. See you at pickup time!
@@ -2712,8 +2714,11 @@ def cancel_taxicaller_booking(order_id, jwt_token):
     <Hangup/>
 </Response>
 """
-                else:
-                    response_xml = """<?xml version="1.0" encoding="UTF-8"?>
+        return False, response_xml
+
+    else:
+        print("❌ Cancellation failed with unexpected error.")
+        response_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, something went wrong while processing your request.
@@ -2721,6 +2726,7 @@ def cancel_taxicaller_booking(order_id, jwt_token):
     <Hangup/>
 </Response>
 """
+        return False, response_xml
 
                 return Response(response_xml, mimetype="text/xml")
             
