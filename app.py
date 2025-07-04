@@ -421,8 +421,10 @@ def cancel_taxicaller_booking(order_id, original_booking=None):
     except Exception as e:
         print(f"❌ CANCEL ERROR: {e}")
         return False
-
 def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
+    if not order_id:
+        print("❌ No valid order_id provided to edit_taxicaller_booking")
+        return False
     """Edit existing booking using TaxiCaller EDIT endpoint (recommended approach)"""
     try:
         jwt_token = get_taxicaller_jwt()
@@ -433,14 +435,7 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
         token_data = json.loads(jwt_token)
         token = token_data['token']
 
-        # Add fallback for job_id
-        if order_id:
-            edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
-        elif booking_data and (job_id := booking_data.get("taxicaller_job_id")):
-            edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/job_{job_id}"
-        else:
-            print("❌ No order_id or job_id found for editing")
-            return False
+        edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
 
         # Convert new time to Unix timestamp
         from datetime import datetime
@@ -466,56 +461,18 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
             "Content-Type": "application/json"
         }
 
-        print(f"✏️ EDITING BOOKING: {order_id if order_id else job_id}")
+        print(f"✏️ EDITING BOOKING: {order_id}")
         response = requests.put(edit_url, headers=headers, json=payload, timeout=10)
 
         print(f"📥 EDIT RESPONSE: {response.status_code} - {response.text}")
 
         if response.status_code in [200, 204]:
-            print(f"✅ BOOKING UPDATED: {order_id if order_id else job_id}")
+            print(f"✅ BOOKING UPDATED: {order_id}")
             return True
         else:
             print(f"❌ EDIT FAILED: {response.text}")
             return False
 
-    except Exception as e:
-        print(f"❌ EDIT ERROR: {e}")
-        return False
-        
-        # Build edit payload according to TaxiCaller docs
-        edit_payload = {
-            "route": {
-                "nodes": [{
-                    "times": {
-                        "arrive": {
-                            "target": unix_timestamp
-                        }
-                    }
-                }]
-            }
-        }
-        
-        edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
-        
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-        
-        print(f"✏️ EDITING ORDER: {order_id}")
-        print(f"📅 NEW TIME: {new_time_str} → Unix: {unix_timestamp}")
-        
-        response = requests.post(edit_url, json=edit_payload, headers=headers, timeout=10)
-        
-        print(f"📥 EDIT RESPONSE: {response.status_code} - {response.text}")
-        
-        if response.status_code in [200, 201, 204]:
-            print(f"✅ ORDER EDITED: {order_id}")
-            return True
-        else:
-            print(f"❌ EDIT FAILED: {response.text}")
-            return False
-            
     except Exception as e:
         print(f"❌ EDIT ERROR: {e}")
         return False
