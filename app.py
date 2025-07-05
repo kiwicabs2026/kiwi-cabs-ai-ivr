@@ -2123,8 +2123,8 @@ elif intent == "change_pickup" and new_value:
             updated_booking = original_booking.copy()
             updated_booking["pickup_address"] = exact_address
 
-            # IMMEDIATE response
-            immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+# IMMEDIATE response
+                        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Perfect! I've updated your pickup to {speech_address}.
@@ -2144,7 +2144,7 @@ elif intent == "change_pickup" and new_value:
 
             return Response(immediate_response, mimetype="text/xml")
         
-                # Handle time changes
+        # Handle time changes
         elif intent == "change_time" and new_value:
             print(f"🕒 Changing booking time to: {new_value}")
             
