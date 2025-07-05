@@ -1998,18 +1998,18 @@ else:
     order_id = None
 
 print(f"DEBUG: order_id for modification: {order_id}")
-    # If we can't find a valid order ID, abort and inform the user
+# If we can't find a valid order ID, abort and inform the user
     
 if not order_id:
-        print("❌ NO ORDER ID FOUND - cannot modify booking")
-        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    print("❌ NO ORDER ID FOUND - cannot modify booking")
+    error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, I couldn't find your booking reference to modify. Please contact our team.
     </Say>
     <Hangup/>
 </Response>"""
-        return Response(error_xml, mimetype="text/xml")
+    return Response(error_xml, mimetype="text/xml")
 
     # Try AI first for natural language understanding
     ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
