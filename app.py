@@ -2134,7 +2134,6 @@ immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
     </Say>
     <Hangup/>
 </Response>"""
-
             # Start background thread
             threading.Thread(
                 target=background_pickup_modification,
