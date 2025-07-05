@@ -1999,7 +1999,8 @@ else:
 
 print(f"DEBUG: order_id for modification: {order_id}")
     # If we can't find a valid order ID, abort and inform the user
-    if not order_id:
+    
+if not order_id:
         print("❌ NO ORDER ID FOUND - cannot modify booking")
         error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
