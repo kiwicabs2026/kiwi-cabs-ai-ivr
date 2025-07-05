@@ -1,4 +1,210 @@
+import os
+import sys
+import requests
+import json
+from flask import Flask, request, Response, jsonify, redirect
+from datetime import datetime, timedelta
+import re
+import urllib.parse
+import time
+import base64
+import threading
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import googlemaps
+import pytz 
 
+# New Zealand timezone
+NZ_TZ = pytz.timezone('Pacific/Auckland')
+
+# Try to import Google Cloud Speech, but make it optional with better error handling
+GOOGLE_SPEECH_AVAILABLE = False
+google_speech_client = None
+
+try:
+    from google.cloud import speech
+    from google.oauth2 import service_account
+
+    GOOGLE_SPEECH_AVAILABLE = True
+    print("✅ Google Cloud Speech imported successfully")
+except ImportError:
+    print("⚠️ Google Cloud Speech not available - will use Twilio transcription only")
+except Exception as e:
+    print(
+        f"⚠️ Google Cloud Speech import error: {e} - will use Twilio transcription only"
+    )
+
+app = Flask(__name__)
+print("✅ Flask app created successfully")
+# Initialize Google Maps client
+gmaps = None
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+if GOOGLE_MAPS_API_KEY:
+    try:
+        gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
+        print("✅ Google Maps client initialized")
+    except Exception as e:
+        print(f"❌ Google Maps initialization failed: {e}")
+else:
+    print("⚠️ Google Maps API key not configured")
+
+def validate_and_format_address(address, address_type="general"):
+    """Validate and format address using Google Maps"""
+    if not gmaps:
+        return address
+    
+    try:
+        # Add Wellington context if not present
+        if "wellington" not in address.lower():
+            search_address = f"{address}, Wellington, New Zealand"
+        else:
+            search_address = address
+        
+        # Use Google Geocoding
+        results = gmaps.geocode(search_address, region="nz")
+        
+        if results:
+            result = results[0]
+            components = result['address_components']
+            
+            street_number = ""
+            street_name = ""
+            suburb = ""
+            
+            for comp in components:
+                types = comp['types']
+                if 'street_number' in types:
+                    street_number = comp['long_name']
+                elif 'route' in types:
+                    street_name = comp['long_name']
+                elif 'sublocality_level_1' in types:
+                    suburb = comp['long_name']
+            
+            # Build clean address
+            if street_number and street_name:
+                clean_address = f"{street_number} {street_name}"
+                if suburb:
+                    clean_address += f", {suburb}"
+            else:
+                clean_address = address
+            
+            print(f"✅ Google Maps validated: {address} → {clean_address}")
+            return clean_address
+        else:
+            return address
+            
+    except Exception as e:
+        print(f"❌ Google Maps error: {e}")
+        return address
+
+# Configuration - STEP 1: Environment Variables (with fallback to your key)
+TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
+TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+RENDER_ENDPOINT = os.getenv(
+    "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
+)
+
+# Google Cloud and Twilio Configuration
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CLOUD_CREDENTIALS", "")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+
+# JWT Token Cache (legacy - keeping for compatibility)
+TAXICALLER_JWT_CACHE = {"token": None, "expires_at": 0}
+
+# Session memory stores
+user_sessions = {}
+modification_bookings = {}
+booking_storage = {}
+
+print(
+    f"🔑 TaxiCaller API Key: {'Configured (' + TAXICALLER_API_KEY[:8] + '...)' if TAXICALLER_API_KEY else 'Not configured'}"
+)
+
+# Database connection function
+def get_db_connection():
+    """Get PostgreSQL connection from DATABASE_URL"""
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    if DATABASE_URL:
+        # Render uses postgresql:// but psycopg2 needs postgres://
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        try:
+            return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        except Exception as e:
+            print(f"❌ Database connection error: {e}")
+            return None
+    return None
+
+
+# Initialize database tables
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Customers table
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS customers (
+                    id SERIAL PRIMARY KEY,
+                    phone_number VARCHAR(20) UNIQUE NOT NULL,
+                    name VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    total_bookings INTEGER DEFAULT 0
+                )
+            """
+            )
+
+            # Bookings table
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bookings (
+                    id SERIAL PRIMARY KEY,
+                    customer_phone VARCHAR(20) NOT NULL,
+                    customer_name VARCHAR(100),
+                    pickup_location TEXT NOT NULL,
+                    dropoff_location TEXT,
+                    booking_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    scheduled_time TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    booking_reference VARCHAR(100),
+                    raw_speech TEXT,
+                    pickup_date VARCHAR(20),
+                    pickup_time VARCHAR(20),
+                    created_via VARCHAR(20) DEFAULT 'ai_ivr'
+                )
+            """
+            )
+
+            # Conversation history table
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id SERIAL PRIMARY KEY,
+                    phone_number VARCHAR(20) NOT NULL,
+                    message TEXT,
+                    role VARCHAR(10),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            conn.commit()
+            cur.close()
+            conn.close()
+            print("✅ Database tables initialized")
+        except Exception as e:
+            print(f"❌ Database initialization error: {e}")
+            if conn:
+                conn.close()
+
+
+# Run this once when app starts
+init_db()
 def parse_natural_language_time(time_str):
     """
     Convert natural language time expressions to datetime objects.
