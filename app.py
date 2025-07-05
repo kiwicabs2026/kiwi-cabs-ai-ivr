@@ -2011,14 +2011,14 @@ if not order_id:
 </Response>"""
     return Response(error_xml, mimetype="text/xml")
 
-    # Try AI first for natural language understanding
-    ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
+# Try AI first for natural language understanding
+ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
     
-    if ai_intent and ai_intent.get("confidence", 0) > 0.7:
-        intent = ai_intent["intent"]
-        new_value = ai_intent["new_value"]
+if ai_intent and ai_intent.get("confidence", 0) > 0.7:
+    intent = ai_intent["intent"]
+    new_value = ai_intent["new_value"]
         
-        print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
+    print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
         # Handle destination changes
         if intent == "change_destination" and new_value:
