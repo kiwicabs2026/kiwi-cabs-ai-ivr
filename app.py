@@ -2054,39 +2054,58 @@ if intent == "change_destination" and new_value:
     <Hangup/>
 </Response>"""
                 
-                # Start background thread
-                threading.Thread(
-                    target=background_destination_modification,
-                    args=(caller_number, updated_booking, original_booking),
-                    daemon=True
-                ).start()
-                
-                # Return the immediate response
-                return Response(immediate_response, mimetype="text/xml")
-            
-            except ValueError as ve:
-                # Handle missing POI gracefully
-                print(f"❌ Error: {ve}")
-                error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        # Start background thread
+        threading.Thread(
+            target=background_destination_modification,
+            args=(caller_number, updated_booking, original_booking),
+            daemon=True
+        ).start()
+        
+        # Return the immediate response
+        return Response(immediate_response, mimetype="text/xml")
+    
+    except ValueError as ve:
+        # Handle missing POI gracefully
+        print(f"❌ Error: {ve}")
+        error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, we couldn't update your destination. Please try again later.
     </Say>
     <Hangup/>
 </Response>"""
-                return Response(error_response, mimetype="text/xml")
-            
-            except Exception as e:
-                # Handle unexpected errors
-                print(f"❌ Error resolving POI or updating booking: {str(e)}")
-                error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        return Response(error_response, mimetype="text/xml")
+    
+    except Exception as e:
+        # Handle unexpected errors
+        print(f"❌ Error resolving POI or updating booking: {str(e)}")
+        error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Sorry, something went wrong. Please try again later.
     </Say>
     <Hangup/>
 </Response>"""
-                return Response(error_response, mimetype="text/xml")
+        return Response(error_response, mimetype="text/xml")
+
+# Handle pickup changes
+elif intent == "change_pickup" and new_value:
+    # Smart POI resolution for pickup changes
+    resolved_pickup = resolve_wellington_poi_to_address(new_value)
+
+    # Get the actual address string
+    if isinstance(resolved_pickup, dict):
+        exact_address = resolved_pickup.get("full_address", new_value)
+        speech_address = resolved_pickup.get("speech", exact_address)
+    else:
+        exact_address = resolved_pickup if resolved_pickup else new_value
+        speech_address = exact_address
+
+    updated_booking = original_booking.copy()
+    updated_booking["pickup_address"] = exact_address
+
+    # IMMEDIATE response
+    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
         
         # Handle pickup changes
         elif intent == "change_pickup" and new_value:
