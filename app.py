@@ -2020,32 +2020,32 @@ if ai_intent and ai_intent.get("confidence", 0) > 0.7:
         
     print(f"🤖 AI UNDERSTOOD: {intent} → {new_value}")
         
-        # Handle destination changes
-        if intent == "change_destination" and new_value:
-            print(f"🔍 Resolving Wellington POI: {new_value}")
-            
-            try:
-                # Convert POI name to exact address
-                resolved_destination = resolve_wellington_poi_to_address(new_value)
-                
-                # Add error handling for missing POI
-                if not resolved_destination:
-                    raise ValueError(f"Failed to resolve destination for POI: {new_value}")
-                
-                # Get the actual address string
-                if isinstance(resolved_destination, dict):
-                    exact_address = resolved_destination.get("full_address", new_value)
-                    speech_address = resolved_destination.get("speech", exact_address)
-                else:
-                    exact_address = resolved_destination
-                    speech_address = exact_address
-                
-                # Update booking with new destination
-                updated_booking = original_booking.copy()
-                updated_booking["destination"] = exact_address
-                
-                # IMMEDIATE response - don't make customer wait
-                immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+# Handle destination changes
+if intent == "change_destination" and new_value:
+    print(f"🔍 Resolving Wellington POI: {new_value}")
+    
+    try:
+        # Convert POI name to exact address
+        resolved_destination = resolve_wellington_poi_to_address(new_value)
+        
+        # Add error handling for missing POI
+        if not resolved_destination:
+            raise ValueError(f"Failed to resolve destination for POI: {new_value}")
+        
+        # Get the actual address string
+        if isinstance(resolved_destination, dict):
+            exact_address = resolved_destination.get("full_address", new_value)
+            speech_address = resolved_destination.get("speech", exact_address)
+        else:
+            exact_address = resolved_destination
+            speech_address = exact_address
+        
+        # Update booking with new destination
+        updated_booking = original_booking.copy()
+        updated_booking["destination"] = exact_address
+        
+        # IMMEDIATE response - don't make customer wait
+        immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Great! Your new destination is {speech_address}.
