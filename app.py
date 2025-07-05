@@ -1984,15 +1984,20 @@ def process_modification_smart(request):
     if caller_number not in booking_storage:
         return redirect_to("/modify_booking")
 
-    original_booking = booking_storage[caller_number].copy()
-    
     # Robustly get the order ID for modification
-    order_id = (
-        original_booking.get("taxicaller_order_id")
-        or original_booking.get("order_id")
-    )
-    print(f"DEBUG: order_id for modification: {order_id}")
+if caller_number in booking_storage:
+    booking_data = booking_storage[caller_number]
+    
+    # If it's a dictionary (old format), try to get the ID from it
+    if isinstance(booking_data, dict):
+        order_id = booking_data.get("taxicaller_order_id") or booking_data.get("order_id")
+    else:
+        # If it's a string (new format), use it directly
+        order_id = booking_data
+else:
+    order_id = None
 
+print(f"DEBUG: order_id for modification: {order_id}")
     # If we can't find a valid order ID, abort and inform the user
     if not order_id:
         print("❌ NO ORDER ID FOUND - cannot modify booking")
