@@ -2073,6 +2073,19 @@ if intent == "change_destination" and new_value:
     </Say>
     <Hangup/>
 </Response>"""
+        # You need a return statement here too
+        return Response(error_response, mimetype="text/xml")
+    
+    except ValueError as ve:
+        # Handle missing POI gracefully
+        print(f"❌ Error: {ve}")
+        error_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, we couldn't update your destination. Please try again later.
+    </Say>
+    <Hangup/>
+</Response>"""
         return Response(error_response, mimetype="text/xml")
     
     except Exception as e:
