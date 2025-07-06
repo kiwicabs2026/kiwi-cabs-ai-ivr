@@ -2105,138 +2105,139 @@ elif intent == "change_pickup" and new_value:
     updated_booking["pickup_address"] = exact_address
 
     # IMMEDIATE response
-    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
+# Handle pickup changes
+elif intent == "change_pickup" and new_value:
+    # Smart POI resolution for pickup changes
+    resolved_pickup = resolve_wellington_poi_to_address(new_value)
+
+    # Get the actual address string
+    if isinstance(resolved_pickup, dict):
+        exact_address = resolved_pickup.get("full_address", new_value)
+        speech_address = resolved_pickup.get("speech", exact_address)
+    else:
+        exact_address = resolved_pickup if resolved_pickup else new_value
+        speech_address = exact_address
+
+    updated_booking = original_booking.copy()
+    updated_booking["pickup_address"] = exact_address
+
+    immediate_response = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<Response>\n'
+        '    <Say voice="Polly.Aria-Neural" language="en-NZ">\n'
+        '        Perfect! I\'ve updated your pickup location.\n'
+        '        Your taxi will pick you up and take you to ' + str(updated_booking.get('destination', '')) + '.\n'
+        '        We appreciate your booking with Kiwi Cabs. Have a great day.\n'
+        '    </Say>\n'
+        '    <Hangup/>\n'
+        '</Response>'
+    )
+    
+    # Start background thread
+    threading.Thread(
+        target=background_pickup_modification,
+        args=(caller_number, updated_booking, original_booking),
+        daemon=True
+    ).start()
+
+    return Response(immediate_response, mimetype="text/xml")
         
-        # Handle pickup changes
-        elif intent == "change_pickup" and new_value:
-            # Smart POI resolution for pickup changes
-            resolved_pickup = resolve_wellington_poi_to_address(new_value)
-
-            # Get the actual address string
-            if isinstance(resolved_pickup, dict):
-                exact_address = resolved_pickup.get("full_address", new_value)
-                speech_address = resolved_pickup.get("speech", exact_address)
-            else:
-                exact_address = resolved_pickup if resolved_pickup else new_value
-                speech_address = exact_address
-
+# Handle time changes
+elif intent == "change_time" and new_value:
+    print(f"🕒 Changing booking time to: {new_value}")
+    
+    try:
+        # Use improved time parsing
+        booking_time = parse_natural_language_time(new_value)
+        
+        # Format for the API
+        nz_time_str = booking_time.strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Get Unix timestamp
+        unix_timestamp = int(booking_time.timestamp())
+        
+        # Log the parsed time values
+        print(f"🛠️ User requested: {new_value}")
+        print(f"🛠️ NZ booking time: {nz_time_str}")
+        print(f"🛠️ Unix timestamp: {unix_timestamp}")
+        
+        # Call our new function to cancel and create a new booking
+        new_order_id = cancel_and_recreate_booking(order_id, nz_time_str, caller_number)
+        
+        if new_order_id:
+            # Update booking storage
             updated_booking = original_booking.copy()
-            updated_booking["pickup_address"] = exact_address
-
-immediate_response = (
-    '<?xml version="1.0" encoding="UTF-8"?>\n'
-    '<Response>\n'
-    '    <Say voice="Polly.Aria-Neural" language="en-NZ">\n'
-    '        Perfect! I\'ve updated your pickup location.\n'
-    '        Your taxi will pick you up and take you to ' + str(updated_booking.get('destination', '')) + '.\n'
-    '        We appreciate your booking with Kiwi Cabs. Have a great day.\n'
-    '    </Say>\n'
-    '    <Hangup/>\n'
-    '</Response>'
-)
-            # Start background thread
-            threading.Thread(
-                target=background_pickup_modification,
-                args=(caller_number, updated_booking, original_booking),
-                daemon=True
-            ).start()
-
+            updated_booking["time"] = nz_time_str
+            booking_storage[caller_number] = updated_booking
+            
+            # Convert time to nice speech format
+            nice_time = booking_time.strftime("%I:%M %p").lstrip("0").lower()
+            nice_date = booking_time.strftime("%A, %d %B").replace(" 0", " ")
+            
+            # Return success response
+            immediate_response = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<Response>\n'
+                '    <Say voice="Polly.Aria-Neural" language="en-NZ">\n'
+                '        Perfect! I\'ve updated your time to ' + nice_time + ' on ' + nice_date + '.\n'
+                '        Your taxi will pick you up at this new time.\n'
+                '        Your new booking reference is ' + str(new_order_id[-6:]) + '.\n'
+                '        We appreciate your booking with Kiwi Cabs. Have a great day.\n'
+                '    </Say>\n'
+                '    <Hangup/>\n'
+                '</Response>'
+            )
             return Response(immediate_response, mimetype="text/xml")
-        
-        # Handle time changes
-        elif intent == "change_time" and new_value:
-            print(f"🕒 Changing booking time to: {new_value}")
-            
-            try:
-                # Use improved time parsing
-                booking_time = parse_natural_language_time(new_value)
-                
-                # Format for the API
-                nz_time_str = booking_time.strftime('%Y-%m-%d %H:%M:%S')
-                
-                # Get Unix timestamp
-                unix_timestamp = int(booking_time.timestamp())
-                
-                # Log the parsed time values
-                print(f"🛠️ User requested: {new_value}")
-                print(f"🛠️ NZ booking time: {nz_time_str}")
-                print(f"🛠️ Unix timestamp: {unix_timestamp}")
-                
-                # Call our new function to cancel and create a new booking
-                new_order_id = cancel_and_recreate_booking(order_id, nz_time_str, caller_number)
-                
-                if new_order_id:
-                    # Update booking storage
-                    updated_booking = original_booking.copy()
-                    updated_booking["time"] = nz_time_str
-                    booking_storage[caller_number] = updated_booking
-                    
-                    # Convert time to nice speech format
-                    nice_time = booking_time.strftime("%I:%M %p").lstrip("0").lower()
-                    nice_date = booking_time.strftime("%A, %d %B").replace(" 0", " ")
-                    
-                    # Return success response
-                    immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I\'ve updated your time to {nice_time} on {nice_date}.
-        Your taxi will pick you up at this new time.
-        Your new booking reference is {new_order_id[-6:]}.
-        We appreciate your booking with Kiwi Cabs. Have a great day.
-    </Say>
-    <Hangup/>
-</Response>"""
-                    return Response(immediate_response, mimetype="text/xml")
-                else:
-                    # Handle error in creating new booking
-                    error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+        else:
+            # Handle error in creating new booking
+            error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
-                    return Response(error_xml, mimetype="text/xml")
-            except Exception as e:
-                print(f"❌ Error while updating booking time: {str(e)}")
-                error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+            return Response(error_xml, mimetype="text/xml")
+    except Exception as e:
+        print(f"❌ Error while updating booking time: {str(e)}")
+        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
-                return Response(error_xml, mimetype="text/xml")
+        return Response(error_xml, mimetype="text/xml")
         
-        # Handle cancellation
-        elif intent == "cancel":
-            print(f"🚫 Cancelling booking with order ID: {order_id}")
+# Handle cancellation
+elif intent == "cancel":
+    print(f"🚫 Cancelling booking with order ID: {order_id}")
+    
+    try:
+        # Call TaxiCaller API to cancel booking
+        # Assuming you have a function like this - replace with your actual API call
+        cancel_result = {"status": "success"}  # Replace with actual API call
+        
+        if cancel_result and cancel_result.get("status") == "success":
+            # Update booking storage to mark as cancelled
+            updated_booking = original_booking.copy()
+            updated_booking["status"] = "cancelled"
+            booking_storage[caller_number] = updated_booking
             
-            try:
-                # Call TaxiCaller API to cancel booking
-                # Assuming you have a function like this - replace with your actual API call
-                cancel_result = {"status": "success"}  # Replace with actual API call
-                
-                if cancel_result and cancel_result.get("status") == "success":
-                    # Update booking storage to mark as cancelled
-                    updated_booking = original_booking.copy()
-                    updated_booking["status"] = "cancelled"
-                    booking_storage[caller_number] = updated_booking
-                    
-                    # Return success response
-                    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+            # Return success response
+    response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I've cancelled your taxi booking. Your booking with reference {order_id} has been cancelled successfully.
+        I've cancelled your taxi booking. Your booking has been cancelled successfully.
         Thank you for using our service.
     </Say>
     <Hangup/>
 </Response>"""
-                    return Response(response, mimetype="text/xml")
-                else:
-                    # Handle API error
-                    error_msg = cancel_result.get("message", "Unknown error") if cancel_result else "Failed to connect to booking system"
-                    print(f"❌ Failed to cancel booking: {error_msg}")
+            return Response(response, mimetype="text/xml")
+        else:
+            # Handle API error
+            error_msg = cancel_result.get("message", "Unknown error") if cancel_result else "Failed to connect to booking system"
+            print(f"❌ Failed to cancel booking: {error_msg}")
                     
                     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
