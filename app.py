@@ -2123,15 +2123,17 @@ elif intent == "change_pickup" and new_value:
             updated_booking = original_booking.copy()
             updated_booking["pickup_address"] = exact_address
 
-immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I\'ve updated your pickup location.
-        Your taxi will pick you up and take you to {updated_booking.get('destination', '')}.
-        We appreciate your booking with Kiwi Cabs. Have a great day.
-    </Say>
-    <Hangup/>
-</Response>"""
+immediate_response = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<Response>\n'
+    '    <Say voice="Polly.Aria-Neural" language="en-NZ">\n'
+    '        Perfect! I\'ve updated your pickup location.\n'
+    '        Your taxi will pick you up and take you to ' + str(updated_booking.get('destination', '')) + '.\n'
+    '        We appreciate your booking with Kiwi Cabs. Have a great day.\n'
+    '    </Say>\n'
+    '    <Hangup/>\n'
+    '</Response>'
+)
             # Start background thread
             threading.Thread(
                 target=background_pickup_modification,
