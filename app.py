@@ -2179,7 +2179,7 @@ immediate_response = (
                     immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your time to {nice_time} on {nice_date}.
+        Perfect! I\'ve updated your time to {nice_time} on {nice_date}.
         Your taxi will pick you up at this new time.
         Your new booking reference is {new_order_id[-6:]}.
         We appreciate your booking with Kiwi Cabs. Have a great day.
