@@ -2247,29 +2247,65 @@ elif intent == "cancel":
     <Hangup/>
 </Response>"""
             return Response(response, mimetype="text/xml")
-            except Exception as e:
-                print(f"❌ Error while cancelling booking: {str(e)}")
-                
-                response = f"""<?xml version="1.0" encoding="UTF-8"?>
+    try:
+    # Your existing code for cancellation or booking changes
+    # Keep all the logic inside the try block
+    
+    if cancel_result and cancel_result.get("status") == "success":
+        # Update booking storage to mark as cancelled
+        updated_booking = original_booking.copy()
+        updated_booking["status"] = "cancelled"
+        booking_storage[caller_number] = updated_booking
+        
+        # Return success response
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I've cancelled your taxi booking. Your booking has been cancelled successfully.
+        Thank you for using our service.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+    else:
+        # Handle API error
+        error_msg = cancel_result.get("message", "Unknown error") if cancel_result else "Failed to connect to booking system"
+        print(f"❌ Failed to cancel booking: {error_msg}")
+        
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I'm sorry, there was a problem cancelling your booking. Please try again later or contact our customer service.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+        
+except Exception as e:
+    print(f"❌ Error while cancelling booking: {str(e)}")
+    
+    response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I'm sorry, I encountered an error while trying to cancel your booking. Please try again later or contact our customer service.
     </Say>
     <Hangup/>
 </Response>"""
-                return Response(response, mimetype="text/xml")
-    else:
-        # Handle error in creating new booking
-        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    return Response(response, mimetype="text/xml")
+
+# Handle error in creating new booking (this should be part of a different condition in your code)
+def handle_booking_error():
+    error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
-        return Response(error_xml, mimetype="text/xml")
-    
-    # If AI couldn't understand the request with high confidence
+    return Response(error_xml, mimetype="text/xml")
+
+# AI couldn't understand the request (this should be part of your fallback logic)
+def handle_unclear_request():
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
@@ -2281,7 +2317,6 @@ elif intent == "cancel":
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
-    
     return Response(response, mimetype="text/xml")
 
 @app.route("/process_modification_smart", methods=["POST"])
