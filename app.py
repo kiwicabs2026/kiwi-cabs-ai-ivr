@@ -2123,13 +2123,11 @@ elif intent == "change_pickup" and new_value:
             updated_booking = original_booking.copy()
             updated_booking["pickup_address"] = exact_address
 
-#IMMEDIATE response
 immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your pickup to {speech_address}.
-        Your taxi will now pick you up from {speech_address}
-        and take you to {updated_booking.get('destination', '')}.
+        Perfect! I\'ve updated your pickup location.
+        Your taxi will pick you up and take you to {updated_booking.get('destination', '')}.
         We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
