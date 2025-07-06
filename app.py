@@ -1573,14 +1573,13 @@ def background_time_modification(caller_number, updated_booking, original_bookin
         else:
             print("❌ NO ORDER ID FOUND - cannot modify booking")
             
+        print("✅ BACKGROUND: Time modification completed")
         return True
     except Exception as e:
-        print(f"❌ ERROR in time modification: {str(e)}")
+        print(f"❌ BACKGROUND: Time modification error: {str(e)}")
         return False
 
-        print("✅ BACKGROUND: Time modification completed")
-    except Exception as e:
-        print(f"❌ BACKGROUND: Time modification error: {str(e)}")
+
 def parse_booking_speech(speech_text):
     """STEP 3: Parse booking details from speech input"""
     booking_data = {
@@ -1819,7 +1818,7 @@ def parse_booking_speech(speech_text):
                     time_str = match.group(1).strip()
                     time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
                 if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")  # ← ADD 4 SPACES HERE
+                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
                 
                 # Convert to 24-hour format for timestamp calculation
                 if "PM" in time_str and not time_str.startswith("12"):
@@ -1985,17 +1984,17 @@ def process_modification_smart(request):
         return redirect_to("/modify_booking")
 
     # Robustly get the order ID for modification
-if caller_number in booking_storage:
-    booking_data = booking_storage[caller_number]
-    
-    # If it's a dictionary (old format), try to get the ID from it
-    if isinstance(booking_data, dict):
-        order_id = booking_data.get("taxicaller_order_id") or booking_data.get("order_id")
+    if caller_number in booking_storage:
+        booking_data = booking_storage[caller_number]
+        
+        # If it's a dictionary (old format), try to get the ID from it
+        if isinstance(booking_data, dict):
+            order_id = booking_data.get("taxicaller_order_id") or booking_data.get("order_id")
+        else:
+            # If it's a string (new format), use it directly
+            order_id = booking_data
     else:
-        # If it's a string (new format), use it directly
-        order_id = booking_data
-else:
-    order_id = None
+        order_id = None
 
 print(f"DEBUG: order_id for modification: {order_id}")
 # If we can't find a valid order ID, abort and inform the user
