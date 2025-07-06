@@ -2224,8 +2224,8 @@ elif intent == "cancel":
             updated_booking["status"] = "cancelled"
             booking_storage[caller_number] = updated_booking
             
-            # Return success response
-    response = """<?xml version="1.0" encoding="UTF-8"?>
+                 # Return success response
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I've cancelled your taxi booking. Your booking has been cancelled successfully.
@@ -2238,15 +2238,15 @@ elif intent == "cancel":
             # Handle API error
             error_msg = cancel_result.get("message", "Unknown error") if cancel_result else "Failed to connect to booking system"
             print(f"❌ Failed to cancel booking: {error_msg}")
-                    
-                    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+            
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         I'm sorry, there was a problem cancelling your booking. Please try again later or contact our customer service.
     </Say>
     <Hangup/>
 </Response>"""
-                    return Response(response, mimetype="text/xml")
+            return Response(response, mimetype="text/xml")
             except Exception as e:
                 print(f"❌ Error while cancelling booking: {str(e)}")
                 
