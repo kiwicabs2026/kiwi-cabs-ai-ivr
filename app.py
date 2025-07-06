@@ -2161,7 +2161,7 @@ elif intent == "change_time" and new_value:
         print(f"🛠️ NZ booking time: {nz_time_str}")
         print(f"🛠️ Unix timestamp: {unix_timestamp}")
         
-        # Call our new function to cancel and create a new booking
+        # Call our new function to cancel and recreate a new booking
         new_order_id = cancel_and_recreate_booking(order_id, nz_time_str, caller_number)
         
         if new_order_id:
@@ -2190,26 +2190,12 @@ elif intent == "change_time" and new_value:
             return Response(immediate_response, mimetype="text/xml")
         else:
             # Handle error in creating new booking
-            error_xml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
-    </Say>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-            return Response(error_xml, mimetype="text/xml")
+            return handle_booking_error()
     except Exception as e:
         print(f"❌ Error while updating booking time: {str(e)}")
-        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
-    </Say>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-        return Response(error_xml, mimetype="text/xml")
+        return handle_booking_error()
         
-    # Handle cancellation
+# Handle cancellation
 elif intent == "cancel":
     print(f"🚫 Cancelling booking with order ID: {order_id}")
     
@@ -2258,47 +2244,9 @@ elif intent == "cancel":
     <Hangup/>
 </Response>"""
         return Response(response, mimetype="text/xml")
-
-# Handle error in creating new booking (this should be part of a different condition in your code)
-def handle_booking_error():
-    error_xml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
-    </Say>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-    return Response(error_xml, mimetype="text/xml")
-
-# AI couldn't understand the request (this should be part of your fallback logic)
-def handle_unclear_request():
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm not sure I understood what you want to change. 
-        Would you like to change your pickup location, destination, time, or cancel your booking?
-    </Say>
-    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what you'd like to change.</Say>
-    </Gather>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
-
-# AI couldn't understand the request (this should be part of your fallback logic)
-def handle_unclear_request():
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm not sure I understood what you want to change. 
-        Would you like to change your pickup location, destination, time, or cancel your booking?
-    </Say>
-    <Gather input="speech" action="/process_modification_smart" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what you'd like to change.</Say>
-    </Gather>
-    <Redirect>/modify_booking</Redirect>
-</Response>"""
-    return Response(response, mimetype="text/xml")
+else:
+    # AI couldn't understand the request
+    return handle_unclear_request()
 
 @app.route("/process_modification_smart", methods=["POST"])
 def process_modification_smart_route():
