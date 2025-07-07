@@ -314,8 +314,44 @@ def transcribe_with_google(audio_url):
             use_enhanced=True,
         )
 
-def transcribe_with_google(audio, config):
+def transcribe_with_google(audio_url):
+    """Fetch audio, send to Google Speech, return transcript + confidence"""
+    if not GOOGLE_SPEECH_AVAILABLE or not google_speech_client:
+        print("❌ Google Speech client not available")
+        return None, 0
+
     try:
+        print(f"🎤 Fetching audio from: {audio_url}")
+        response = requests.get(audio_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
+        if response.status_code != 200:
+            print(f"❌ Failed to download audio: {response.status_code}")
+            return None, 0
+
+        audio_content = response.content
+        print(f"✅ Downloaded audio: {len(audio_content)} bytes")
+
+        audio = speech.RecognitionAudio(content=audio_content)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=8000,
+            language_code="en-NZ",
+            enable_automatic_punctuation=True,
+            enable_word_confidence=True,
+            speech_contexts=[
+                speech.SpeechContext(
+                    phrases=[
+                        "Willis Street", "Cuba Street", "Lambton Quay", "Wellington Station",
+                        "Te Papa", "Airport", "Victoria University", "Petone", "Kelburn", "Karori",
+                        "Miramar", "Upper Hutt", "Lower Hutt", "Newtown", "Oriental Parade"
+                    ],
+                    boost=20.0,
+                )
+            ],
+            max_alternatives=3,
+            model="phone_call",
+            use_enhanced=True,
+        )
+
         print("🔄 Sending to Google Speech API...")
         response = google_speech_client.recognize(config=config, audio=audio)
 
@@ -334,19 +370,6 @@ def transcribe_with_google(audio, config):
         print(f"❌ Google Speech Error: {str(e)}")
         return None, 0
 
-
-def get_taxicaller_jwt():
-    print("🚀 Starting get_taxicaller_jwt()")
-    if (
-        TAXICALLER_JWT_CACHE["token"]
-        and time.time() < TAXICALLER_JWT_CACHE["expires_at"]
-    ):
-        print("📌 Using cached JWT token")
-        return TAXICALLER_JWT_CACHE["token"]
-
-    if not TAXICALLER_API_KEY:
-        print("❌ No TaxiCaller API key configured - skipping JWT")
-        return None
 
     try:
         jwt_endpoints = [
