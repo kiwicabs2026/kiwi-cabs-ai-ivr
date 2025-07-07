@@ -333,6 +333,7 @@ except Exception as e:
     print(f"❌ Google Speech Error: {str(e)}")
     return None, 0
 
+
 def get_taxicaller_jwt():
     print("🚀 Starting get_taxicaller_jwt()")
     if (
