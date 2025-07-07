@@ -315,26 +315,27 @@ def transcribe_with_google(audio_url):
         )
 
 # ==== Part2.py ====
- print("🔄 Sending to Google Speech API...")
-        response = google_speech_client.recognize(config=config, audio=audio)
+print("🔄 Sending to Google Speech API...")
 
-        if response.results:
-            best_result = response.results[0].alternatives[0]
-            confidence = best_result.confidence
-            transcript = best_result.transcript
+try:
+    response = google_speech_client.recognize(config=config, audio=audio)
 
-            print(
-                f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})"
-            )
-            return transcript, confidence
-        else:
-            print("❌ No speech detected by Google")
-            return None, 0
+    if response.results:
+        best_result = response.results[0].alternatives[0]
+        confidence = best_result.confidence
+        transcript = best_result.transcript
 
-    except Exception as e:
-        print(f"❌ Google Speech Error: {str(e)}")
+        print(
+            f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})"
+        )
+        return transcript, confidence
+    else:
+        print("❌ No speech detected by Google")
         return None, 0
 
+except Exception as e:
+    print(f"❌ Google Speech Error: {str(e)}")
+    return None, 0
 
 def get_taxicaller_jwt():
     print("🚀 Starting get_taxicaller_jwt()")
