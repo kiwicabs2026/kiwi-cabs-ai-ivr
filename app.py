@@ -2579,11 +2579,11 @@ def process_booking_with_google():
     if not recording_url:
         return redirect_to("/book_taxi")
 
-    # Try Google transcription
-    transcript, confidence = transcribe_with_google(recording_url)
+# Try Google transcription
+transcript, confidence = transcribe_with_google(recording_url, config)
 
-    if transcript and confidence > 0.5:
-        print(f"✅ Google transcript: {transcript} (confidence: {confidence:.2f})")
+if transcript and confidence > 0.5:
+    print(f"✅ Google transcript: {transcript} (confidence: {confidence:.2f})")
 
         # Create fake request data for processing
         from werkzeug.datastructures import ImmutableMultiDict
