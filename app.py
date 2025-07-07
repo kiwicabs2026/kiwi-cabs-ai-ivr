@@ -316,26 +316,25 @@ def transcribe_with_google(audio_url):
 
 # ==== Part2.py ====
 print("🔄 Sending to Google Speech API...")
+        response = google_speech_client.recognize(config=config, audio=audio)
 
-try:
-    response = google_speech_client.recognize(config=config, audio=audio)
+        if response.results:
+            best_result = response.results[0].alternatives[0]
+            confidence = best_result.confidence
+            transcript = best_result.transcript
 
-    if response.results:
-        best_result = response.results[0].alternatives[0]
-        confidence = best_result.confidence
-        transcript = best_result.transcript
+            print(
+                f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})"
+            )
+            return transcript, confidence
+        else:
+            print("❌ No speech detected by Google")
+            return None, 0
 
-        print(
-            f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})"
-        )
-        return transcript, confidence
-    else:
-        print("❌ No speech detected by Google")
+    except Exception as e:
+        print(f"❌ Google Speech Error: {str(e)}")
         return None, 0
 
-except Exception as e:
-    print(f"❌ Google Speech Error: {str(e)}")
-    return None, 0
 
 def get_taxicaller_jwt():
     print("🚀 Starting get_taxicaller_jwt()")
@@ -592,10 +591,10 @@ def resolve_wellington_poi_to_address(place_name):
                     print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
                     clean_address = clean_address_for_speech(place_address)
                     return {
-                         "full_address": place_address,
-                         "poi_name": place_actual_name,
-                         "clean_address": clean_address,
-                         "speech": f"{place_actual_name} at {clean_address}"
+                        "full_address": place_address,
+                        "poi_name": place_actual_name,
+                        "clean_address": clean_address,
+                        "speech": f"{place_actual_name} at {clean_address}"
                     }
 
 # ==== Part3.py ====
@@ -1943,7 +1942,7 @@ def process_modification_smart(request):
 </Response>"""
 
 # ==== Part7.py ====
-   # Start background thread
+# Start background thread
                 threading.Thread(
                     target=background_destination_modification,
                     args=(caller_number, updated_booking, original_booking),
@@ -2663,9 +2662,9 @@ def confirm_booking():
                 # Update or insert customer
                 cur.execute(
                     """INSERT INTO customers (phone_number, name) 
-                       VALUES (%s, %s) 
-                       ON CONFLICT (phone_number) 
-                       DO UPDATE SET name = EXCLUDED.name, total_bookings = customers.total_bookings + 1""",
+                    VALUES (%s, %s) 
+                    ON CONFLICT (phone_number) 
+                    DO UPDATE SET name = EXCLUDED.name, total_bookings = customers.total_bookings + 1""",
                     (caller_number, booking_data["name"]),
                 )
 
@@ -2705,10 +2704,10 @@ def confirm_booking():
 
                 cur.execute(
                     """INSERT INTO bookings 
-                       (customer_phone, customer_name, pickup_location, dropoff_location, 
+                    (customer_phone, customer_name, pickup_location, dropoff_location, 
                         scheduled_time, status, booking_reference, raw_speech, 
                         pickup_date, pickup_time, created_via) 
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         caller_number,
                         booking_data["name"],
@@ -2888,8 +2887,8 @@ def modify_booking():
             cur = conn.cursor()
             cur.execute(
                 """SELECT * FROM bookings 
-                   WHERE customer_phone = %s AND status = 'confirmed' 
-                   ORDER BY booking_time DESC LIMIT 1""",
+                WHERE customer_phone = %s AND status = 'confirmed' 
+                ORDER BY booking_time DESC LIMIT 1""",
                 (caller_number,),
             )
             db_booking = cur.fetchone()
@@ -3084,8 +3083,8 @@ def modify_booking():
             cur = conn.cursor()
             cur.execute(
                 """SELECT * FROM bookings 
-                   WHERE customer_phone = %s AND status = 'confirmed' 
-                   ORDER BY booking_time DESC LIMIT 1""",
+                WHERE customer_phone = %s AND status = 'confirmed' 
+                ORDER BY booking_time DESC LIMIT 1""",
                 (caller_number,),
             )
             db_booking = cur.fetchone()
