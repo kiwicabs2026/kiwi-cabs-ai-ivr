@@ -328,7 +328,6 @@ def transcribe_with_google(audio_url):
         print(f"❌ Google Speech Error: {str(e)}")
         return None, 0
 
-
     try:
         jwt_endpoints = [
             "https://api-rc.taxicaller.net/api/v1/jwt/for-key",
