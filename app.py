@@ -320,9 +320,9 @@ try:
     response = google_speech_client.recognize(config=config, audio=audio)
 
     if response.results:
-        best_result = response.results[0].alternatives[0]
-        confidence = best_result.confidence
-        transcript = best_result.transcript
+    best_result = response.results[0].alternatives[0]
+    confidence = best_result.confidence
+    transcript = best_result.transcript
 
         print(f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})")
         return transcript, confidence
@@ -333,6 +333,7 @@ try:
 except Exception as e:
     print(f"❌ Google Speech Error: {str(e)}")
     return None, 0
+
 
 def get_taxicaller_jwt():
     print("🚀 Starting get_taxicaller_jwt()")
