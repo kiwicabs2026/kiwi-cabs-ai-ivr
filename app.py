@@ -1300,11 +1300,11 @@ def background_pickup_modification(caller_number, updated_booking, original_book
     """Background process to modify pickup location"""
     try:
         print("✅ BACKGROUND: Starting pickup modification...")
-        
+
         # Get order ID from storage
         stored_booking = booking_storage.get(caller_number, {})
         old_order_id = stored_booking.get("taxicaller_order_id")
-        
+
         # Fallback to original booking if not in storage
         if not old_order_id and original_booking:
             old_order_id = original_booking.get("taxicaller_order_id")
@@ -1314,11 +1314,11 @@ def background_pickup_modification(caller_number, updated_booking, original_book
             # Cancel and recreate for pickup changes
             print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
-            
+
             if cancel_success:
                 print("✅ OLD BOOKING CANCELLED")
                 time.sleep(2)  # Adding delay after cancellation
-                
+
                 # Create new booking with new pickup
                 updated_booking["modified_at"] = datetime.now().isoformat()
                 updated_booking["ai_modified"] = True
@@ -1333,7 +1333,7 @@ def background_pickup_modification(caller_number, updated_booking, original_book
                 print("❌ CANCEL FAILED - manual intervention needed")
         else:
             print("❌ NO ORDER ID FOUND for pickup change")
-            
+
         print("✅ BACKGROUND: Pickup modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
@@ -1357,27 +1357,26 @@ def background_time_modification(caller_number, updated_booking, original_bookin
             print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
             # Format the datetime string properly for API
             current_date = datetime.now().strftime("%Y-%m-%d")
-            
-                        # Fix time format - ensure leading zeros and add seconds
+
             try:
                 # Get current UTC time and calculate NZ time
                 now_utc = datetime.now()
                 now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
-                
+
                 print(f"🕒 Current UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"🕒 Current NZ: {now_nz.strftime('%Y-%m-%d %H:%M:%S')}")
-                
+
                 # Parse the time value
                 if ":" in new_value:
                     time_parts = new_value.split(":")
                     hour = int(time_parts[0])
                     minute = 0
-                    
+
                     if len(time_parts) > 1:
                         # Handle "5:30" or "5:30 AM" format
                         minute_part = time_parts[1].split()
                         minute = int(minute_part[0])
-                        
+
                         # Handle AM/PM
                         if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
                             hour += 12
@@ -1385,31 +1384,31 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                     # Handle simple hour format like "5"
                     hour = int(new_value)
                     minute = 0
-                
+
                 # Set date for booking in NZ time
                 booking_date_nz = now_nz.strftime('%Y-%m-%d')
-                
+
                 # Create booking time in NZ
                 booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
-                
+
                 # If time is in the past for today in NZ, assume tomorrow
                 if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
                     booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
                     print(f"⏰ Time appears to be for tomorrow")
-                
+
                 # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
                 booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
-                
+
                 # Format times for display and API
                 time_str = booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
                 print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"🛠️ UTC for API: {time_str}")
-                
+
                 # Check if booking has sufficient notice (20+ minutes)
                 time_diff_minutes = (booking_time_nz_naive - now_nz).total_seconds() / 60
-                
+
                 if time_diff_minutes < 20:
                     print(f"⚠️ Notice too short: {time_diff_minutes:.1f} min (min 20 min)")
                     adjusted_time_nz = now_nz + timedelta(minutes=25)
@@ -1420,7 +1419,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                 print(f"⚠️ Time parsing error: {parse_error}, using default format")
                 # Fallback in case of parsing error
                 time_str = f"{current_date} {new_value.strip()}:00" if ":" in new_value else f"{current_date} {new_value.strip()}:00:00"
-            
+
             edit_success = edit_taxicaller_booking(old_order_id, time_str, updated_booking)
             if edit_success:
                 print("✅ BOOKING TIME EDITED SUCCESSFULLY")
@@ -1447,55 +1446,13 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                     print("❌ Cannot find order ID for time modification")
         else:
             print("❌ NO ORDER ID FOUND - cannot modify booking")
-            
-        return True
-    except Exception as e:
-        print(f"❌ ERROR in time modification: {str(e)}")
-        return False
 
         print("✅ BACKGROUND: Time modification completed")
+        return True
     except Exception as e:
         print(f"❌ BACKGROUND: Time modification error: {str(e)}")
-def parse_booking_speech(speech_text):
-    """STEP 3: Parse booking details from speech input"""
-    booking_data = {
-        "name": "",
-        "pickup_address": "",
-        "destination": "",
-        "pickup_time": "",
-        "pickup_date": "",
-        "raw_speech": speech_text,
-    }
-    # Extract weekdays (Monday, Tuesday, ...)
-    from datetime import datetime, timedelta
+        return False
 
-    weekdays = {
-        "monday": 0,
-        "tuesday": 1,
-        "wednesday": 2,
-        "thursday": 3,
-        "friday": 4,
-        "saturday": 5,
-        "sunday": 6,
-    }
-
-    # Check for weekday mentioned explicitly
-    for day_name, day_index in weekdays.items():
-        if day_name in speech_text.lower():
-            today_weekday = datetime.now().weekday()
-            days_ahead = day_index - today_weekday
-            if days_ahead <= 0:  # if mentioned day is today or passed, move to next week
-                days_ahead += 7
-            pickup_date = datetime.now() + timedelta(days=days_ahead)
-            booking_data["pickup_date"] = pickup_date.strftime("%d/%m/%Y")
-            break
-
-    # Extract name
-    name_patterns = [
-        r"(?:my name is|i am|this is|it's)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
-        r"^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b(?!\s+(?:Street|Road|Avenue|Lane|Drive))",
-        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b(?!\s+(?:Street|Road|Avenue|Lane|Drive))\s+from",
-    ]
 
     import re
     for pattern in name_patterns:
