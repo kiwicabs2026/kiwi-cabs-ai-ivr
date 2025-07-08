@@ -236,14 +236,13 @@ if GOOGLE_SPEECH_AVAILABLE:
 
 
 def transcribe_with_google(audio_url):
-    """Use Google Speech for better transcription"""
+    """Fetch audio, send to Google Speech, return transcript + confidence"""
     if not GOOGLE_SPEECH_AVAILABLE or not google_speech_client:
         print("❌ Google Speech client not available")
         return None, 0
 
     try:
         print(f"🎤 Fetching audio from: {audio_url}")
-
         response = requests.get(audio_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
         if response.status_code != 200:
             print(f"❌ Failed to download audio: {response.status_code}")
@@ -262,7 +261,9 @@ def transcribe_with_google(audio_url):
             speech_contexts=[
                 speech.SpeechContext(
                     phrases=[
-                        # ... (long phrase list here)
+                        "Willis Street", "Cuba Street", "Lambton Quay", "Wellington Station",
+                        "Te Papa", "Airport", "Victoria University", "Petone", "Kelburn", "Karori",
+                        "Miramar", "Upper Hutt", "Lower Hutt", "Newtown", "Oriental Parade"
                     ],
                     boost=20.0,
                 )
@@ -272,20 +273,24 @@ def transcribe_with_google(audio_url):
             use_enhanced=True,
         )
 
-def transcribe_with_google(audio_url):
-    """Fetch audio, send to Google Speech, return transcript + confidence"""
-    if not GOOGLE_SPEECH_AVAILABLE or not google_speech_client:
-        print("❌ Google Speech client not available")
-        return None, 0
+        print("🔄 Sending to Google Speech API...")
+        response = google_speech_client.recognize(config=config, audio=audio)
 
-    try:
-        print(f"🎤 Fetching audio from: {audio_url}")
-        response = requests.get(audio_url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
-        if response.status_code != 200:
-            print(f"❌ Failed to download audio: {response.status_code}")
+        if response.results:
+            best_result = response.results[0].alternatives[0]
+            confidence = best_result.confidence
+            transcript = best_result.transcript
+
+            print(f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})")
+            return transcript, confidence
+        else:
+            print("❌ No speech detected by Google")
             return None, 0
 
-        audio_content = response.content
+    except Exception as e:
+        print(f"❌ Google Speech Error: {str(e)}")
+        return None, 0
+
         print(f"✅ Downloaded audio: {len(audio_content)} bytes")
 
         audio = speech.RecognitionAudio(content=audio_content)
@@ -1084,31 +1089,35 @@ def background_destination_modification(caller_number, updated_booking, original
             print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
 
-            if cancel_success:
-                print("✅ OLD BOOKING CANCELLED")
-                time.sleep(2)  # Adding delay after cancellation
+if cancel_success:
+    print("✅ OLD BOOKING CANCELLED")
+    time.sleep(2)  # Adding delay after cancellation
 
-                # Create new booking with new destination
-                updated_booking["modified_at"] = datetime.now().isoformat()
-                updated_booking["ai_modified"] = True
-                booking_storage[caller_number] = updated_booking
-                success, response = send_booking_to_api(updated_booking, caller_number)
+    # Create new booking with new destination
+    updated_booking["modified_at"] = datetime.now().isoformat()
+    updated_booking["ai_modified"] = True
+    success, response = send_booking_to_api(updated_booking, caller_number)
 
-                if success:
-                    print("✅ NEW BOOKING CREATED with new destination")
-                else:
-                    print("❌ NEW BOOKING FAILED")
-            else:
-                print("❌ CANCEL FAILED - manual intervention needed")
-        else:
-            print("❌ NO ORDER ID FOUND for destination change")
+    if success:
+        print("✅ NEW BOOKING CREATED with new destination")
+        # ✅ Store new order ID for future modifications
+        if response and "orderId" in response:
+            updated_booking["taxicaller_order_id"] = response["orderId"]
+            booking_storage[caller_number] = updated_booking
+    else:
+        print("❌ NEW BOOKING FAILED")
+else:
+    print("❌ CANCEL FAILED - manual intervention needed")
 
         print("✅ BACKGROUND: Destination modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
+
+
 def cancel_and_recreate_booking(old_order_id, new_time, phone):
     """Cancel existing booking and create new one with updated time"""
     print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new time {new_time}")
+
     
     # Get existing booking details from TaxiCaller
     try:
