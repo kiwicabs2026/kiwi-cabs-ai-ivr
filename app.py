@@ -3011,4 +3011,6 @@ def confirm_cancellation():
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
+
     return Response(response, mimetype="text/xml")
+
