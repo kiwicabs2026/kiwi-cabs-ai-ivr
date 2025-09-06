@@ -14,9 +14,6 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
 import pytz 
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
