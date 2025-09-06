@@ -1,4 +1,4 @@
-# ==== Part1.py ====
+
 import os
 import sys
 import requests
@@ -14,6 +14,9 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
 import pytz 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
@@ -286,57 +289,20 @@ def transcribe_with_google(audio_url):
         else:
             print("❌ No speech detected by Google")
             return None, 0
-
     except Exception as e:
         print(f"❌ Google Speech Error: {str(e)}")
         return None, 0
 
-        print(f"✅ Downloaded audio: {len(audio_content)} bytes")
+def get_taxicaller_jwt():
+    """Generate or retrieve a cached JWT token from TaxiCaller."""
+    if (
+        TAXICALLER_JWT_CACHE.get("token")
+        and TAXICALLER_JWT_CACHE.get("expires_at", 0) > time.time()
+    ):
+        print("✅ Using cached JWT token")
+        return TAXICALLER_JWT_CACHE["token"]
 
-        audio = speech.RecognitionAudio(content=audio_content)
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-            sample_rate_hertz=8000,
-            language_code="en-NZ",
-            enable_automatic_punctuation=True,
-            enable_word_confidence=True,
-            speech_contexts=[
-                speech.SpeechContext(
-                    phrases=[
-                        "Willis Street", "Cuba Street", "Lambton Quay", "Wellington Station",
-                        "Te Papa", "Airport", "Victoria University", "Petone", "Kelburn", "Karori",
-                        "Miramar", "Upper Hutt", "Lower Hutt", "Newtown", "Oriental Parade"
-                    ],
-                    boost=20.0,
-                )
-            ],
-            max_alternatives=3,
-            model="phone_call",
-            use_enhanced=True,
-        )
-
-        print("🔄 Sending to Google Speech API...")
-        response = google_speech_client.recognize(config=config, audio=audio)
-
-    print("🔄 Sending to Google Speech API...")
-    response = google_speech_client.recognize(config=config, audio=audio)
-
-    if response.results:
-        best_result = response.results[0].alternatives[0]
-        confidence = best_result.confidence
-        transcript = best_result.transcript
-
-        print(f"✅ GOOGLE SPEECH RESULT: {transcript} (confidence: {confidence:.2f})")
-        return transcript, confidence
-    else:
-        print("❌ No speech detected by Google")
-        return None, 0
-
-except Exception as e:
-    print(f"❌ Google Speech Error: {str(e)}")
-    return None, 0
-
-
+    print("🔄 Generating new JWT token...")
     try:
         jwt_endpoints = [
             "https://api-rc.taxicaller.net/api/v1/jwt/for-key",
@@ -358,13 +324,12 @@ except Exception as e:
                     return jwt_token
                 else:
                     print(f"❌ Failed JWT endpoint {jwt_url}: {response.status_code}")
-    except Exception as e:
+            except Exception as e:
                 print(f"❌ JWT endpoint {jwt_url} error: {str(e)}")
                 continue
 
         print("❌ All JWT endpoints failed")
         return None
-
     except Exception as e:
         print(f"❌ Error generating JWT: {str(e)}")
         return None
@@ -584,9 +549,7 @@ def resolve_wellington_poi_to_address(place_name):
                         "clean_address": clean_address,
                         "speech": f"{place_actual_name} at {clean_address}"
                     }
-
-# ==== Part3.py ====
-except Exception as e:
+            except Exception as e:
                 print(f"⚠️ Places search failed for {query}: {e}")
                 continue
         
@@ -1089,25 +1052,25 @@ def background_destination_modification(caller_number, updated_booking, original
             print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
 
-if cancel_success:
-    print("✅ OLD BOOKING CANCELLED")
-    time.sleep(2)  # Adding delay after cancellation
+            if cancel_success:
+                print("✅ OLD BOOKING CANCELLED")
+                time.sleep(2)  # Adding delay after cancellation
 
-    # Create new booking with new destination
-    updated_booking["modified_at"] = datetime.now().isoformat()
-    updated_booking["ai_modified"] = True
-    success, response = send_booking_to_api(updated_booking, caller_number)
+                # Create new booking with new destination
+                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["ai_modified"] = True
+                success, response = send_booking_to_api(updated_booking, caller_number)
 
-    if success:
-        print("✅ NEW BOOKING CREATED with new destination")
-        # ✅ Store new order ID for future modifications
-        if response and "orderId" in response:
-            updated_booking["taxicaller_order_id"] = response["orderId"]
-            booking_storage[caller_number] = updated_booking
-    else:
-        print("❌ NEW BOOKING FAILED")
-else:
-    print("❌ CANCEL FAILED - manual intervention needed")
+                if success:
+                    print("✅ NEW BOOKING CREATED with new destination")
+                    # ✅ Store new order ID for future modifications
+                    if response and "orderId" in response:
+                        updated_booking["taxicaller_order_id"] = response["orderId"]
+                        booking_storage[caller_number] = updated_booking
+                else:
+                    print("❌ NEW BOOKING FAILED")
+            else:
+                print("❌ CANCEL FAILED - manual intervention needed")
 
         print("✅ BACKGROUND: Destination modification completed")
     except Exception as e:
@@ -1463,7 +1426,25 @@ def background_time_modification(caller_number, updated_booking, original_bookin
         return False
 
 
-    import re
+def parse_booking_speech(speech_text):
+    """Parse booking speech using regex to extract details."""
+    booking_data = {
+        "name": "",
+        "pickup_address": "",
+        "destination": "",
+        "pickup_time": "",
+        "pickup_date": "",
+        "raw_speech": speech_text,
+    }
+
+    # Extract name
+    name_patterns = [
+        r"my name is\s+([^,]+)",
+        r"i'm\s+([^,]+)",
+        r"i am\s+([^,]+)",
+        r"it's\s+([^,]+)",
+    ]
+
     for pattern in name_patterns:
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
@@ -1677,7 +1658,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
 
-# ==== Part6.py ====
+
 # Clean and validate pickup address
     if booking_data.get('pickup_address'):
         pickup = booking_data['pickup_address']
@@ -1890,7 +1871,7 @@ def process_modification_smart(request):
     <Hangup/>
 </Response>"""
 
-# ==== Part7.py ====
+
 # Start background thread
                 threading.Thread(
                     target=background_destination_modification,
@@ -2114,7 +2095,7 @@ def menu():
     else:
         return redirect_to("/voice")
 
-# ==== Part8.py ====
+
 @app.route("/book_taxi", methods=["POST"])
 def book_taxi():
     """Start taxi booking process - STEP-BY-STEP FLOW"""
@@ -2452,8 +2433,8 @@ def process_booking():
     </Gather>
 </Response>"""
 
-# ==== Part9.py ====
-elif current_step == "driver_instructions":
+
+    elif current_step == "driver_instructions":
         # Process driver instructions
         instructions = speech_data.strip()
 
@@ -2529,11 +2510,11 @@ def process_booking_with_google():
     if not recording_url:
         return redirect_to("/book_taxi")
 
-# Try Google transcription
-transcript, confidence = transcribe_with_google(recording_url, config)
+    # Try Google transcription
+    transcript, confidence = transcribe_with_google(recording_url)
 
-if transcript and confidence > 0.5:
-    print(f"✅ Google transcript: {transcript} (confidence: {confidence:.2f})")
+    if transcript and confidence > 0.5:
+        print(f"✅ Google transcript: {transcript} (confidence: {confidence:.2f})")
 
         # Create fake request data for processing
         from werkzeug.datastructures import ImmutableMultiDict
@@ -2817,8 +2798,8 @@ def confirm_booking():
     <Redirect>/confirm_booking</Redirect>
 </Response>"""
 
-# ==== Part10.py ====
-return Response(response, mimetype="text/xml")
+    return Response(response, mimetype="text/xml")
+
 @app.route("/modify_booking", methods=["POST"])
 def modify_booking():
     """Handle booking modifications - AI powered with natural language"""
@@ -2962,6 +2943,7 @@ def confirm_cancellation():
     """Process cancellation confirmation"""
     speech_result = request.form.get("SpeechResult", "").lower()
     caller_number = request.form.get("From", "")
+    response = ""
 
     if any(word in speech_result for word in ["yes", "confirm", "cancel", "yeah"]):
         # Cancel booking
@@ -3012,200 +2994,21 @@ def confirm_cancellation():
     </Say>
     <Hangup/>
 </Response>"""
-
-# ==== Part11.py ====
-return Response(response, mimetype="text/xml")
-@app.route("/modify_booking", methods=["POST"])
-def modify_booking():
-    """Handle booking modifications - AI powered with natural language"""
-    call_sid = request.form.get("CallSid", "")
-    caller_number = request.form.get("From", "")
-
-    print(f"📞 Checking bookings for: {caller_number}")
-
-    # Check database first
-    conn = get_db_connection()
-    booking = None
-
-    if conn:
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """SELECT * FROM bookings 
-                WHERE customer_phone = %s AND status = 'confirmed' 
-                ORDER BY booking_time DESC LIMIT 1""",
-                (caller_number,),
-            )
-            db_booking = cur.fetchone()
-
-            if db_booking:
-                booking = {
-                    "name": db_booking["customer_name"],
-                    "pickup_address": db_booking["pickup_location"],
-                    "destination": db_booking["dropoff_location"],
-                    "pickup_date": db_booking["pickup_date"],
-                    "pickup_time": db_booking["pickup_time"],
-                    "status": db_booking["status"],
-                    "booking_reference": db_booking["booking_reference"],
-                }
-
-            cur.close()
-            conn.close()
-        except Exception as e:
-            print(f"❌ Database error: {e}")
-            if conn:
-                conn.close()
-
-    # Fallback to memory storage
-    if (
-        not booking
-        and caller_number in booking_storage
-        and booking_storage[caller_number].get("status") == "confirmed"
-    ):
-        booking = booking_storage[caller_number]
-
-    if booking:
-        # Store in session for modification
-        if call_sid not in user_sessions:
-            user_sessions[call_sid] = {}
-        user_sessions[call_sid]["modifying_booking"] = booking.copy()
-        user_sessions[call_sid]["caller_number"] = caller_number
-
-        # Format booking details
-        name = booking.get("name", "Customer")
-        pickup = booking.get("pickup_address", "")
-        destination = booking.get("destination", "")
-        pickup_date = booking.get("pickup_date", "")
-        pickup_time = booking.get("pickup_time", "")
-
-        # Build time string
-        time_str = ""
-        if pickup_time == "ASAP":
-            time_str = "as soon as possible"
-        elif pickup_date and pickup_time:
-            time_str = f"on {pickup_date} at {pickup_time}"
-        elif pickup_time:
-            time_str = f"at {pickup_time}"
-
-        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Hello {name}, I found your booking.
-        You have a taxi from {pickup} to {destination} {time_str}.
-        What would you like to change? You can change the time, pickup location, destination, or cancel the booking.
-        Go ahead, I am listening
+        I couldn't find a booking to cancel.
     </Say>
-    <Gather input="speech" 
-            action="/process_modification_smart" 
-            method="POST" 
-            timeout="20" 
-            language="en-NZ" 
-            speechTimeout="1">
-    </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
     else:
+        # Customer said no
         response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I couldn't find any active booking for your phone number.
-        Would you like to make a new booking?
+        Okay, I won't cancel your booking.
     </Say>
-    <Gather input="speech" action="/no_booking_found" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-    </Gather>
-</Response>"""
-
-    return Response(response, mimetype="text/xml")
-
-@app.route("/no_booking_found", methods=["POST"])
-def no_booking_found():
-    """Handle case when no booking found"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-
-    if any(
-        word in speech_result for word in ["yes", "yeah", "yep", "book", "new", "make"]
-    ):
-        return redirect_to("/book_taxi")
-    else:
-        response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! We appreciate your booking with Kiwi Cabs. Have a great day!
-    </Say>
-    <Hangup/>
-</Response>"""
-        return Response(response, mimetype="text/xml")
-
-
-@app.route("/cancel_booking", methods=["POST"])
-def cancel_booking():
-    """Cancel booking confirmation"""
-    response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Just to confirm - you want to cancel your taxi booking?
-    </Say>
-    <Gather action="/confirm_cancellation" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Say yes to cancel, or no to keep it.</Say>
-    </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
     return Response(response, mimetype="text/xml")
-
-
-@app.route("/confirm_cancellation", methods=["POST"])
-def confirm_cancellation():
-    """Process cancellation confirmation"""
-    speech_result = request.form.get("SpeechResult", "").lower()
-    caller_number = request.form.get("From", "")
-
-    if any(word in speech_result for word in ["yes", "confirm", "cancel", "yeah"]):
-        # Cancel booking
-        if caller_number in booking_storage:
-            booking_storage[caller_number]["status"] = "cancelled"
-            booking_storage[caller_number]["cancelled_at"] = datetime.now().isoformat()
-
-            # Send cancellation to API
-            cancelled_booking = booking_storage[caller_number].copy()
-            cancelled_booking["status"] = "cancelled"
-            send_booking_to_api(cancelled_booking, caller_number)
-
-            # Get order ID for TaxiCaller cancellation
-            order_id = cancelled_booking.get('taxicaller_order_id')
-            if order_id:
-                # Cancel in TaxiCaller
-                cancel_success = cancel_taxicaller_booking(order_id, cancelled_booking)
-                if cancel_success:
-                    # Update database
-                    conn = get_db_connection()
-                    if conn:
-                        try:
-                            cur = conn.cursor()
-                            cur.execute(
-                                "UPDATE bookings SET status = 'cancelled' WHERE customer_phone = %s AND status = 'confirmed'",
-                                (caller_number,)
-                            )
-                            conn.commit()
-                            cur.close()
-                            conn.close()
-                        except Exception as e:
-                            print(f"❌ Database update error: {e}")
-                            if conn:
-                                conn.close()
-                
-                response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        No worries! I've cancelled your booking. Thanks for letting us know!
-    </Say>
-    <Hangup/>
-</Response>"""
-            else:
-                response = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I've recorded your cancellation. Your booking has been cancelled.
-    </Say>
-    <Hangup/>
-</Response>"""
-
