@@ -1617,7 +1617,7 @@ def parse_booking_speech(speech_text):
     # Add special handling for "half hour" BEFORE the pattern matching
     if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
         booking_time = datetime.now(NZ_TZ) + timedelta(minutes=30)
-        booking_data["pickup_time"] = f"In 30 minutes ({booking_time.strftime('%I:%M %p')})"
+        booking_data["pickup_time"] = f"{booking_time.strftime('%I:%M %p')}"
         booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
         # Then do the pattern matching
@@ -1627,14 +1627,14 @@ def parse_booking_speech(speech_text):
                 if pattern == r"in\s+(\d+)\s+minutes?":
                     minutes = int(match.group(1))
                     booking_time = datetime.now(NZ_TZ) + timedelta(minutes=minutes)
-                    time_str = f"In {minutes} minutes ({booking_time.strftime('%I:%M %p')})"
+                    time_str = f"{booking_time.strftime('%I:%M %p')}"
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
                 elif pattern == r"in\s+(\d+)\s+hours?":
                     hours = int(match.group(1))
                     booking_time = datetime.now(NZ_TZ) + timedelta(hours=hours)
-                    time_str = f"In {hours} hours ({booking_time.strftime('%I:%M %p')})"
+                    time_str = f"{booking_time.strftime('%I:%M %p')}"
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
