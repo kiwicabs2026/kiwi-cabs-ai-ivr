@@ -2379,7 +2379,7 @@ def process_booking():
 
             print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {speech_data}")
             parsed_booking = parse_booking_speech(speech_data)
-            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {parsed_booking}")
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data after parsing: {parsed_booking}")
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
