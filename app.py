@@ -1027,7 +1027,6 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         traceback.print_exc()
         return False, None
 
-# ==== Part4.py ====
 # Background processing functions for booking modifications
 def background_destination_modification(caller_number, updated_booking, original_booking=None):
     """Background process to modify destination"""
@@ -1146,7 +1145,10 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
                         hour += 12
             else:
                 # Handle simple hour format like "5"
-                hour = int(new_time)
+                time_parts = new_time.split()
+                hour = int(time_parts[0])
+                if len(time_parts) > 1 and time_parts[1].upper() == "PM" and hour < 12:
+                    hour += 12
                 minute = 0
             
             # Set date for booking in NZ time
@@ -1264,7 +1266,7 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
         traceback.print_exc()
         return None
 
-# ==== Part5.py ====
+
 def background_pickup_modification(caller_number, updated_booking, original_booking=None):
     """Background process to modify pickup location"""
     try:
@@ -1351,7 +1353,10 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                             hour += 12
                 else:
                     # Handle simple hour format like "5"
-                    hour = int(new_value)
+                    time_parts = new_value.split()
+                    hour = int(time_parts[0])
+                    if len(time_parts) > 1 and time_parts[1].upper() == "PM" and hour < 12:
+                        hour += 12
                     minute = 0
 
                 # Set date for booking in NZ time
@@ -2371,7 +2376,10 @@ def process_booking():
             valid_time = True
         else:
             # Parse time using existing logic
+
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {speech_data}")
             parsed_booking = parse_booking_speech(speech_data)
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {parsed_booking}")
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
@@ -3008,6 +3016,4 @@ def confirm_cancellation():
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
-
     return Response(response, mimetype="text/xml")
-
