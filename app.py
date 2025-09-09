@@ -1058,6 +1058,43 @@ def background_destination_modification(caller_number, updated_booking, original
                 success, response = send_booking_to_api(updated_booking, caller_number)
 
                 if success:
+                    #update the database with new booking details
+                    conn = get_db_connection()
+                    if conn:
+                        try:
+                            cur = conn.cursor()
+                            cur.execute(
+                                """
+                                UPDATE bookings
+                                SET
+                                    customer_name = %s,
+                                    pickup_location = %s,
+                                    dropoff_location = %s,
+                                    scheduled_time = %s,
+                                    raw_speech = %s,
+                                    pickup_date = %s,
+                                    pickup_time = %s,
+                                WHERE customer_phone = %s
+                                """,
+                                (
+                                    updated_booking["name"],
+                                    updated_booking["pickup_address"],
+                                    updated_booking["destination"],
+                                    updated_booking["modified_at"],
+                                    updated_booking.get("raw_speech", ""),
+                                    updated_booking.get("pickup_date", ""),
+                                    updated_booking.get("pickup_time", ""),
+                                    caller_number,  # this is used in the WHERE clause
+                                ),
+                            )
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                        except Exception as e:
+                            print(f"❌ Error saving conversation: {e}")
+                            if conn:
+                                conn.close()
+
                     print("✅ NEW BOOKING CREATED with new destination")
                     # ✅ Store new order ID for future modifications
                     if response and "orderId" in response:
