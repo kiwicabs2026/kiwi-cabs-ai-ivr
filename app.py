@@ -1038,7 +1038,7 @@ def update_bookingtime_to_db(caller_number, new_date, new_time):
                 UPDATE bookings
                 SET
                     pickup_date = %s,
-                    pickup_time = %s,
+                    pickup_time = %s
                 WHERE customer_phone = %s
                 """,
                 (
@@ -1222,7 +1222,7 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
             # booking_date_nz = now_nz.strftime('%Y-%m-%d')
             
             # Create booking time in NZ
-            booking_time_nz_naive = datetime.strptime(f"{new_date} {new_time}", '%d-%m-%Y %H:%M:00')
+            booking_time_nz_naive = datetime.strptime(f"{new_date} {new_time}", '%d/%m/%Y %H:%M')
             print(f"🗑️ booking time nz naive output: {booking_time_nz_naive}")
             # If time is in the past for today in NZ, assume tomorrow
             # if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
