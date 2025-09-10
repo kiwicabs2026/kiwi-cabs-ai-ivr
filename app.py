@@ -1220,6 +1220,7 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
             
             # # Set date for booking in NZ time
             # booking_date_nz = now_nz.strftime('%Y-%m-%d')
+
             
             # Create booking time in NZ
             booking_time_nz_naive = datetime.strptime(f"{new_date} {new_time}", '%d/%m/%Y %H:%M')
@@ -1491,7 +1492,6 @@ def background_time_modification(caller_number, updated_booking, original_bookin
     except Exception as e:
         print(f"❌ BACKGROUND: Time modification error: {str(e)}")
         return False
-
 
 def parse_booking_speech(speech_text):
     """Parse booking speech using regex to extract details."""
@@ -2020,6 +2020,13 @@ def process_modification_smart(request):
             updated_booking_info = parse_booking_speech(new_value)
 
             # Call our new function to cancel and create a new booking
+            updated_booking = original_booking.copy()
+
+            if not updated_booking_info.get("pickup_time"):
+                updated_booking_info["pickup_time"] = original_booking.get("pickup_time", "ASAP")
+            if not updated_booking_info.get("pickup_date"):
+                updated_booking_info["pickup_date"] = original_booking.get("pickup_date", datetime.now(NZ_TZ).strftime("%d/%m/%Y"))
+                
             new_order_id = cancel_and_recreate_booking(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"], caller_number)
             
             if new_order_id:
