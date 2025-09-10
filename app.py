@@ -1754,6 +1754,7 @@ def parse_booking_speech(speech_text):
             destination = validate_and_format_address(destination, "destination")
         booking_data['destination'] = destination.strip()
     
+    print(f"📝 PARSED BOOKING DATA: {booking_data}")
     return booking_data
 
 def send_booking_to_api(booking_data, caller_number):
