@@ -691,7 +691,7 @@ def convert_time_to_unix(time_str):
             hour = 0
     
     # Use today's date with the specified time
-    current_date = datetime.now().date()
+    current_date = datetime.now(NZ_TZ).date()
     time_obj = time(hour=hour, minute=minute)
     datetime_obj = datetime.combine(current_date, time_obj)
     
@@ -712,7 +712,7 @@ def convert_datetime_to_unix(datetime_str):
         except ValueError:
             print(f"❌ Could not parse datetime string: {datetime_str}")
             # Return current time + 1 hour as a fallback
-            return int((datetime.now() + timedelta(hours=1)).timestamp())
+            return int((datetime.now(NZ_TZ) + timedelta(hours=1)).timestamp())
 
 def update_taxicaller_booking(order_id, payload):
     """Update an existing booking using TaxiCaller edit endpoint"""
@@ -780,7 +780,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
 
         if is_immediate:
             # For immediate bookings, use current time + 5 minutes
-            pickup_datetime = datetime.now() + timedelta(minutes=5)
+            pickup_datetime = datetime.now(NZ_TZ) + timedelta(minutes=5)
         else:
             # Parse date and time from booking data
             try:
@@ -1053,7 +1053,7 @@ def background_destination_modification(caller_number, updated_booking, original
                 time.sleep(2)  # Adding delay after cancellation
 
                 # Create new booking with new destination
-                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
                 updated_booking["ai_modified"] = True
                 success, response = send_booking_to_api(updated_booking, caller_number)
 
@@ -1213,7 +1213,7 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
         except Exception as parse_error:
             print(f"⚠️ Time parsing error: {parse_error}, using simple approach")
             # Fallback in case of parsing error
-            unix_time = int(datetime.now().timestamp()) + 3600  # Default to 1 hour from now
+            unix_time = int(datetime.now(NZ_TZ).timestamp()) + 3600  # Default to 1 hour from now
         
         # Step 3: Create new booking
         # Format phone number appropriately
@@ -1328,7 +1328,7 @@ def background_pickup_modification(caller_number, updated_booking, original_book
                 time.sleep(2)  # Adding delay after cancellation
 
                 # Create new booking with new pickup
-                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
                 updated_booking["ai_modified"] = True
                 booking_storage[caller_number] = updated_booking
                 success, response = send_booking_to_api(updated_booking, caller_number)
@@ -1364,7 +1364,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
         if old_order_id:
             print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
             # Format the datetime string properly for API
-            current_date = datetime.now().strftime("%Y-%m-%d")
+            current_date = datetime.now(NZ_TZ).strftime("%Y-%m-%d")
 
             try:
                 # Get current UTC time and calculate NZ time
@@ -1434,7 +1434,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
             edit_success = edit_taxicaller_booking(old_order_id, time_str, updated_booking)
             if edit_success:
                 print("✅ BOOKING TIME EDITED SUCCESSFULLY")
-                updated_booking["modified_at"] = datetime.now().isoformat()
+                updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
                 updated_booking["ai_modified"] = True
                 booking_storage[caller_number] = updated_booking
             else:
@@ -1444,7 +1444,7 @@ def background_time_modification(caller_number, updated_booking, original_bookin
                 if cancel_success:
                     print("✅ OLD BOOKING CANCELLED - creating new one")
                     time.sleep(2)
-                    updated_booking["modified_at"] = datetime.now().isoformat()
+                    updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
                     updated_booking["ai_modified"] = True
                     booking_storage[caller_number] = updated_booking
                     success, response = send_booking_to_api(updated_booking, caller_number)
@@ -1617,7 +1617,7 @@ def parse_booking_speech(speech_text):
         booking_data["pickup_time"] = "ASAP"
     elif any(keyword in speech_text.lower() for keyword in after_tomorrow_keywords):
         # Handle "after tomorrow" - add 2 days
-        after_tomorrow = datetime.now() + timedelta(days=2)
+        after_tomorrow = datetime.now(NZ_TZ) + timedelta(days=2)
         booking_data["pickup_date"] = after_tomorrow.strftime("%d/%m/%Y")
     elif any(keyword in speech_text.lower() for keyword in tomorrow_keywords):
         # Handle "tomorrow" - add 1 day
@@ -1747,7 +1747,7 @@ def send_booking_to_api(booking_data, caller_number):
         "payment_method": "cash",
         "number_of_passengers": 1,
         "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
-        "created_at": datetime.now().isoformat(),
+        "created_at": datetime.now(NZ_TZ).isoformat(NZ_TZ),
         "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]
     }
     
@@ -2408,7 +2408,7 @@ def process_booking():
         immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
         if any(keyword in time_text for keyword in immediate_keywords):
             partial_booking["pickup_time"] = "ASAP"
-            partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+            partial_booking["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
             time_string = "right now"
             valid_time = True
         else:
@@ -2425,7 +2425,7 @@ def process_booking():
                     time_string = f"on {parsed_booking['pickup_date']} at {parsed_booking['pickup_time']}"
                 else:
                     # Default to today if no date specified
-                    partial_booking["pickup_date"] = datetime.now().strftime("%d/%m/%Y")
+                    partial_booking["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     time_string = f"today at {parsed_booking['pickup_time']}"
                 valid_time = True
             elif parsed_booking.get("pickup_date"):
@@ -2621,7 +2621,7 @@ def confirm_booking():
         # Store booking immediately
         booking_storage[caller_number] = {
             **booking_data,
-            "confirmed_at": datetime.now().isoformat(),
+            "confirmed_at": datetime.now(NZ_TZ).isoformat(),
             "status": "confirmed",
         }
 
@@ -2991,7 +2991,7 @@ def confirm_cancellation():
         # Cancel booking
         if caller_number in booking_storage:
             booking_storage[caller_number]["status"] = "cancelled"
-            booking_storage[caller_number]["cancelled_at"] = datetime.now().isoformat()
+            booking_storage[caller_number]["cancelled_at"] = datetime.now(NZ_TZ).isoformat()
 
             # Send cancellation to API
             cancelled_booking = booking_storage[caller_number].copy()
