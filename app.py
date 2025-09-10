@@ -1027,6 +1027,44 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         traceback.print_exc()
         return False, None
 
+def update_booking_to_db(caller_number, updated_booking):
+    #update the database with new booking details
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE bookings
+                SET
+                    customer_name = %s,
+                    pickup_location = %s,
+                    dropoff_location = %s,
+                    scheduled_time = %s,
+                    raw_speech = %s,
+                    pickup_date = %s,
+                    pickup_time = %s,
+                WHERE customer_phone = %s
+                """,
+                (
+                    updated_booking["name"],
+                    updated_booking["pickup_address"],
+                    updated_booking["destination"],
+                    updated_booking["modified_at"],
+                    updated_booking.get("raw_speech", ""),
+                    updated_booking.get("pickup_date", ""),
+                    updated_booking.get("pickup_time", ""),
+                    caller_number,  # this is used in the WHERE clause
+                ),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Error saving conversation: {e}")
+            if conn:
+                conn.close()
+
 # Background processing functions for booking modifications
 def background_destination_modification(caller_number, updated_booking, original_booking=None):
     """Background process to modify destination"""
@@ -1058,43 +1096,6 @@ def background_destination_modification(caller_number, updated_booking, original
                 success, response = send_booking_to_api(updated_booking, caller_number)
 
                 if success:
-                    #update the database with new booking details
-                    conn = get_db_connection()
-                    if conn:
-                        try:
-                            cur = conn.cursor()
-                            cur.execute(
-                                """
-                                UPDATE bookings
-                                SET
-                                    customer_name = %s,
-                                    pickup_location = %s,
-                                    dropoff_location = %s,
-                                    scheduled_time = %s,
-                                    raw_speech = %s,
-                                    pickup_date = %s,
-                                    pickup_time = %s,
-                                WHERE customer_phone = %s
-                                """,
-                                (
-                                    updated_booking["name"],
-                                    updated_booking["pickup_address"],
-                                    updated_booking["destination"],
-                                    updated_booking["modified_at"],
-                                    updated_booking.get("raw_speech", ""),
-                                    updated_booking.get("pickup_date", ""),
-                                    updated_booking.get("pickup_time", ""),
-                                    caller_number,  # this is used in the WHERE clause
-                                ),
-                            )
-                            conn.commit()
-                            cur.close()
-                            conn.close()
-                        except Exception as e:
-                            print(f"❌ Error saving conversation: {e}")
-                            if conn:
-                                conn.close()
-
                     print("✅ NEW BOOKING CREATED with new destination")
                     # ✅ Store new order ID for future modifications
                     if response and "orderId" in response:
@@ -1110,8 +1111,9 @@ def background_destination_modification(caller_number, updated_booking, original
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
 
 
-def cancel_and_recreate_booking(old_order_id, new_time, phone):
+def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
     """Cancel existing booking and create new one with updated time"""
+    print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new date {new_date}")
     print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new time {new_time}")
 
     
@@ -1140,7 +1142,7 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
         
         booking_data = get_response.json()
         print(f"📑 RETRIEVED BOOKING DETAILS: {old_order_id}")
-        
+        print(f"📑 booking DETAILS: {booking_data}")
         # Extract important details
         customer_name = booking_data['order']['items'][0]['passenger']['name']
         pickup_address = booking_data['order']['route']['nodes'][0]['location']['name']
@@ -1184,7 +1186,7 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
                 # Handle simple hour format like "5"
                 time_parts = new_time.split()
                 hour = int(time_parts[0])
-                if len(time_parts) > 1 and time_parts[1].upper() == "PM" and hour < 12:
+                if len(time_parts) > 1 and (time_parts[1].upper() == "PM" or time_parts[1].upper() == "P.M.") and hour < 12:
                     hour += 12
                 minute = 0
             
@@ -1195,19 +1197,19 @@ def cancel_and_recreate_booking(old_order_id, new_time, phone):
             booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
             
             # If time is in the past for today in NZ, assume tomorrow
-            if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
-                booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
-                print(f"⏰ Time appears to be for tomorrow")
+            # if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
+            #     booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
+            #     print(f"⏰ Time appears to be for tomorrow")
             
             # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
-            booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
+            # booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
             
             # Format times for display and API
-            unix_time = int(booking_time_utc.timestamp())
+            unix_time = int(booking_time_nz_naive.timestamp())
             
             print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
             print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"🛠️ UTC for API: {booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+            # print(f"🛠️ UTC for API: {booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')}")
             print(f"🛠️ Unix timestamp: {unix_time}")
         
         except Exception as parse_error:
@@ -1910,8 +1912,10 @@ def process_modification_smart(request):
     <Hangup/>
 </Response>"""
 
+                # Save updated booking immediately
+                update_booking_to_db(caller_number, updated_booking)
 
-# Start background thread
+                # Start background thread
                 threading.Thread(
                     target=background_destination_modification,
                     args=(caller_number, updated_booking, original_booking),
@@ -1972,7 +1976,8 @@ def process_modification_smart(request):
     </Say>
     <Hangup/>
 </Response>"""
-
+            # Save updated booking immediately
+            update_booking_to_db(caller_number, updated_booking)
             # Start background thread
             threading.Thread(
                 target=background_pickup_modification,
@@ -1985,9 +1990,10 @@ def process_modification_smart(request):
         # Handle time changes
         elif intent == "change_time" and new_value:
             print(f"✅ BOOKING TIME CHANGE REQUEST: {order_id}, new_value: {new_value}")
-            
+            updated_booking_info = parse_booking_speech(new_value)
+
             # Call our new function to cancel and create a new booking
-            new_order_id = cancel_and_recreate_booking(order_id, new_value, caller_number)
+            new_order_id = cancel_and_recreate_booking(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"], caller_number)
             
             if new_order_id:
                 immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -2416,7 +2422,7 @@ def process_booking():
 
             print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {speech_data}")
             parsed_booking = parse_booking_speech(speech_data)
-            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data after parsing: {parsed_booking}")
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {parsed_booking}")
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
