@@ -1749,7 +1749,7 @@ def send_booking_to_api(booking_data, caller_number):
         "payment_method": "cash",
         "number_of_passengers": 1,
         "special_instructions": f"AI IVR booking - {booking_data.get('raw_speech', '')}",
-        "created_at": datetime.now(NZ_TZ).isoformat(NZ_TZ),
+        "created_at": datetime.now(NZ_TZ).isoformat(),
         "is_immediate": booking_data.get("pickup_time", "").upper() in ["ASAP", "NOW", "IMMEDIATELY"]
     }
     
