@@ -1027,6 +1027,34 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         traceback.print_exc()
         return False, None
 
+def update_bookingtime_to_db(caller_number, new_date, new_time):
+    #update the database with new booking details
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE bookings
+                SET
+                    pickup_date = %s,
+                    pickup_time = %s,
+                WHERE customer_phone = %s
+                """,
+                (
+                    new_date,
+                    new_time,
+                    caller_number,  # this is used in the WHERE clause
+                ),
+            )
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Error saving conversation: {e}")
+            if conn:
+                conn.close()
+
 def update_booking_to_db(caller_number, updated_booking):
     #update the database with new booking details
     conn = get_db_connection()
@@ -1169,33 +1197,33 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
         
         # Parse the time value
         try:
-            if ":" in new_time:
-                time_parts = new_time.split(":")
-                hour = int(time_parts[0])
-                minute = 0
+            # if ":" in new_time:
+            #     time_parts = new_time.split(":")
+            #     hour = int(time_parts[0])
+            #     minute = 0
                 
-                if len(time_parts) > 1:
-                    # Handle "5:30" or "5:30 AM" format
-                    minute_part = time_parts[1].split()
-                    minute = int(minute_part[0])
+            #     if len(time_parts) > 1:
+            #         # Handle "5:30" or "5:30 AM" format
+            #         minute_part = time_parts[1].split()
+            #         minute = int(minute_part[0])
                     
-                    # Handle AM/PM
-                    if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
-                        hour += 12
-            else:
-                # Handle simple hour format like "5"
-                time_parts = new_time.split()
-                hour = int(time_parts[0])
-                if len(time_parts) > 1 and (time_parts[1].upper() == "PM" or time_parts[1].upper() == "P.M.") and hour < 12:
-                    hour += 12
-                minute = 0
+            #         # Handle AM/PM
+            #         if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
+            #             hour += 12
+            # else:
+            #     # Handle simple hour format like "5"
+            #     time_parts = new_time.split()
+            #     hour = int(time_parts[0])
+            #     if len(time_parts) > 1 and (time_parts[1].upper() == "PM" or time_parts[1].upper() == "P.M.") and hour < 12:
+            #         hour += 12
+            #     minute = 0
             
-            # Set date for booking in NZ time
-            booking_date_nz = now_nz.strftime('%Y-%m-%d')
+            # # Set date for booking in NZ time
+            # booking_date_nz = now_nz.strftime('%Y-%m-%d')
             
             # Create booking time in NZ
-            booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
-            
+            booking_time_nz_naive = datetime.strptime(f"{new_date} {new_time}", '%d-%m-%Y %H:%M:00')
+            print(f"🗑️ booking time nz naive output: {booking_time_nz_naive}")
             # If time is in the past for today in NZ, assume tomorrow
             # if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
             #     booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
@@ -1206,11 +1234,6 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
             
             # Format times for display and API
             unix_time = int(booking_time_nz_naive.timestamp())
-            
-            print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
-            print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
-            # print(f"🛠️ UTC for API: {booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"🛠️ Unix timestamp: {unix_time}")
         
         except Exception as parse_error:
             print(f"⚠️ Time parsing error: {parse_error}, using simple approach")
@@ -1285,6 +1308,9 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
             new_booking = create_response.json()
             new_order_id = new_booking['order']['order_id']
             print(f"✅ NEW BOOKING CREATED: {new_order_id}")
+
+            # Update booking details in the database
+            update_bookingtime_to_db(phone, new_date, new_time)
             
             # Update booking storage
             if phone in booking_storage:
