@@ -2472,27 +2472,19 @@ def process_booking():
                 valid_time = True
                 print(f"current pick up time !!!!!!!!!!!!! {partial_booking['pickup_date']} {partial_booking['pickup_time']}")
                 
-                try:
-                        # Parse date and time for scheduled bookings
-                        date_parts = partial_booking["pickup_date"].split("/")
-                        time_str = partial_booking["pickup_time"]
-                        if "AM" in time_str or "PM" in time_str:
-                            pickup_time = datetime.strptime(time_str, "%I:%M %p").time()
-                        else:
-                            pickup_time = datetime.strptime(time_str, "%H:%M").time()
-
-                        scheduled_time = datetime.combine(
-                            datetime(
-                                int(date_parts[2]),
-                                int(date_parts[1]),
-                                int(date_parts[0]),
-                            ).date(),
-                            pickup_time,
-                        )
-                        if(scheduled_time < datetime.now(NZ_TZ)):
-                            valid_time = False
-                except Exception as e:
-                    valid_time = False
+                datetime_str = f"{partial_booking['pickup_date']} {partial_booking['pickup_time']}"
+                booked_time = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
+                if(booked_time < datetime.now(NZ_TZ)):
+                    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        That time is in the past. Would you like to pick a different time?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listning.</Say>
+    </Gather>
+</Response>"""
+                    return Response(response, mimetype="text/xml")
 
                 
             elif parsed_booking.get("pickup_date"):
