@@ -2470,6 +2470,7 @@ def process_booking():
                     time_string = f"today at {parsed_booking['pickup_time']}"
 
                 valid_time = True
+                print(f"current pick up time !!!!!!!!!!!!! {partial_booking['pickup_date']} {partial_booking['pickup_time']}")
                 
                 try:
                         # Parse date and time for scheduled bookings
