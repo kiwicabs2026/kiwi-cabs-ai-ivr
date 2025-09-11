@@ -14,6 +14,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
 import pytz 
+from zoneinfo import ZoneInfo
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
@@ -2474,6 +2475,7 @@ def process_booking():
                 
                 datetime_str = f"{partial_booking['pickup_date']} {partial_booking['pickup_time']}"
                 booked_time = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
+                booked_time = booked_time.replace(tzinfo=ZoneInfo("Pacific/Auckland"))
                 if(booked_time < datetime.now(NZ_TZ)):
                     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
