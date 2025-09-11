@@ -1941,6 +1941,7 @@ def process_modification_smart(request):
 </Response>"""
 
                 # Save updated booking immediately
+                print(f"!!!!!updated booking info: {updated_booking}")
                 update_booking_to_db(caller_number, updated_booking)
 
                 # Start background thread
