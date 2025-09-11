@@ -2468,17 +2468,42 @@ def process_booking():
                     # Default to today if no date specified
                     partial_booking["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     time_string = f"today at {parsed_booking['pickup_time']}"
+
                 valid_time = True
+                
+                try:
+                        # Parse date and time for scheduled bookings
+                        date_parts = partial_booking["pickup_date"].split("/")
+                        time_str = partial_booking["pickup_time"]
+                        if "AM" in time_str or "PM" in time_str:
+                            pickup_time = datetime.strptime(time_str, "%I:%M %p").time()
+                        else:
+                            pickup_time = datetime.strptime(time_str, "%H:%M").time()
+
+                        scheduled_time = datetime.combine(
+                            datetime(
+                                int(date_parts[2]),
+                                int(date_parts[1]),
+                                int(date_parts[0]),
+                            ).date(),
+                            pickup_time,
+                        )
+                        if(scheduled_time < datetime.now(NZ_TZ)):
+                            valid_time = False
+                except Exception as e:
+                    valid_time = False
+
+                
             elif parsed_booking.get("pickup_date"):
                 # Date specified but no time - ask for time
                 partial_booking["pickup_date"] = parsed_booking["pickup_date"]
                 response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        What time on {parsed_booking['pickup_date']} would you like the taxi?
+        I didn't catch that. Please tell me when you need the taxi again.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the time.</Say>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listning.</Say>
     </Gather>
 </Response>"""
                 # Store session updates before returning
