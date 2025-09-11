@@ -1071,7 +1071,7 @@ def update_booking_to_db(caller_number, updated_booking):
                     dropoff_location = %s,
                     raw_speech = %s,
                     pickup_date = %s,
-                    pickup_time = %s,
+                    pickup_time = %s 
                 WHERE customer_phone = %s
                 """,
                 (
