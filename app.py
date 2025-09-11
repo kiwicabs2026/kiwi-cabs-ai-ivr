@@ -2021,12 +2021,13 @@ def process_modification_smart(request):
 
             # Call our new function to cancel and create a new booking
             updated_booking = original_booking.copy()
-
+            print(f"✅ updated booking info: {updated_booking_info}")
             if not updated_booking_info.get("pickup_time"):
                 updated_booking_info["pickup_time"] = original_booking.get("pickup_time", "ASAP")
             if not updated_booking_info.get("pickup_date"):
                 updated_booking_info["pickup_date"] = original_booking.get("pickup_date", datetime.now(NZ_TZ).strftime("%d/%m/%Y"))
-                
+            print(f"✅ updated booking info after change: {updated_booking_info}")
+            print(f"✅ original booking info : {original_booking}")
             new_order_id = cancel_and_recreate_booking(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"], caller_number)
             
             if new_order_id:
@@ -2456,7 +2457,7 @@ def process_booking():
 
             print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {speech_data}")
             parsed_booking = parse_booking_speech(speech_data)
-            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {parsed_booking}")
+            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data after parsing: {parsed_booking}")
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
