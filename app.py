@@ -1363,6 +1363,12 @@ def background_pickup_modification(caller_number, updated_booking, original_book
 
                 if success:
                     print("✅ NEW BOOKING CREATED with new pickup")
+                    # ✅ Store new order ID and update database
+                    if response and "orderId" in response:
+                        updated_booking["taxicaller_order_id"] = response["orderId"]
+                        booking_storage[caller_number] = updated_booking
+                        # Update database with new pickup location
+                        update_booking_to_db(caller_number, updated_booking)
                 else:
                     print("❌ NEW BOOKING FAILED")
             else:
@@ -1876,6 +1882,42 @@ def process_modification_smart(request):
 
     original_booking = booking_storage[caller_number].copy()
     
+    # Use OpenAI to understand the modification request
+    ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
+    
+    if ai_intent is None:
+        print("❌ AI parsing failed - falling back to basic parsing")
+        ai_intent = {
+            "intent": "no_change",
+            "new_value": "",
+            "confidence": 0.0
+        }
+    
+    print(f"🤖 AI Intent: {ai_intent}")
+
+    if ai_intent["intent"] == "no_change":
+        print("✅ No change detected - keeping original booking")
+        return redirect_to("/booking_confirmed")
+
+    # Handle pickup modification
+    if ai_intent["intent"] == "change_pickup":
+        new_pickup = ai_intent["new_value"]
+        print(f"🔄 Pickup change detected: {new_pickup}")
+
+        # Resolve the new pickup address
+        resolved_pickup = resolve_wellington_poi_to_address(new_pickup)
+        if resolved_pickup:
+            print(f"✅ Resolved pickup: {resolved_pickup}")
+            new_pickup_address = resolved_pickup["full_address"]
+            new_pickup_speech = resolved_pickup["speech"]
+        else:
+            print(f"❌ Failed to resolve pickup: {new_pickup}")
+            new_pickup_address = new_pickup
+            new_pickup_speech = f"Pickup address: {new_pickup}"
+
+        # Update the booking with the new pickup address
+        updated_booking = original_booking.copy()
+        updated_booking["pickup_address"]
     # Robustly get the order ID for modification
     order_id = (
         original_booking.get("taxicaller_order_id")
@@ -2003,8 +2045,7 @@ def process_modification_smart(request):
     </Say>
     <Hangup/>
 </Response>"""
-            # Save updated booking immediately
-            update_booking_to_db(caller_number, updated_booking)
+            # Save updated booking immediatel
             # Start background thread
             threading.Thread(
                 target=background_pickup_modification,
