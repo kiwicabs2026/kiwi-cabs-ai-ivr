@@ -1173,11 +1173,8 @@ def background_destination_modification(caller_number, updated_booking, original
         except Exception as db_error:
             print(f"❌ FALLBACK: Database update also failed: {db_error}")
 
-def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
+def cancel_and_recreate_booking_with_new_time(old_order_id, new_date, new_time):
     """Cancel existing booking and create new one with updated time"""
-    print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new date {new_date}")
-    print(f"🔄 CANCEL AND RECREATE: Old booking {old_order_id} with new time {new_time}")
-
     
     # Get existing booking details from TaxiCaller
     try:
@@ -1201,17 +1198,32 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
         if get_response.status_code != 200:
             print(f"⚠️ ERROR: Failed to get booking details from TaxiCaller: {get_response.status_code}")
             return None
-        
-        booking_data = get_response.json()
+            
+        booking_details = get_response.json()
         print(f"📑 RETRIEVED BOOKING DETAILS: {old_order_id}")
-        print(f"📑 booking DETAILS: {booking_data}")
-        # Extract important details
-        customer_name = booking_data['order']['items'][0]['passenger']['name']
-        pickup_address = booking_data['order']['route']['nodes'][0]['location']['name']
-        dropoff_address = booking_data['order']['route']['nodes'][1]['location']['name']
-        pickup_coords = booking_data['order']['route']['nodes'][0]['location'].get('coords', [0, 0])
-        dropoff_coords = booking_data['order']['route']['nodes'][1]['location'].get('coords', [0, 0])
-        driver_instructions = booking_data['order']['route']['nodes'][0].get('info', {}).get('all', '')
+        print(f"📑 booking DETAILS: {booking_details}")
+        
+        # Extract booking information
+        order_data = booking_details.get('order', {})
+        route = order_data.get('route', {})
+        nodes = route.get('nodes', [])
+        items = order_data.get('items', [])
+        
+        if not nodes or not items:
+            print("⚠️ ERROR: Invalid booking structure")
+            return None
+            
+        pickup_node = nodes[0]
+        dropoff_node = nodes[1] if len(nodes) > 1 else None
+        passenger_info = items[0].get('passenger', {})
+        
+        pickup_address = pickup_node.get('location', {}).get('name', '')
+        pickup_coords = pickup_node.get('location', {}).get('coords', [])
+        dropoff_address = dropoff_node.get('location', {}).get('name', '') if dropoff_node else ''
+        dropoff_coords = dropoff_node.get('location', {}).get('coords', []) if dropoff_node else []
+        customer_name = passenger_info.get('name', '')
+        customer_phone = passenger_info.get('phone', '')
+        driver_instructions = pickup_node.get('info', {}).get('all', '')
         
         print(f"📋 BOOKING DETAILS: {customer_name} from {pickup_address} to {dropoff_address}")
         
@@ -1225,64 +1237,32 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
         if cancel_response.status_code not in [200, 202, 204]:
             print(f"⚠️ WARNING: Failed to cancel booking: {cancel_response.text}")
         
-        # Step 2: Format the new time properly
-        now_utc = datetime.now()
-        now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
+        # Step 2: Format the new time properly for NZ timezone
+        from datetime import datetime, timedelta
+        import pytz
         
-        # Parse the time value
-        try:
-            # if ":" in new_time:
-            #     time_parts = new_time.split(":")
-            #     hour = int(time_parts[0])
-            #     minute = 0
-                
-            #     if len(time_parts) > 1:
-            #         # Handle "5:30" or "5:30 AM" format
-            #         minute_part = time_parts[1].split()
-            #         minute = int(minute_part[0])
-                    
-            #         # Handle AM/PM
-            #         if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
-            #             hour += 12
-            # else:
-            #     # Handle simple hour format like "5"
-            #     time_parts = new_time.split()
-            #     hour = int(time_parts[0])
-            #     if len(time_parts) > 1 and (time_parts[1].upper() == "PM" or time_parts[1].upper() == "P.M.") and hour < 12:
-            #         hour += 12
-            #     minute = 0
-            
-            # # Set date for booking in NZ time
-            # booking_date_nz = now_nz.strftime('%Y-%m-%d')
-
-            
-            # Create booking time in NZ
-            booking_time_nz_naive = datetime.strptime(f"{new_date} {new_time}", '%d/%m/%Y %H:%M')
-            print(f"🗑️ booking time nz naive output: {booking_time_nz_naive}")
-            # If time is in the past for today in NZ, assume tomorrow
-            # if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
-            #     booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
-            #     print(f"⏰ Time appears to be for tomorrow")
-            
-            # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
-            # booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
-            
-            # Format times for display and API
-            unix_time = int(booking_time_nz_naive.timestamp())
+        # Parse the new date and time
+        nz_tz = pytz.timezone('Pacific/Auckland')
         
-        except Exception as parse_error:
-            print(f"⚠️ Time parsing error: {parse_error}, using simple approach")
-            # Fallback in case of parsing error
-            unix_time = int(datetime.now(NZ_TZ).timestamp()) + 3600  # Default to 1 hour from now
+        # Combine date and time strings
+        datetime_str = f"{new_date} {new_time}:00"
+        print(f"🗑️ booking time nz naive output: {datetime_str}")
         
-        # Step 3: Create new booking
-        # Format phone number appropriately
-        nz_local_phone = phone
-        if phone.startswith("+64"):
-            nz_local_phone = "0" + phone[3:]  # +64220881234 → 0220881234
-        elif phone.startswith("64") and len(phone) == 11:  # Ensure it's NZ format
-            nz_local_phone = "0" + phone[2:]  # 64220881234 → 0220881234
+        # Parse as naive datetime first
+        naive_dt = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M:%S")
         
+        # Localize to NZ timezone (this handles DST correctly)
+        nz_dt = nz_tz.localize(naive_dt)
+        
+        # Convert to UTC for Unix timestamp
+        utc_dt = nz_dt.astimezone(pytz.UTC)
+        unix_time = int(utc_dt.timestamp())
+        
+        print(f"🕐 NZ Time: {nz_dt}")
+        print(f"🕐 UTC Time: {utc_dt}")
+        print(f"🕐 Unix Timestamp: {unix_time}")
+        
+        # Step 3: Create new booking with same details but new time
         create_payload = {
             "order": {
                 "company_id": 8257,
@@ -1294,7 +1274,7 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
                         "passenger": {
                             "name": customer_name,
                             "email": "customer@kiwicabs.co.nz",
-                            "phone": nz_local_phone
+                            "phone": customer_phone
                         },
                         "client_id": 0,
                         "account": {"id": 0},
@@ -1339,31 +1319,36 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
         create_url = "https://api-rc.taxicaller.net/api/v1/booker/order"
         create_response = requests.post(create_url, headers=headers, json=create_payload)
         
-        if create_response.status_code == 200:
-            new_booking = create_response.json()
-            new_order_id = new_booking['order']['order_id']
+        if create_response.status_code in [200, 201]:
+            response_data = create_response.json()
+            new_order_id = response_data.get("order", {}).get("order_id", "Unknown")
             print(f"✅ NEW BOOKING CREATED: {new_order_id}")
-
-            # Update booking details in the database
-            update_bookingtime_to_db(phone, new_date, new_time)
             
-            # Update booking storage
-            if phone in booking_storage:
-                if isinstance(booking_storage[phone], dict):
-                    booking_storage[phone]["taxicaller_order_id"] = new_order_id
-                else:
-                    booking_storage[phone] = new_order_id
-                print(f"🔄 UPDATED ORDER ID in booking_storage: {phone} -> {new_order_id}")
+            # Update booking_storage with new order ID and time
+            for caller_number, booking_data in booking_storage.items():
+                if booking_data.get("taxicaller_order_id") == old_order_id:
+                    booking_data["taxicaller_order_id"] = new_order_id
+                    booking_data["pickup_time"] = new_time
+                    booking_data["pickup_date"] = new_date
+                    booking_data["modified_at"] = datetime.now(nz_tz).isoformat()
+                    booking_data["ai_modified"] = True
+                    print(f"🔄 UPDATED ORDER ID in booking_storage: {caller_number} -> {new_order_id}")
+                    
+                    # Update database
+                    try:
+                        update_booking_to_db(caller_number, booking_data)
+                        print("✅ DATABASE UPDATED with new time")
+                    except Exception as db_error:
+                        print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+                    break
             
             return new_order_id
         else:
-            print(f"❌ FAILED TO CREATE NEW BOOKING: {create_response.text}")
+            print(f"❌ FAILED TO CREATE NEW BOOKING: {create_response.status_code} - {create_response.text}")
             return None
-        
+            
     except Exception as e:
-        print(f"⚠️ ERROR IN CANCEL AND RECREATE: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ ERROR in cancel_and_recreate_booking_with_new_time: {str(e)}")
         return None
 
 
