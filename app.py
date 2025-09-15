@@ -2110,7 +2110,7 @@ def process_modification_smart(request):
             print(f"✅ BOOKING TIME CHANGE REQUEST: {order_id}, new_value: {new_value}")
             updated_booking_info = parse_booking_speech(new_value)
 
-            # Call our new function to cancel and create a new booking
+            # Call our function to cancel and create a new booking
             updated_booking = original_booking.copy()
             print(f"✅ updated booking info: {updated_booking_info}")
             if not updated_booking_info.get("pickup_time"):
@@ -2119,7 +2119,9 @@ def process_modification_smart(request):
                 updated_booking_info["pickup_date"] = original_booking.get("pickup_date", datetime.now(NZ_TZ).strftime("%d/%m/%Y"))
             print(f"✅ updated booking info after change: {updated_booking_info}")
             print(f"✅ original booking info : {original_booking}")
-            new_order_id = cancel_and_recreate_booking(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"], caller_number)
+            
+            # Use the correct function name
+            new_order_id = cancel_and_recreate_booking_with_new_time(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"])
             
             if new_order_id:
                 immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
