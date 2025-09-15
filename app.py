@@ -973,7 +973,14 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 # Update the stored booking with order ID
                                 booking_storage[caller_number].update(booking_data)
                                 booking_storage[caller_number]["taxicaller_order_id"] = order_id
-                                
+
+                                # Update database with the new order ID
+                                try:
+                                    update_booking_to_db(caller_number, booking_storage[caller_number])
+                                    print(f"✅ DATABASE UPDATED with new order ID: {order_id}")
+                                except Exception as db_error:
+                                    print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+
                                 print(f"✅ TAXICALLER BOOKING CREATED: {booking_id} (Order ID: {order_id})")
                                 print(f"🔗 ORDER ID STORED in booking_storage[{caller_number}]")
                                 return True, response_data
@@ -1073,24 +1080,27 @@ def update_booking_to_db(caller_number, updated_booking):
                     dropoff_location = %s,
                     raw_speech = %s,
                     pickup_date = %s,
-                    pickup_time = %s 
+                    pickup_time = %s,
+                    order_id = %s
                 WHERE customer_phone = %s
                 """,
                 (
-                    updated_booking["name"],
-                    updated_booking["pickup_address"],
-                    updated_booking["destination"],
+                    updated_booking.get("name", ""),
+                    updated_booking.get("pickup_address", ""),
+                    updated_booking.get("destination", ""),
                     updated_booking.get("raw_speech", ""),
                     updated_booking.get("pickup_date", ""),
                     updated_booking.get("pickup_time", ""),
+                    updated_booking.get("taxicaller_order_id", ""),
                     caller_number,  # this is used in the WHERE clause
                 ),
             )
             conn.commit()
             cur.close()
             conn.close()
+            print(f"✅ DATABASE UPDATED: order_id={updated_booking.get('taxicaller_order_id', 'N/A')}")
         except Exception as e:
-            print(f"❌ Error saving conversation: {e}")
+            print(f"❌ Error updating booking in database: {e}")
             if conn:
                 conn.close()
 
@@ -1144,8 +1154,24 @@ def background_destination_modification(caller_number, updated_booking, original
                 try:
                     update_booking_to_db(caller_number, updated_booking)
                     print("✅ DATABASE UPDATED with new destination")
+                    print(f"🎯 DESTINATION MODIFICATION COMPLETE:")
+                    print(f"   📞 Customer: {caller_number}")
+                    print(f"   🆔 Old Order ID: {old_order_id}")
+                    print(f"   🆔 New Order ID: {updated_booking.get('taxicaller_order_id', 'N/A')}")
+                    print(f"   📍 New Destination: {updated_booking.get('destination', 'N/A')}")
+                    print(f"   ✅ TaxiCaller: Updated")
+                    print(f"   ✅ Database: Updated")
+                    print(f"   ✅ Memory: Updated")
                 except Exception as db_error:
                     print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+                    print(f"⚠️ DESTINATION MODIFICATION PARTIAL:")
+                    print(f"   📞 Customer: {caller_number}")
+                    print(f"   🆔 Old Order ID: {old_order_id}")
+                    print(f"   🆔 New Order ID: {updated_booking.get('taxicaller_order_id', 'N/A')}")
+                    print(f"   📍 New Destination: {updated_booking.get('destination', 'N/A')}")
+                    print(f"   ✅ TaxiCaller: Updated")
+                    print(f"   ❌ Database: Failed")
+                    print(f"   ✅ Memory: Updated")
             else:
                 print("❌ NEW BOOKING FAILED")
                 # Still update database with destination change even if TaxiCaller fails
@@ -1338,10 +1364,26 @@ def cancel_and_recreate_booking_with_new_time(old_order_id, new_date, new_time):
                     try:
                         update_booking_to_db(caller_number, booking_data)
                         print("✅ DATABASE UPDATED with new time")
+                        print(f"🎯 BOOKING MODIFICATION COMPLETE:")
+                        print(f"   📞 Customer: {caller_number}")
+                        print(f"   🆔 Old Order ID: {old_order_id}")
+                        print(f"   🆔 New Order ID: {new_order_id}")
+                        print(f"   🕐 New Time: {new_date} {new_time}")
+                        print(f"   ✅ TaxiCaller: Updated")
+                        print(f"   ✅ Database: Updated")
+                        print(f"   ✅ Memory: Updated")
                     except Exception as db_error:
                         print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+                        print(f"⚠️ BOOKING MODIFICATION PARTIAL:")
+                        print(f"   📞 Customer: {caller_number}")
+                        print(f"   🆔 Old Order ID: {old_order_id}")
+                        print(f"   🆔 New Order ID: {new_order_id}")
+                        print(f"   🕐 New Time: {new_date} {new_time}")
+                        print(f"   ✅ TaxiCaller: Updated")
+                        print(f"   ❌ Database: Failed")
+                        print(f"   ✅ Memory: Updated")
                     break
-            
+
             return new_order_id
         else:
             print(f"❌ FAILED TO CREATE NEW BOOKING: {create_response.status_code} - {create_response.text}")
