@@ -1108,35 +1108,68 @@ def background_destination_modification(caller_number, updated_booking, original
         print(f"🛠️ DEBUG: old_order_id for destination change: {old_order_id}")
                     
         if old_order_id:
-            # For destination changes, we need to cancel and recreate
-            # (TaxiCaller.EDIT endpoint is mainly for time changes)
-            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
+            # Try to cancel the old booking
+            print(f"✅ ATTEMPTING TO CANCEL OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
+            print(f"🛠️ DEBUG: Cancel result: {cancel_success}")
 
+            # Proceed with new booking regardless of cancellation result
+            # (cancellation might fail if booking is already dispatched, etc.)
             if cancel_success:
                 print("✅ OLD BOOKING CANCELLED")
-                time.sleep(2)  # Adding delay after cancellation
-
-                # Create new booking with new destination
-                updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
-                updated_booking["ai_modified"] = True
-                success, response = send_booking_to_api(updated_booking, caller_number)
-
-                if success:
-                    print("✅ NEW BOOKING CREATED with new destination")
-                    # ✅ Store new order ID for future modifications
-                    if response and "orderId" in response:
-                        updated_booking["taxicaller_order_id"] = response["orderId"]
-                        booking_storage[caller_number] = updated_booking
-                else:
-                    print("❌ NEW BOOKING FAILED")
             else:
-                print("❌ CANCEL FAILED - manual intervention needed")
+                print("⚠️ CANCEL FAILED - proceeding with new booking anyway")
+            
+            time.sleep(2)  # Adding delay after cancellation attempt
+
+            # Create new booking with new destination
+            updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
+            updated_booking["ai_modified"] = True
+            print(f"🛠️ DEBUG: About to create new booking: {updated_booking}")
+            
+            success, response = send_booking_to_api(updated_booking, caller_number)
+            print(f"🛠️ DEBUG: New booking result: success={success}, response={response}")
+
+            if success:
+                print("✅ NEW BOOKING CREATED with new destination")
+                # Store new order ID for future modifications
+                if response and "orderId" in response:
+                    updated_booking["taxicaller_order_id"] = response["orderId"]
+                    booking_storage[caller_number] = updated_booking
+                    print(f"✅ NEW ORDER ID STORED: {response['orderId']}")
+                
+                # Update database with new destination and order ID
+                try:
+                    update_booking_to_db(caller_number, updated_booking)
+                    print("✅ DATABASE UPDATED with new destination")
+                except Exception as db_error:
+                    print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+            else:
+                print("❌ NEW BOOKING FAILED")
+                # Still update database with destination change even if TaxiCaller fails
+                try:
+                    update_booking_to_db(caller_number, updated_booking)
+                    print("✅ DATABASE UPDATED (TaxiCaller failed but DB updated)")
+                except Exception as db_error:
+                    print(f"❌ DATABASE UPDATE ALSO FAILED: {db_error}")
+        else:
+            print("❌ NO ORDER ID FOUND for destination change")
+            # Still update database with destination change
+            try:
+                update_booking_to_db(caller_number, updated_booking)
+                print("✅ DATABASE UPDATED (no TaxiCaller order to modify)")
+            except Exception as db_error:
+                print(f"❌ DATABASE UPDATE FAILED: {db_error}")
 
         print("✅ BACKGROUND: Destination modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Destination modification error: {str(e)}")
-
+        # Fallback: at least try to update the database
+        try:
+            update_booking_to_db(caller_number, updated_booking)
+            print("✅ FALLBACK: Database updated despite error")
+        except Exception as db_error:
+            print(f"❌ FALLBACK: Database update also failed: {db_error}")
 
 def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
     """Cancel existing booking and create new one with updated time"""
@@ -1333,52 +1366,82 @@ def cancel_and_recreate_booking(old_order_id, new_date, new_time, phone):
 
 
 def background_pickup_modification(caller_number, updated_booking, original_booking=None):
-    """Background process to modify pickup location"""
+    """Background process to modify pickup"""
     try:
-        print("✅ BACKGROUND: Starting pickup modification...")
+        print("🔄 BACKGROUND: Starting pickup modification...")
 
         # Get order ID from storage
         stored_booking = booking_storage.get(caller_number, {})
         old_order_id = stored_booking.get("taxicaller_order_id")
 
-        # Fallback to original booking if not in storage
         if not old_order_id and original_booking:
             old_order_id = original_booking.get("taxicaller_order_id")
-            print(f"⚠️ DEBUG: old_order_id for pickup change: {old_order_id}")
+
+        print(f"🛠️ DEBUG: old_order_id for pickup change: {old_order_id}")
 
         if old_order_id:
-            # Cancel and recreate for pickup changes
-            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
+            # Try to cancel the old booking
+            print(f"✅ ATTEMPTING TO CANCEL OLD BOOKING: {old_order_id}")
             cancel_success = cancel_taxicaller_booking(old_order_id)
+            print(f"🛠️ DEBUG: Cancel result: {cancel_success}")
 
+            # Proceed with new booking regardless of cancellation result
             if cancel_success:
                 print("✅ OLD BOOKING CANCELLED")
-                time.sleep(2)  # Adding delay after cancellation
-
-                # Create new booking with new pickup
-                updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
-                updated_booking["ai_modified"] = True
-                booking_storage[caller_number] = updated_booking
-                success, response = send_booking_to_api(updated_booking, caller_number)
-
-                if success:
-                    print("✅ NEW BOOKING CREATED with new pickup")
-                    # ✅ Store new order ID and update database
-                    if response and "orderId" in response:
-                        updated_booking["taxicaller_order_id"] = response["orderId"]
-                        booking_storage[caller_number] = updated_booking
-                        # Update database with new pickup location
-                        update_booking_to_db(caller_number, updated_booking)
-                else:
-                    print("❌ NEW BOOKING FAILED")
             else:
-                print("❌ CANCEL FAILED - manual intervention needed")
+                print("⚠️ CANCEL FAILED - proceeding with new booking anyway")
+
+            time.sleep(2)  # Adding delay after cancellation attempt
+
+            # Create new booking with new pickup
+            updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
+            updated_booking["ai_modified"] = True
+            booking_storage[caller_number] = updated_booking
+            print(f"🛠️ DEBUG: About to create new booking: {updated_booking}")
+            
+            success, response = send_booking_to_api(updated_booking, caller_number)
+            print(f"🛠️ DEBUG: New booking result: success={success}, response={response}")
+
+            if success:
+                print("✅ NEW BOOKING CREATED with new pickup")
+                # Store new order ID for future modifications
+                if response and "orderId" in response:
+                    updated_booking["taxicaller_order_id"] = response["orderId"]
+                    booking_storage[caller_number] = updated_booking
+                    print(f"✅ NEW ORDER ID STORED: {response['orderId']}")
+                
+                # Update database with new pickup location and order ID
+                try:
+                    update_booking_to_db(caller_number, updated_booking)
+                    print("✅ DATABASE UPDATED with new pickup")
+                except Exception as db_error:
+                    print(f"❌ DATABASE UPDATE FAILED: {db_error}")
+            else:
+                print("❌ NEW BOOKING FAILED")
+                # Still update database with pickup change even if TaxiCaller fails
+                try:
+                    update_booking_to_db(caller_number, updated_booking)
+                    print("✅ DATABASE UPDATED (TaxiCaller failed but DB updated)")
+                except Exception as db_error:
+                    print(f"❌ DATABASE UPDATE ALSO FAILED: {db_error}")
         else:
             print("❌ NO ORDER ID FOUND for pickup change")
+            # Still update database with pickup change
+            try:
+                update_booking_to_db(caller_number, updated_booking)
+                print("✅ DATABASE UPDATED (no TaxiCaller order to modify)")
+            except Exception as db_error:
+                print(f"❌ DATABASE UPDATE FAILED: {db_error}")
 
         print("✅ BACKGROUND: Pickup modification completed")
     except Exception as e:
         print(f"❌ BACKGROUND: Pickup modification error: {str(e)}")
+        # Fallback: at least try to update the database
+        try:
+            update_booking_to_db(caller_number, updated_booking)
+            print("✅ FALLBACK: Database updated despite error")
+        except Exception as db_error:
+            print(f"❌ FALLBACK: Database update also failed: {db_error}")
 
 def background_time_modification(caller_number, updated_booking, original_booking=None, new_value=None):
     """Background process to modify pickup time"""
