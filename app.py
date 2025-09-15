@@ -349,33 +349,35 @@ def cancel_taxicaller_booking(order_id, original_booking=None):
             # If JWT token is not a JSON string or doesn't contain 'token' key
             token = jwt_token
 
-        # Add fallback for job_id, and guard for string "None"
-        if order_id and order_id != "None":
-            cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/{order_id}/cancel"
-            ref_id = order_id
-        elif original_booking and (job_id := original_booking.get("taxicaller_job_id")) and job_id != "None":
-            cancel_url = f"https://api-rc.taxicaller.net/api/v1/order/job_{job_id}/cancel"
-            ref_id = job_id
-        else:
-            print("❌ No order_id or job_id found for cancellation")
-            return False
-
+        # Use the correct booker endpoint for cancellation
+        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
+        
         headers = {
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "KiwiCabs-AI-IVR/2.1"
         }
+        
+        cancel_data = {"cancel_reason": "Customer requested modification"}
+        
         print(f"🛠️ DEBUG: Sending TaxiCaller cancel request to: {cancel_url}")
-        response = requests.delete(cancel_url, headers=headers)
-        print(f"🛠️ DEBUG: Response status: {response.status_code}, text: {response.text}")
-        if response.status_code == 200:
-            print(f"✅ ORDER CANCELLED: {ref_id}")
+        print(f"🛠️ DEBUG: Cancel headers: {headers}")
+        print(f"🛠️ DEBUG: Cancel data: {cancel_data}")
+        
+        response = requests.post(cancel_url, headers=headers, json=cancel_data, timeout=10)
+        
+        print(f"🛠️ DEBUG: Cancel response status: {response.status_code}")
+        print(f"🛠️ DEBUG: Cancel response body: {response.text}")
+        
+        if response.status_code in [200, 202, 204]:
+            print(f"✅ BOOKING {order_id} CANCELLED SUCCESSFULLY")
             return True
         else:
-            print(f"❌ Cancellation failed: {response.text}")
+            print(f"❌ CANCEL FAILED: {response.status_code} - {response.text}")
             return False
-
+            
     except Exception as e:
-        print(f"❌ Exception during TaxiCaller cancellation: {e}")
+        print(f"❌ CANCEL ERROR: {str(e)}")
         return False
 
 def handle_taxicaller_cancel_response(response):
