@@ -500,22 +500,27 @@ def parse_address(address: str):
     
     prompt = f"""
 You are an expert Wellington, New Zealand taxi dispatcher AI.
-Your job is to clean and standardize customer-provided addresses.
+Your job is to clean, correct, and standardize customer-provided addresses.
 
 RULES:
 - Always assume the address is in Wellington, New Zealand unless explicitly told otherwise.
+- If the suburb/street is misspelled or unclear, correct it to the closest valid Wellington suburb/street/landmark.
+  Example: "Belrose" → "Melrose", "Mirmar" → "Miramar".
 - Output two strings only:
   1. "clean_address": just house/flat number, street, suburb (no postcode, city, country).
   2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
-- Recognize flats/apartments (e.g. "flat 2 slash 55 Melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose").
-- Recognize POIs and landmarks in Wellington (e.g. "Wellington Airport", "Te Papa", "Weta Cave") and expand them to their proper full address.
+- Recognize flats/apartments:
+  Example: "flat2 slash 55 melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose".
+- Recognize landmarks/POIs:
+  Example: "Wellington Airport" → clean_address: "Wellington Airport, Rongotai".
+  Example: "Te Papa" → clean_address: "Te Papa Museum, Wellington Central".
 
-Examples:
+EXAMPLES:
 Input: "63 hobart st miramar"
 → clean_address: "63 Hobart Street, Miramar"
 → full_address: "63 Hobart Street, Miramar, Wellington 6022, New Zealand"
 
-Input: "flat2 slash 55 melrose road melrose"
+Input: "flat2 slash 55 belrose road melrose"
 → clean_address: "2/55 Melrose Road, Melrose"
 → full_address: "2/55 Melrose Road, Melrose, Wellington 6023, New Zealand"
 
@@ -524,6 +529,7 @@ Input: "wellington airport"
 → full_address: "Wellington International Airport, Stewart Duff Drive, Rongotai, Wellington 6022, New Zealand"
 
 CUSTOMER SAID: "{address}"
+
 Respond ONLY with the two strings in this format:
 clean_address: ...
 full_address: ...
@@ -2249,9 +2255,8 @@ def process_modification_smart(request):
             immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your pickup to {speech_address}.
-        Your taxi will now pick you up from {speech_address} 
-        and take you to {updated_booking.get('destination', '')}.
+        Great! I've updated your pickup to {speech_address}.
+        We'll update your booking immediately.
         We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
