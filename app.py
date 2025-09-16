@@ -499,16 +499,35 @@ def parse_address(address: str):
     openai.api_key = OPENAI_API_KEY
     
     prompt = f"""
-    Take the following address and return two outputs as plain text:
+You are an expert Wellington, New Zealand taxi dispatcher AI.
+Your job is to clean and standardize customer-provided addresses.
 
-    Clean address: only flat number (if any), house number, street, and suburb. 
-    Do not include postcode, city, or country.
+RULES:
+- Always assume the address is in Wellington, New Zealand unless explicitly told otherwise.
+- Output two strings only:
+  1. "clean_address": just house/flat number, street, suburb (no postcode, city, country).
+  2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
+- Recognize flats/apartments (e.g. "flat 2 slash 55 Melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose").
+- Recognize POIs and landmarks in Wellington (e.g. "Wellington Airport", "Te Papa", "Weta Cave") and expand them to their proper full address.
 
-    Full corrected address: properly formatted full address with suburb, city, 
-    postcode, and country if available. Fix spelling errors (e.g., Miranar → Miramar).
+Examples:
+Input: "63 hobart st miramar"
+→ clean_address: "63 Hobart Street, Miramar"
+→ full_address: "63 Hobart Street, Miramar, Wellington 6022, New Zealand"
 
-    Address: "{address}"
-    """
+Input: "flat2 slash 55 melrose road melrose"
+→ clean_address: "2/55 Melrose Road, Melrose"
+→ full_address: "2/55 Melrose Road, Melrose, Wellington 6023, New Zealand"
+
+Input: "wellington airport"
+→ clean_address: "Wellington Airport, Rongotai"
+→ full_address: "Wellington International Airport, Stewart Duff Drive, Rongotai, Wellington 6022, New Zealand"
+
+CUSTOMER SAID: "{speech_text}"
+Respond ONLY with the two strings in this format:
+clean_address: ...
+full_address: ...
+"""
 
     response = openai.ChatCompletion.create(
         model="gpt-4o-mini",
@@ -2147,6 +2166,7 @@ def process_modification_smart(request):
                 # Update booking with new destination
                 updated_booking = original_booking.copy()
                 updated_booking["destination"] = exact_address
+                updated_booking["destination_clean"] = speech_address
                 
                 # IMMEDIATE response - don't make customer wait
                 immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -2223,6 +2243,7 @@ def process_modification_smart(request):
 
             updated_booking = original_booking.copy()
             updated_booking["pickup_address"] = exact_address
+            updated_booking["pickup_address_clean"] = speech_address
 
             # IMMEDIATE response
             immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -2605,8 +2626,11 @@ def process_booking():
                 else:
                     validated_address = pickup
                 pickup_for_speech = clean_address_for_speech(validated_address)
+                clean_pickup = pickup_for_speech  # Set clean address for fallback
 
+            # Save both full and clean addresses
             partial_booking["pickup_address"] = validated_address
+            partial_booking["pickup_address_clean"] = pickup_for_speech
             session["booking_step"] = "destination"
 
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -2666,10 +2690,12 @@ def process_booking():
 
         if isinstance(resolved_destination, dict) and resolved_destination.get('full_address'):
             partial_booking["destination"] = resolved_destination["full_address"]
-            session["booking_step"] = "time"
 
             # Use clean address for speech, fallback to resolved speech
             destination_for_speech = clean_destination if clean_destination else resolved_destination['speech']
+            partial_booking["destination_clean"] = destination_for_speech
+
+            session["booking_step"] = "time"
 
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -2684,10 +2710,12 @@ def process_booking():
 </Response>"""
         elif isinstance(resolved_destination, str) and len(resolved_destination) >= 3:
             partial_booking["destination"] = resolved_destination
-            session["booking_step"] = "time"
 
             # Use clean address for speech, fallback to resolved destination
             destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(resolved_destination)
+            partial_booking["destination_clean"] = destination_for_speech
+
+            session["booking_step"] = "time"
 
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -2828,21 +2856,9 @@ def process_booking():
         name = partial_booking['name']
         confirmation_text = f"Perfect {name}! Let me confirm everything: "
 
-        # Parse and clean pickup address for speech
-        pickup_address = partial_booking['pickup_address']
-        try:
-            clean_pickup, full_pickup = parse_address(pickup_address)
-            pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
-        except:
-            pickup_for_speech = clean_address_for_speech(pickup_address)
-
-        # Parse and clean destination address for speech
-        destination_address = partial_booking.get('destination', '')
-        try:
-            clean_destination, full_destination = parse_address(destination_address)
-            destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(destination_address)
-        except:
-            destination_for_speech = clean_address_for_speech(destination_address)
+        # Use saved clean addresses from partial_booking
+        pickup_for_speech = partial_booking.get('pickup_address_clean', clean_address_for_speech(partial_booking['pickup_address']))
+        destination_for_speech = partial_booking.get('destination_clean', clean_address_for_speech(partial_booking.get('destination', '')))
 
         confirmation_text += f"pickup from {pickup_for_speech}, "
         confirmation_text += f"going to {destination_for_speech},"
@@ -3181,21 +3197,9 @@ def confirm_booking():
         # Build simple confirmation
         booking = session_data.get("pending_booking", {})
 
-        # Parse and clean addresses for speech
-        pickup_address = booking.get('pickup_address', '')
-        destination_address = booking.get('destination', '')
-
-        try:
-            clean_pickup, _ = parse_address(pickup_address)
-            pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
-        except:
-            pickup_for_speech = clean_address_for_speech(pickup_address)
-
-        try:
-            clean_destination, _ = parse_address(destination_address)
-            destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(destination_address)
-        except:
-            destination_for_speech = clean_address_for_speech(destination_address)
+        # Use saved clean addresses from booking, fallback to parsing if not available
+        pickup_for_speech = booking.get('pickup_address_clean', clean_address_for_speech(booking.get('pickup_address', '')))
+        destination_for_speech = booking.get('destination_clean', clean_address_for_speech(booking.get('destination', '')))
 
         simple_confirm = f"Is this booking correct? {booking.get('name', '')}, from {pickup_for_speech} to {destination_for_speech}"
         
@@ -3269,23 +3273,12 @@ def modify_booking():
 
         # Format booking details
         name = booking.get("name", "Customer")
-        pickup_address = booking.get("pickup_address", "")
-        destination_address = booking.get("destination", "")
         pickup_date = booking.get("pickup_date", "")
         pickup_time = booking.get("pickup_time", "")
 
-        # Parse and clean addresses for speech
-        try:
-            clean_pickup, _ = parse_address(pickup_address)
-            pickup = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
-        except:
-            pickup = clean_address_for_speech(pickup_address)
-
-        try:
-            clean_destination, _ = parse_address(destination_address)
-            destination = clean_destination if clean_destination else clean_address_for_speech(destination_address)
-        except:
-            destination = clean_address_for_speech(destination_address)
+        # Use saved clean addresses from booking, fallback to parsing if not available
+        pickup = booking.get("pickup_address_clean", clean_address_for_speech(booking.get("pickup_address", "")))
+        destination = booking.get("destination_clean", clean_address_for_speech(booking.get("destination", "")))
 
         # Build time string
         time_str = ""
