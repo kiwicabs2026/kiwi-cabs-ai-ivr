@@ -2098,45 +2098,45 @@ def process_modification_smart(request):
         return redirect_to("/booking_confirmed")
 
     # Handle pickup modification
-    if ai_intent["intent"] == "change_pickup":
-        new_pickup = ai_intent["new_value"]
-        print(f"🔄 Pickup change detected: {new_pickup}")
+#     if ai_intent["intent"] == "change_pickup":
+#         new_pickup = ai_intent["new_value"]
+#         print(f"🔄 Pickup change detected: {new_pickup}")
 
-        # Resolve the new pickup address
-        resolved_pickup = resolve_wellington_poi_to_address(new_pickup)
-        if resolved_pickup:
-            print(f"✅ Resolved pickup: {resolved_pickup}")
-            new_pickup_address = resolved_pickup["full_address"]
-            new_pickup_speech = resolved_pickup["speech"]
-        else:
-            print(f"❌ Failed to resolve pickup: {new_pickup}")
-            new_pickup_address = new_pickup
-            new_pickup_speech = f"Pickup address: {new_pickup}"
+#         # Resolve the new pickup address
+#         resolved_pickup = resolve_wellington_poi_to_address(new_pickup)
+#         if resolved_pickup:
+#             print(f"✅ Resolved pickup: {resolved_pickup}")
+#             new_pickup_address = resolved_pickup["full_address"]
+#             new_pickup_speech = resolved_pickup["speech"]
+#         else:
+#             print(f"❌ Failed to resolve pickup: {new_pickup}")
+#             new_pickup_address = new_pickup
+#             new_pickup_speech = f"Pickup address: {new_pickup}"
 
-        # Update the booking with the new pickup address
-        updated_booking = original_booking.copy()
-        updated_booking["pickup_address"]
-    # Robustly get the order ID for modification
-    order_id = (
-        original_booking.get("taxicaller_order_id")
-        or original_booking.get("order_id")
-    )
-    print(f"DEBUG: order_id for modification: {order_id}")
+#         # Update the booking with the new pickup address
+#         updated_booking = original_booking.copy()
+#         updated_booking["pickup_address"]
+#     # Robustly get the order ID for modification
+#     order_id = (
+#         original_booking.get("taxicaller_order_id")
+#         or original_booking.get("order_id")
+#     )
+#     print(f"DEBUG: order_id for modification: {order_id}")
 
-    # If we can't find a valid order ID, abort and inform the user
-    if not order_id:
-        print("❌ NO ORDER ID FOUND - cannot modify booking")
-        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Sorry, I couldn't find your booking reference to modify. Please contact our team.
-    </Say>
-    <Hangup/>
-</Response>"""
-        return Response(error_xml, mimetype="text/xml")
+#     # If we can't find a valid order ID, abort and inform the user
+#     if not order_id:
+#         print("❌ NO ORDER ID FOUND - cannot modify booking")
+#         error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+# <Response>
+#     <Say voice="Polly.Aria-Neural" language="en-NZ">
+#         Sorry, I couldn't find your booking reference to modify. Please contact our team.
+#     </Say>
+#     <Hangup/>
+# </Response>"""
+#         return Response(error_xml, mimetype="text/xml")
 
     # Try AI first for natural language understanding
-    ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
+    # ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
     
     if ai_intent and ai_intent.get("confidence", 0) > 0.7:
         intent = ai_intent["intent"]
