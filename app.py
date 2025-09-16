@@ -15,13 +15,11 @@ from psycopg2.extras import RealDictCursor
 import googlemaps
 import pytz 
 from zoneinfo import ZoneInfo
-from openai import OpenAI
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
 
 # Initialize client with your API key
-openAIClient = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -497,6 +495,9 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
         return False
 
 def parse_address(address: str):
+    import openai
+    openai.api_key = OPENAI_API_KEY
+    
     prompt = f"""
     Take the following address and return two outputs as plain text:
 
@@ -509,7 +510,7 @@ def parse_address(address: str):
     Address: "{address}"
     """
 
-    response = openAIClient.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are an NZ address parser and formatter."},
@@ -2580,18 +2581,38 @@ def process_booking():
     <Hangup/>
 </Response>"""
                 return Response(response, mimetype="text/xml")
-            
-            # Validate with Google Maps if available
-            if gmaps:
-                pickup = validate_and_format_address(pickup, "pickup")
-            
-            partial_booking["pickup_address"] = pickup
+
+            # Parse address to get clean and full versions
+            try:
+                clean_pickup, full_pickup = parse_address(pickup)
+                print(f"📍 Parsed pickup - Clean: {clean_pickup}, Full: {full_pickup}")
+
+                # Use full address for validation and storage
+                address_to_validate = full_pickup if full_pickup else pickup
+                if gmaps:
+                    validated_address = validate_and_format_address(address_to_validate, "pickup")
+                else:
+                    validated_address = address_to_validate
+
+                # Use clean address for speech
+                pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(validated_address)
+
+            except Exception as e:
+                print(f"⚠️ Error parsing pickup address: {e}")
+                # Fallback to original logic
+                if gmaps:
+                    validated_address = validate_and_format_address(pickup, "pickup")
+                else:
+                    validated_address = pickup
+                pickup_for_speech = clean_address_for_speech(validated_address)
+
+            partial_booking["pickup_address"] = validated_address
             session["booking_step"] = "destination"
-            
+
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I have your pickup at {pickup}.
+        Perfect! I have your pickup at {pickup_for_speech}.
         Where would you like to go?
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
@@ -2626,18 +2647,34 @@ def process_booking():
         elif dest_lower.startswith("i am going to "):
             destination = destination[14:].strip()
         
+        # Parse address to get clean and full versions
+        try:
+            clean_destination, full_destination = parse_address(destination)
+            print(f"📍 Parsed destination - Clean: {clean_destination}, Full: {full_destination}")
+
+            # Use full address for POI resolution
+            address_to_resolve = full_destination if full_destination else destination
+
+        except Exception as e:
+            print(f"⚠️ Error parsing destination address: {e}")
+            clean_destination = None
+            address_to_resolve = destination
+
         # SMART WELLINGTON POI RESOLUTION
-        print(f"🔍 Resolving destination POI: {destination}")
-        resolved_destination = resolve_wellington_poi_to_address(destination)
-        
+        print(f"🔍 Resolving destination POI: {address_to_resolve}")
+        resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
+
         if isinstance(resolved_destination, dict) and resolved_destination.get('full_address'):
             partial_booking["destination"] = resolved_destination["full_address"]
             session["booking_step"] = "time"
-            
+
+            # Use clean address for speech, fallback to resolved speech
+            destination_for_speech = clean_destination if clean_destination else resolved_destination['speech']
+
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! Going to {resolved_destination['speech']}.
+        Great! Going to {destination_for_speech}.
         When do you need the taxi?
         You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
     </Say>
@@ -2648,11 +2685,14 @@ def process_booking():
         elif isinstance(resolved_destination, str) and len(resolved_destination) >= 3:
             partial_booking["destination"] = resolved_destination
             session["booking_step"] = "time"
-            
+
+            # Use clean address for speech, fallback to resolved destination
+            destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(resolved_destination)
+
             response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Great! Going to {resolved_destination}.
+        Great! Going to {destination_for_speech}.
         When do you need the taxi?
         You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
     </Say>
