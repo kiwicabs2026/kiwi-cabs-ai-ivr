@@ -496,20 +496,61 @@ def clean_address_for_speech(address):
     """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
     if not address:
         return address
-    
+
     import re
     # Remove postcodes (4-digit numbers)
     cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
-    
-    # Remove "Wellington" and "New Zealand" 
+
+    # Remove "Wellington" and "New Zealand"
     cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
     cleaned = cleaned.replace(", New Zealand", "").replace(" New Zealand", "")
-    
+
     # Clean up extra commas and spaces
     cleaned = re.sub(r',\s*,', ',', cleaned)
     cleaned = cleaned.strip(', ')
-    
+
     return cleaned
+
+def format_time_for_speech(time_str):
+    """Convert 24-hour time format (15:00) to 12-hour format with AM/PM (3 PM) for speech"""
+    if not time_str or time_str.upper() in ["ASAP", "NOW", "IMMEDIATELY"]:
+        return time_str
+
+    try:
+        # Handle different time formats
+        if "AM" in time_str.upper() or "PM" in time_str.upper() or "A.M." in time_str.upper() or "P.M." in time_str.upper():
+            # Already in 12-hour format, just clean it up
+            cleaned = time_str.replace("a.m.", "AM").replace("p.m.", "PM").replace("A.M.", "AM").replace("P.M.", "PM")
+            return cleaned.replace("a.M.", "AM").replace("p.M.", "PM")
+
+        # Handle 24-hour format (15:00, 15:30, etc.)
+        if ":" in time_str:
+            try:
+                # Parse 24-hour format
+                time_obj = datetime.strptime(time_str.strip(), "%H:%M").time()
+                # Convert to 12-hour format
+                return time_obj.strftime("%I:%M %p").lstrip('0').replace(' 0', ' ')
+            except ValueError:
+                pass
+
+        # Handle single digit hours (15, 9, etc.)
+        if time_str.isdigit():
+            hour = int(time_str)
+            if hour == 0:
+                return "12 AM"
+            elif hour < 12:
+                return f"{hour} AM"
+            elif hour == 12:
+                return "12 PM"
+            else:
+                return f"{hour - 12} PM"
+
+        # If we can't parse it, return as is
+        return time_str
+
+    except Exception as e:
+        print(f"⚠️ Error formatting time for speech: {e}")
+        return time_str
 
 def resolve_wellington_poi_to_address(place_name):
     """Convert Wellington POI names to exact addresses using Google Maps"""
@@ -2166,12 +2207,12 @@ def process_modification_smart(request):
             new_order_id = cancel_and_recreate_booking_with_new_time(order_id, updated_booking_info["pickup_date"], updated_booking_info["pickup_time"])
             
             if new_order_id:
+                formatted_time = format_time_for_speech(new_value)
                 immediate_response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Perfect! I've updated your time to {new_value}.
-        Your taxi will pick you up at {new_value}.
-        Your new booking reference is {new_order_id[-6:]}.
+        Perfect! I've updated your time to {formatted_time}.
+        Your taxi will pick you up at {formatted_time}.
         We appreciate your booking with Kiwi Cabs. Have a great day.
     </Say>
     <Hangup/>
@@ -2596,13 +2637,14 @@ def process_booking():
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
+                formatted_time = format_time_for_speech(parsed_booking['pickup_time'])
                 if parsed_booking.get("pickup_date"):
                     partial_booking["pickup_date"] = parsed_booking["pickup_date"]
-                    time_string = f"on {parsed_booking['pickup_date']} at {parsed_booking['pickup_time']}"
+                    time_string = f"on {parsed_booking['pickup_date']} at {formatted_time}"
                 else:
                     # Default to today if no date specified
                     partial_booking["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
-                    time_string = f"today at {parsed_booking['pickup_time']}"
+                    time_string = f"today at {formatted_time}"
 
                 valid_time = True
                 print(f"current pick up time !!!!!!!!!!!!! {partial_booking['pickup_date']} {partial_booking['pickup_time']}")
@@ -2697,7 +2739,9 @@ def process_booking():
         else:
             pickup_date = partial_booking.get('pickup_date', '')
             pickup_time = partial_booking.get('pickup_time', '')
-            confirmation_text += f" on {pickup_date} at {pickup_time}" if pickup_date and pickup_time else ""
+            if pickup_date and pickup_time:
+                formatted_time = format_time_for_speech(pickup_time)
+                confirmation_text += f" on {pickup_date} at {formatted_time}"
         
         confirmation_text += instructions_msg
 
@@ -3105,9 +3149,11 @@ def modify_booking():
         if pickup_time == "ASAP":
             time_str = "as soon as possible"
         elif pickup_date and pickup_time:
-            time_str = f"on {pickup_date} at {pickup_time}"
+            formatted_time = format_time_for_speech(pickup_time)
+            time_str = f"on {pickup_date} at {formatted_time}"
         elif pickup_time:
-            time_str = f"at {pickup_time}"
+            formatted_time = format_time_for_speech(pickup_time)
+            time_str = f"at {formatted_time}"
 
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
