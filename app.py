@@ -493,23 +493,107 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
         return False
 
 def clean_address_for_speech(address):
-    """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
+    """Clean address for AI speech - extract only house number, street name, and suburb"""
     if not address:
         return address
 
     import re
-    # Remove postcodes (4-digit numbers)
-    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
+
+    # First, clean up the raw address
+    cleaned = address.strip()
+
+    # Remove postcodes (4-digit numbers at the end)
+    cleaned = re.sub(r',?\s*\d{4}\s*$', '', cleaned)
 
     # Remove "Wellington" and "New Zealand"
-    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
+    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington Central", " Central")
+    cleaned = cleaned.replace(" Wellington", "")
     cleaned = cleaned.replace(", New Zealand", "").replace(" New Zealand", "")
 
-    # Clean up extra commas and spaces
+    # Remove extra punctuation and clean up
     cleaned = re.sub(r',\s*,', ',', cleaned)
     cleaned = cleaned.strip(', ')
 
-    return cleaned
+    # Parse address components for speech
+    try:
+        # Split by comma to separate main address from suburb
+        parts = [part.strip() for part in cleaned.split(',')]
+
+        if len(parts) >= 2:
+            main_address = parts[0]
+            suburb = parts[-1]  # Last part is usually suburb
+
+            # Extract house number and street from main address
+            # Handle formats like: "63 Hobart St", "2/55 Melrose Road", "27A Rex St"
+            address_match = re.match(r'^(\d+[A-Za-z]?(?:/\d+)?)\s+(.+)', main_address.strip())
+
+            if address_match:
+                house_number = address_match.group(1)
+                street_name = address_match.group(2)
+
+                # Clean up street name (remove extra words like "Road" -> "Rd")
+                street_name = street_name.replace(" Road", " Rd").replace(" Street", " St")
+
+                # Return simplified format: "house number street name, suburb"
+                return f"{house_number} {street_name}, {suburb}"
+
+        # If parsing fails, return cleaned version
+        return cleaned
+
+    except Exception as e:
+        print(f"⚠️ Address parsing error: {e}")
+        return cleaned
+
+def parse_flat_address(address_text):
+    """Parse flat/unit addresses from speech input"""
+    if not address_text:
+        return address_text
+
+    import re
+
+    # Clean up the input
+    cleaned = address_text.strip()
+    original_case = cleaned  # Keep original case for street names
+    cleaned_lower = cleaned.lower()
+
+    # Handle various flat/unit formats
+    patterns = [
+        # "flat 2 slash 55 melrose road" -> "2/55 melrose road"
+        r'flat\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
+        # "unit 2 slash 55 rex street" -> "2/55 rex street"
+        r'unit\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
+        # "apartment 2 slash 55 hobart street" -> "2/55 hobart street"
+        r'apartment\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
+        # "2 slash 55 melrose road" -> "2/55 melrose road"
+        r'^(\d+)\s*slash\s*(\d+)\s*(.+)',
+        # Handle "27 a rex street" -> "27A rex street"
+        r'^(\d+)\s*([a-z])\s+(.+)',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, cleaned_lower)
+        if match:
+            if len(match.groups()) == 3:
+                if pattern.endswith(r'([a-z])\s+(.+)'):
+                    # Handle letter suffix like "27A rex street"
+                    flat_num = f"{match.group(1)}{match.group(2).upper()}"
+                    street_part = match.group(3).strip()
+                    return f"{flat_num} {street_part}"
+                else:
+                    # Handle flat/unit numbers like "2/55 melrose road"
+                    flat_num = f"{match.group(1)}/{match.group(2)}"
+                    street_part = match.group(3).strip()
+                    return f"{flat_num} {street_part}"
+            elif len(match.groups()) == 2:
+                if pattern.endswith(r'([a-z])\s+'):
+                    # Handle letter suffix like "27A"
+                    return f"{match.group(1)}{match.group(2).upper()}"
+                else:
+                    # Handle flat/unit numbers like "2/55"
+                    return f"{match.group(1)}/{match.group(2)}"
+
+    # If no special patterns found, return original
+    return address_text
 
 def format_time_for_speech(time_str):
     """Convert 24-hour time format (15:00) to 12-hour format with AM/PM (3 PM) for speech"""
@@ -1682,6 +1766,9 @@ def parse_booking_speech(speech_text):
             pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
             pickup = re.sub(r"\bright\s+now\b", "", pickup, flags=re.IGNORECASE).strip()
 
+            # Parse flat/unit addresses first
+            pickup = parse_flat_address(pickup)
+
             # Fix common speech recognition errors
             pickup = pickup.replace("63rd Street Melbourne", "63 Hobart Street")
             pickup = pickup.replace("Melbourne Street", "Hobart Street")
@@ -1718,6 +1805,9 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             destination = match.group(1).strip()
+
+            # Parse flat/unit addresses first
+            destination = parse_flat_address(destination)
 
             # AGGRESSIVE cleaning to remove "number" and fix order
             destination = re.sub(r"\bnumber\s+", "", destination, flags=re.IGNORECASE)
