@@ -2311,12 +2311,42 @@ def process_modification_smart(request):
     <Redirect>/modify_booking</Redirect>
 </Response>"""
                 return Response(error_xml, mimetype="text/xml")
+        elif intent == "cancel":
+            return redirect_to("/cancel_booking")
+            
+            # Handle "no change" intent
+        elif intent == "no_change":
+            response = f'''<?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Perfect! Your booking remains unchanged.
+            We'll see you at your scheduled pickup time.
+        </Say>
+        <Hangup/>
+    </Response>'''
+            return Response(response, mimetype="text/xml")
+        else:
+            # If AI couldn't understand the request with high confidence
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+        <Response>
+            <Say voice="Polly.Aria-Neural" language="en-NZ">
+                I'm not sure I understood what you want to change. 
+                Would you like to change your pickup location, destination, time, or cancel your booking?
+            </Say>
+            <Gather input="speech" action="/process_modification_smart" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
+                <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me what you'd like to change.</Say>
+            </Gather>
+            <Redirect>/modify_booking</Redirect>
+        </Response>"""
+            
+            return Response(response, mimetype="text/xml")
     else:
         # Handle error in creating new booking
         error_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        I'm sorry, I couldn't update your booking time. Please try again or contact our dispatch center.
+        I'm not sure I understood what you want to change. 
+        Would you like to change your pickup location, destination, time, or cancel your booking?
     </Say>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
