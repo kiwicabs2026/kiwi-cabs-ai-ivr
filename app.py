@@ -15,9 +15,13 @@ from psycopg2.extras import RealDictCursor
 import googlemaps
 import pytz 
 from zoneinfo import ZoneInfo
+from openai import OpenAI
 
 # New Zealand timezone
 NZ_TZ = pytz.timezone('Pacific/Auckland')
+
+# Initialize client with your API key
+openAIClient = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Try to import Google Cloud Speech, but make it optional with better error handling
 GOOGLE_SPEECH_AVAILABLE = False
@@ -492,108 +496,59 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
         print(f"❌ EDIT ERROR: {e}")
         return False
 
+def parse_address(address: str):
+    prompt = f"""
+    Take the following address and return two outputs as plain text:
+
+    Clean address: only flat number (if any), house number, street, and suburb. 
+    Do not include postcode, city, or country.
+
+    Full corrected address: properly formatted full address with suburb, city, 
+    postcode, and country if available. Fix spelling errors (e.g., Miranar → Miramar).
+
+    Address: "{address}"
+    """
+
+    response = openAIClient.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an NZ address parser and formatter."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0
+    )
+
+    output = response.choices[0].message.content.strip()
+
+    # Split into two variables
+    clean_address, full_address = None, None
+    lines = output.splitlines()
+    for line in lines:
+        if line.lower().startswith("clean address:"):
+            clean_address = line.replace("Clean address:", "").strip()
+        elif line.lower().startswith("full corrected address:"):
+            full_address = line.replace("Full corrected address:", "").strip()
+
+    return clean_address, full_address
+
 def clean_address_for_speech(address):
-    """Clean address for AI speech - extract only house number, street name, and suburb"""
+    """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
     if not address:
         return address
 
     import re
-
-    # First, clean up the raw address
-    cleaned = address.strip()
-
-    # Remove postcodes (4-digit numbers at the end)
-    cleaned = re.sub(r',?\s*\d{4}\s*$', '', cleaned)
+    # Remove postcodes (4-digit numbers)
+    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
 
     # Remove "Wellington" and "New Zealand"
-    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington Central", " Central")
-    cleaned = cleaned.replace(" Wellington", "")
+    cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
     cleaned = cleaned.replace(", New Zealand", "").replace(" New Zealand", "")
 
-    # Remove extra punctuation and clean up
+    # Clean up extra commas and spaces
     cleaned = re.sub(r',\s*,', ',', cleaned)
     cleaned = cleaned.strip(', ')
 
-    # Parse address components for speech
-    try:
-        # Split by comma to separate main address from suburb
-        parts = [part.strip() for part in cleaned.split(',')]
-
-        if len(parts) >= 2:
-            main_address = parts[0]
-            suburb = parts[-1]  # Last part is usually suburb
-
-            # Extract house number and street from main address
-            # Handle formats like: "63 Hobart St", "2/55 Melrose Road", "27A Rex St"
-            address_match = re.match(r'^(\d+[A-Za-z]?(?:/\d+)?)\s+(.+)', main_address.strip())
-
-            if address_match:
-                house_number = address_match.group(1)
-                street_name = address_match.group(2)
-
-                # Clean up street name (remove extra words like "Road" -> "Rd")
-                street_name = street_name.replace(" Road", " Rd").replace(" Street", " St")
-
-                # Return simplified format: "house number street name, suburb"
-                return f"{house_number} {street_name}, {suburb}"
-
-        # If parsing fails, return cleaned version
-        return cleaned
-
-    except Exception as e:
-        print(f"⚠️ Address parsing error: {e}")
-        return cleaned
-
-def parse_flat_address(address_text):
-    """Parse flat/unit addresses from speech input"""
-    if not address_text:
-        return address_text
-
-    import re
-
-    # Clean up the input
-    cleaned = address_text.strip()
-    original_case = cleaned  # Keep original case for street names
-    cleaned_lower = cleaned.lower()
-
-    # Handle various flat/unit formats
-    patterns = [
-        # "flat 2 slash 55 melrose road" -> "2/55 melrose road"
-        r'flat\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
-        # "unit 2 slash 55 rex street" -> "2/55 rex street"
-        r'unit\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
-        # "apartment 2 slash 55 hobart street" -> "2/55 hobart street"
-        r'apartment\s*(\d+)\s*(?:slash|/)\s*(\d+)\s*(.+)',
-        # "2 slash 55 melrose road" -> "2/55 melrose road"
-        r'^(\d+)\s*slash\s*(\d+)\s*(.+)',
-        # Handle "27 a rex street" -> "27A rex street"
-        r'^(\d+)\s*([a-z])\s+(.+)',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, cleaned_lower)
-        if match:
-            if len(match.groups()) == 3:
-                if pattern.endswith(r'([a-z])\s+(.+)'):
-                    # Handle letter suffix like "27A rex street"
-                    flat_num = f"{match.group(1)}{match.group(2).upper()}"
-                    street_part = match.group(3).strip()
-                    return f"{flat_num} {street_part}"
-                else:
-                    # Handle flat/unit numbers like "2/55 melrose road"
-                    flat_num = f"{match.group(1)}/{match.group(2)}"
-                    street_part = match.group(3).strip()
-                    return f"{flat_num} {street_part}"
-            elif len(match.groups()) == 2:
-                if pattern.endswith(r'([a-z])\s+'):
-                    # Handle letter suffix like "27A"
-                    return f"{match.group(1)}{match.group(2).upper()}"
-                else:
-                    # Handle flat/unit numbers like "2/55"
-                    return f"{match.group(1)}/{match.group(2)}"
-
-    # If no special patterns found, return original
-    return address_text
+    return cleaned
 
 def format_time_for_speech(time_str):
     """Convert 24-hour time format (15:00) to 12-hour format with AM/PM (3 PM) for speech"""
@@ -1766,9 +1721,6 @@ def parse_booking_speech(speech_text):
             pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
             pickup = re.sub(r"\bright\s+now\b", "", pickup, flags=re.IGNORECASE).strip()
 
-            # Parse flat/unit addresses first
-            pickup = parse_flat_address(pickup)
-
             # Fix common speech recognition errors
             pickup = pickup.replace("63rd Street Melbourne", "63 Hobart Street")
             pickup = pickup.replace("Melbourne Street", "Hobart Street")
@@ -1805,9 +1757,6 @@ def parse_booking_speech(speech_text):
         match = re.search(pattern, speech_text, re.IGNORECASE)
         if match:
             destination = match.group(1).strip()
-
-            # Parse flat/unit addresses first
-            destination = parse_flat_address(destination)
 
             # AGGRESSIVE cleaning to remove "number" and fix order
             destination = re.sub(r"\bnumber\s+", "", destination, flags=re.IGNORECASE)
@@ -2171,23 +2120,28 @@ def process_modification_smart(request):
         
         # Handle destination changes
         if intent == "change_destination" and new_value:
-            print(f"🔍 Resolving Wellington POI: {new_value}")
-            
+            print(f"🔍 Processing destination change: {new_value}")
+
             try:
-                # Convert POI name to exact address
-                resolved_destination = resolve_wellington_poi_to_address(new_value)
-                
+                # First parse the address to get clean and full versions
+                clean_address, full_address = parse_address(new_value)
+                print(f"📍 Parsed address - Clean: {clean_address}, Full: {full_address}")
+
+                # Use full address for POI resolution
+                address_to_resolve = full_address if full_address else new_value
+                resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
+
                 # Add error handling for missing POI
                 if not resolved_destination:
-                    raise ValueError(f"Failed to resolve destination for POI: {new_value}")
-                
-                # Get the actual address string
+                    raise ValueError(f"Failed to resolve destination for POI: {address_to_resolve}")
+
+                # Get the actual address string for storage and clean address for speech
                 if isinstance(resolved_destination, dict):
-                    exact_address = resolved_destination.get("full_address", new_value)
-                    speech_address = resolved_destination.get("speech", exact_address)
+                    exact_address = resolved_destination.get("full_address", address_to_resolve)
+                    speech_address = clean_address if clean_address else resolved_destination.get("speech", exact_address)
                 else:
                     exact_address = resolved_destination
-                    speech_address = exact_address
+                    speech_address = clean_address if clean_address else exact_address
                 
                 # Update booking with new destination
                 updated_booking = original_booking.copy()
@@ -2243,16 +2197,28 @@ def process_modification_smart(request):
         
         # Handle pickup changes
         elif intent == "change_pickup" and new_value:
-            # Smart POI resolution for pickup changes
-            resolved_pickup = resolve_wellington_poi_to_address(new_value)
+            print(f"🔍 Processing pickup change: {new_value}")
 
-            # Get the actual address string
-            if isinstance(resolved_pickup, dict):
-                exact_address = resolved_pickup.get("full_address", new_value)
-                speech_address = resolved_pickup.get("speech", exact_address)
-            else:
-                exact_address = resolved_pickup if resolved_pickup else new_value
-                speech_address = exact_address
+            try:
+                # First parse the address to get clean and full versions
+                clean_address, full_address = parse_address(new_value)
+                print(f"📍 Parsed pickup - Clean: {clean_address}, Full: {full_address}")
+
+                # Use full address for POI resolution
+                address_to_resolve = full_address if full_address else new_value
+                resolved_pickup = resolve_wellington_poi_to_address(address_to_resolve)
+
+                # Get the actual address string for storage and clean address for speech
+                if isinstance(resolved_pickup, dict):
+                    exact_address = resolved_pickup.get("full_address", address_to_resolve)
+                    speech_address = clean_address if clean_address else resolved_pickup.get("speech", exact_address)
+                else:
+                    exact_address = resolved_pickup if resolved_pickup else address_to_resolve
+                    speech_address = clean_address if clean_address else exact_address
+            except Exception as e:
+                print(f"⚠️ Error parsing pickup address: {e}")
+                exact_address = new_value
+                speech_address = new_value
 
             updated_booking = original_booking.copy()
             updated_booking["pickup_address"] = exact_address
@@ -2821,8 +2787,25 @@ def process_booking():
         # Build final confirmation
         name = partial_booking['name']
         confirmation_text = f"Perfect {name}! Let me confirm everything: "
-        confirmation_text += f"pickup from {partial_booking['pickup_address']}, "
-        confirmation_text += f"going to {clean_address_for_speech(partial_booking.get('destination', ''))},"
+
+        # Parse and clean pickup address for speech
+        pickup_address = partial_booking['pickup_address']
+        try:
+            clean_pickup, full_pickup = parse_address(pickup_address)
+            pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
+        except:
+            pickup_for_speech = clean_address_for_speech(pickup_address)
+
+        # Parse and clean destination address for speech
+        destination_address = partial_booking.get('destination', '')
+        try:
+            clean_destination, full_destination = parse_address(destination_address)
+            destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(destination_address)
+        except:
+            destination_for_speech = clean_address_for_speech(destination_address)
+
+        confirmation_text += f"pickup from {pickup_for_speech}, "
+        confirmation_text += f"going to {destination_for_speech},"
         
         if partial_booking.get("pickup_time") == "ASAP":
             confirmation_text += " right now"
@@ -3157,7 +3140,24 @@ def confirm_booking():
         
         # Build simple confirmation
         booking = session_data.get("pending_booking", {})
-        simple_confirm = f"Is this booking correct? {booking.get('name', '')}, from {booking.get('pickup_address', '')} to {booking.get('destination', '')}"
+
+        # Parse and clean addresses for speech
+        pickup_address = booking.get('pickup_address', '')
+        destination_address = booking.get('destination', '')
+
+        try:
+            clean_pickup, _ = parse_address(pickup_address)
+            pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
+        except:
+            pickup_for_speech = clean_address_for_speech(pickup_address)
+
+        try:
+            clean_destination, _ = parse_address(destination_address)
+            destination_for_speech = clean_destination if clean_destination else clean_address_for_speech(destination_address)
+        except:
+            destination_for_speech = clean_address_for_speech(destination_address)
+
+        simple_confirm = f"Is this booking correct? {booking.get('name', '')}, from {pickup_for_speech} to {destination_for_speech}"
         
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -3229,10 +3229,23 @@ def modify_booking():
 
         # Format booking details
         name = booking.get("name", "Customer")
-        pickup = booking.get("pickup_address", "")
-        destination = booking.get("destination", "")
+        pickup_address = booking.get("pickup_address", "")
+        destination_address = booking.get("destination", "")
         pickup_date = booking.get("pickup_date", "")
         pickup_time = booking.get("pickup_time", "")
+
+        # Parse and clean addresses for speech
+        try:
+            clean_pickup, _ = parse_address(pickup_address)
+            pickup = clean_pickup if clean_pickup else clean_address_for_speech(pickup_address)
+        except:
+            pickup = clean_address_for_speech(pickup_address)
+
+        try:
+            clean_destination, _ = parse_address(destination_address)
+            destination = clean_destination if clean_destination else clean_address_for_speech(destination_address)
+        except:
+            destination = clean_address_for_speech(destination_address)
 
         # Build time string
         time_str = ""
