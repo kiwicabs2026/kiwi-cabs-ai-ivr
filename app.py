@@ -523,7 +523,7 @@ Input: "wellington airport"
 → clean_address: "Wellington Airport, Rongotai"
 → full_address: "Wellington International Airport, Stewart Duff Drive, Rongotai, Wellington 6022, New Zealand"
 
-CUSTOMER SAID: "{speech_text}"
+CUSTOMER SAID: "{address}"
 Respond ONLY with the two strings in this format:
 clean_address: ...
 full_address: ...
