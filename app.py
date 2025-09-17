@@ -489,10 +489,10 @@ RULES:
 - If the suburb/street is misspelled or unclear, correct it to the closest valid Wellington suburb/street/landmark.
   Example: "Belrose" → "Melrose", "Mirmar" → "Miramar".
 - Output two strings only:
-  1. "clean_address": just house/flat number, street, suburb (no postcode, city, country).
+  1. "clean_address": just houseflat number, street, suburb (no postcode, city, country).
   2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
 - Recognize flats/apartments:
-  Example: "flat2 slash 55 melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose".
+  Example: "flat2 slash 55 melrose road melrose" → clean_address: "255 Melrose Road, Melrose".
 - Recognize landmarks/POIs:
   Example: "Wellington Airport" → clean_address: "Wellington Airport, Rongotai".
   Example: "Te Papa" → clean_address: "Te Papa Museum, Wellington Central".
@@ -503,7 +503,7 @@ Input: "63 hobart st miramar"
 → full_address: "63 Hobart Street, Miramar, Wellington 6022, New Zealand"
 
 Input: "flat2 slash 55 belrose road melrose"
-→ clean_address: "2/55 Melrose Road, Melrose"
+→ clean_address: "255 Melrose Road, Melrose"
 → full_address: "2/55 Melrose Road, Melrose, Wellington 6023, New Zealand"
 
 Input: "wellington airport"
@@ -518,7 +518,7 @@ full_address: ...
 """
 
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4.0-mini",
         messages=[
             {"role": "system", "content": "You are an NZ address parser and formatter."},
             {"role": "user", "content": prompt}
@@ -2106,23 +2106,23 @@ def process_modification_smart(request):
 #         updated_booking = original_booking.copy()
 #         updated_booking["pickup_address"]
 #     # Robustly get the order ID for modification
-#     order_id = (
-#         original_booking.get("taxicaller_order_id")
-#         or original_booking.get("order_id")
-#     )
-#     print(f"DEBUG: order_id for modification: {order_id}")
+    order_id = (
+        original_booking.get("taxicaller_order_id")
+        or original_booking.get("order_id")
+    )
+    print(f"DEBUG: order_id for modification: {order_id}")
 
-#     # If we can't find a valid order ID, abort and inform the user
-#     if not order_id:
-#         print("❌ NO ORDER ID FOUND - cannot modify booking")
-#         error_xml = """<?xml version="1.0" encoding="UTF-8"?>
-# <Response>
-#     <Say voice="Polly.Aria-Neural" language="en-NZ">
-#         Sorry, I couldn't find your booking reference to modify. Please contact our team.
-#     </Say>
-#     <Hangup/>
-# </Response>"""
-#         return Response(error_xml, mimetype="text/xml")
+    # If we can't find a valid order ID, abort and inform the user
+    if not order_id:
+        print("❌ NO ORDER ID FOUND - cannot modify booking")
+        error_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, I couldn't find your booking reference to modify. Please contact our team.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(error_xml, mimetype="text/xml")
 
     # Try AI first for natural language understanding
     # ai_intent = extract_modification_intent_with_ai(speech_result, original_booking)
