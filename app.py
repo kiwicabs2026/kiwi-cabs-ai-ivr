@@ -74,7 +74,7 @@ def validate_and_format_address(address, address_type="general"):
             components = result['address_components']
             formatted_address = result['formatted_address']
             
-            
+            print(f"formatted address:::::: {formatted_address}")
             return formatted_address
         else:
             return address
