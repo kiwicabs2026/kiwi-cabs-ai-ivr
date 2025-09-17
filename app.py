@@ -643,7 +643,8 @@ def resolve_wellington_poi_to_address(place_name):
                 continue
         
         # Fallback to geocoding
-        geocode_result = gmaps.geocode(f"{place_name}, Wellington, New Zealand")
+        geocode_result = gmaps.geocode(place_name, region="nz")
+
         if geocode_result:
             address = geocode_result[0]['formatted_address']
             print(f"✅ GEOCODED: {place_name} → {address}")
