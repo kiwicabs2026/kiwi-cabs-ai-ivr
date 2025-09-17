@@ -544,7 +544,10 @@ full_address: ...
         temperature=0
     )
 
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print(f"gpt result address: {response}")
     output = response.choices[0].message.content.strip()
+    print(f"gpt result address for output: {output}")
 
     # Split into two variables
     clean_address, full_address = None, None
@@ -2621,6 +2624,7 @@ def process_booking():
             pickup = pickup[14:].strip()
         elif pickup_lower.startswith("pick me up from "):
             pickup = pickup[16:].strip()
+        
         
         # Remove "number" word
         pickup = re.sub(r"\bnumber\s+", "", pickup, flags=re.IGNORECASE)
