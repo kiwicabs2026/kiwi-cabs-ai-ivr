@@ -3323,7 +3323,7 @@ def modify_booking():
             method="POST" 
             timeout="20" 
             language="en-NZ" 
-            speechTimeout="1">
+            speechTimeout="3">
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
