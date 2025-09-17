@@ -518,7 +518,7 @@ full_address: ...
 """
 
     response = openai.ChatCompletion.create(
-        model="gpt-4.0-mini",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are an NZ address parser and formatter."},
             {"role": "user", "content": prompt}
