@@ -3408,7 +3408,7 @@ def confirm_cancellation():
             # Send cancellation to API
             cancelled_booking = booking_storage[caller_number].copy()
             cancelled_booking["status"] = "cancelled"
-            send_booking_to_api(cancelled_booking, caller_number)
+            # send_booking_to_api(cancelled_booking, caller_number)
 
             # Get order ID for TaxiCaller cancellation
             order_id = cancelled_booking.get('taxicaller_order_id')
