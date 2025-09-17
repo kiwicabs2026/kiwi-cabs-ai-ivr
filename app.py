@@ -551,12 +551,12 @@ full_address: ...
 
     # Split into two variables
     clean_address, full_address = None, None
-    lines = output.splitlines()
-    for line in lines:
-        if line.lower().startswith("clean address:"):
-            clean_address = line.replace("Clean address:", "").strip()
-        elif line.lower().startswith("full corrected address:"):
-            full_address = line.replace("Full corrected address:", "").strip()
+    match = re.search(r'clean_address:\s*"(.*?)"', output)
+    clean_address = match.group(1) if match else None
+
+    match = re.search(r'full_address:\s*"(.*?)"', output)
+    full_address = match.group(1) if match else None
+
 
     return clean_address, full_address
 
