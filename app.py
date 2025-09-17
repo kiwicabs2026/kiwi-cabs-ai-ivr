@@ -67,6 +67,8 @@ def validate_and_format_address(address, address_type="general"):
         # Use Google Geocoding
         results = gmaps.geocode(search_address, region="nz")
         
+        print(f"🔍 Google Maps results: {results}")
+        
         if results:
             result = results[0]
             components = result['address_components']
@@ -544,8 +546,6 @@ full_address: ...
         temperature=0
     )
 
-    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    print(f"gpt result address: {response}")
     output = response.choices[0].message.content.strip()
     print(f"gpt result address for output: {output}")
 
