@@ -2093,9 +2093,9 @@ def process_modification_smart(request):
     
     print(f"🤖 AI Intent: {ai_intent}")
 
-    if ai_intent["intent"] == "no_change":
-        print("✅ No change detected - keeping original booking")
-        return redirect_to("/booking_confirmed")
+    # if ai_intent["intent"] == "no_change":
+    #     print("✅ No change detected - keeping original booking")
+    #     return redirect_to("/booking_confirmed")
 
     # Handle pickup modification
 #     if ai_intent["intent"] == "change_pickup":
