@@ -618,6 +618,7 @@ def clean_address_for_speech(address):
     # Clean up extra commas and spaces
     cleaned = re.sub(r',\s*,', ',', cleaned)
     cleaned = cleaned.strip(', ')
+    print(f"clean address for speech cleaned1: {cleaned}")
 
     return cleaned
 
@@ -3368,6 +3369,7 @@ def modify_booking():
         pickup = booking.get("pickup_address_clean", clean_address_for_speech(booking.get("pickup_address", "")))
         destination = booking.get("destination_clean", clean_address_for_speech(booking.get("destination", "")))
 
+        print(f"clean address for speech cleaned2: {pickup}")
         # Build time string
         time_str = ""
         if pickup_time == "ASAP":
