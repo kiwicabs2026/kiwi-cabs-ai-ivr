@@ -2492,7 +2492,7 @@ def voice():
             Press 1 for a new taxi booking.
             Press 2 to change or cancel an existing booking.
             Press 3 to speak with our team.
-            Press 4 for email support.
+            Press 4 If you have a complaint or have lost an item in one of our taxis
         </Say>
     </Gather>
     <Redirect>/voice</Redirect>
@@ -3442,7 +3442,7 @@ def team():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Please hold while I connect you to our team.
     </Say>
-    <Dial>048966156</Dial>
+    <Dial>+6448966156</Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
 
