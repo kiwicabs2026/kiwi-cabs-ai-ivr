@@ -606,6 +606,7 @@ def clean_address_for_speech(address):
     import re
 
     cleaned = normalize_unit_slash_address(address)
+    print("clean address for speech cleaned: {cleaned}")
     # Remove postcodes (4-digit numbers)
     cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
     cleaned = address.replace("/", "")
