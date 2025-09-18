@@ -492,7 +492,9 @@ RULES:
   1. "clean_address": just houseflat number, street, suburb (no postcode, city, country).
   2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
 - Recognize flats/apartments:
-  Example: "flat2 slash 55 melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose".
+  Example: "flat2 slash 55 melrose road melrose" → clean_address: "255 Melrose Road, Melrose".
+- SPECIAL RULE:
+  * If the address looks like "2/55 Street, Suburb", interpret it as "255 Street, Suburb" only for clean_address(merge numbers instead of flat ).
 - Recognize landmarks/POIs:
   Example: "Wellington Airport" → clean_address: "Wellington Airport, Rongotai".
   Example: "Te Papa" → clean_address: "Te Papa Museum, Wellington Central".
@@ -503,7 +505,7 @@ Input: "63 hobart st miramar"
 → full_address: "63 Hobart Street, Miramar, Wellington 6022, New Zealand"
 
 Input: "flat2 slash 55 belrose road melrose"
-→ clean_address: "2/55 Melrose Road, Melrose"
+→ clean_address: "255 Melrose Road, Melrose"
 → full_address: "2/55 Melrose Road, Melrose, Wellington 6023, New Zealand"
 
 Input: "wellington airport"
@@ -537,7 +539,6 @@ full_address: ...
     match = re.search(r'full_address:\s*"(.*?)"', output)
     full_address = match.group(1) if match else None
 
-    clean_address = clean_address.replace("/", "")
 
     return clean_address, full_address
 
@@ -549,7 +550,7 @@ def clean_address_for_speech(address):
     import re
     # Remove postcodes (4-digit numbers)
     cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
-    cleaned = cleaned.replace("/", "")
+    cleaned = address.replace("/", "")
 
     # Remove "Wellington" and "New Zealand"
     cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
