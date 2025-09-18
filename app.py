@@ -489,12 +489,10 @@ RULES:
 - If the suburb/street is misspelled or unclear, correct it to the closest valid Wellington suburb/street/landmark.
   Example: "Belrose" → "Melrose", "Mirmar" → "Miramar".
 - Output two strings only:
-  1. "clean_address": just houseflat number, street, suburb (no postcode, city, country).
+  1. "clean_address": just house/flat number, street, suburb (no postcode, city, country).
   2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
 - Recognize flats/apartments:
-  Example: "flat2 slash 55 melrose road melrose" → clean_address: "255 Melrose Road, Melrose".
-- SPECIAL RULE:
-  * If the address looks like "2/55 Street, Suburb", interpret it as "255 Street, Suburb" only for clean_address(merge numbers instead of flat ).
+  Example: "flat2 slash 55 melrose road melrose" → clean_address: "2/55 Melrose Road, Melrose".
 - Recognize landmarks/POIs:
   Example: "Wellington Airport" → clean_address: "Wellington Airport, Rongotai".
   Example: "Te Papa" → clean_address: "Te Papa Museum, Wellington Central".
@@ -505,7 +503,7 @@ Input: "63 hobart st miramar"
 → full_address: "63 Hobart Street, Miramar, Wellington 6022, New Zealand"
 
 Input: "flat2 slash 55 belrose road melrose"
-→ clean_address: "255 Melrose Road, Melrose"
+→ clean_address: "2/55 Melrose Road, Melrose"
 → full_address: "2/55 Melrose Road, Melrose, Wellington 6023, New Zealand"
 
 Input: "wellington airport"
@@ -539,8 +537,66 @@ full_address: ...
     match = re.search(r'full_address:\s*"(.*?)"', output)
     full_address = match.group(1) if match else None
 
-
+    clean_address = normalize_unit_slash_address(clean_address)
     return clean_address, full_address
+
+def normalize_unit_slash_address(addr: str, lowercase_unit: bool = True) -> str:
+    """
+    Convert addresses of the forms:
+      "2/55 Melrose Road, Melrose" -> "unit 2 at 55 Melrose Road, Melrose"
+      "Flat 2, 55 Melrose Rd"      -> "unit 2 at 55 Melrose Rd"
+      "Unit 2/55 Melrose Rd"      -> "unit 2 at 55 Melrose Rd"
+      "1a/55 Melrose Road"        -> "unit 1a at 55 Melrose Road"
+
+    If the address already appears to be in the target form ("unit X at ..."),
+    it is returned unchanged.
+
+    Args:
+      addr: input address string
+      lowercase_unit: if True produce "unit ...", else "Unit ..."
+
+    Returns:
+      normalized address string
+    """
+    if not addr or not isinstance(addr, str):
+        return addr
+
+    target_unit_word = "unit" if lowercase_unit else "Unit"
+
+    # If already normalized, return as-is (case-insensitive check)
+    if re.search(rf'\b{target_unit_word}\s+\w+\s+at\b', addr, flags=re.IGNORECASE):
+        return addr
+
+    s = addr.strip()
+
+    # Patterns to match unit/house-number styles at start or after punctuation
+    patterns = [
+        # e.g. "2/55 Rest..." or "1a/55 Rest" or "2\55 Rest" or "2-55 Rest"
+        r'(?P<prefix>^|\s|,)(?P<unit>[0-9]+[A-Za-z]?)[\s]*[\/\\\-][\s]*(?P<number>\d+)\b(?P<rest>.*)',
+        # e.g. "Flat 2, 55 Rest" or "flat 2 55 Rest" or "Unit 2, 55 Rest"
+        r'(?P<prefix>^|\s|,)(?P<label>Flat|flat|FLAT|Unit|unit)[\s\.]*?(?P<unit>[0-9]+[A-Za-z]?)[\s,]+(?P<number>\d+)\b(?P<rest>.*)'
+    ]
+
+    for pat in patterns:
+        def repl(m):
+            # m.group('prefix') preserves leading whitespace/comma if present
+            prefix = m.group('prefix') or ''
+            unit = m.group('unit')
+            number = m.group('number')
+            rest = m.group('rest') or ''
+            # strip leading spaces from rest to avoid double spaces
+            rest = rest.lstrip()
+            return f"{prefix}{target_unit_word} {unit} at {number} {rest}".rstrip()
+
+        new_s, count = re.subn(pat, repl, s, count=1)
+        if count:
+            # clean extra spaces/commas
+            new_s = re.sub(r'\s+,', ',', new_s)
+            new_s = re.sub(r'\s{2,}', ' ', new_s).strip()
+            return new_s
+
+    # If nothing matched, just return original (or optionally apply other normalizations)
+    return s
 
 def clean_address_for_speech(address):
     """Clean address for AI speech - remove postcodes, Wellington, New Zealand"""
@@ -548,6 +604,8 @@ def clean_address_for_speech(address):
         return address
 
     import re
+
+    cleaned = normalize_unit_slash_address(address)
     # Remove postcodes (4-digit numbers)
     cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
     cleaned = address.replace("/", "")
@@ -2581,6 +2639,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Nice to meet you {name}! 
         What's your pickup address?
+        For example unit 1 at 27 melrose road.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me where to pick you up.</Say>
