@@ -606,7 +606,6 @@ def clean_address_for_speech(address):
     import re
 
     cleaned = normalize_unit_slash_address(address)
-    print(f"clean address for speech cleaned: {cleaned}")
     # Remove postcodes (4-digit numbers)
     cleaned = re.sub(r',?\s*\d{4}\s*,?', '', cleaned)
     cleaned = cleaned.replace("/", "")
@@ -618,7 +617,6 @@ def clean_address_for_speech(address):
     # Clean up extra commas and spaces
     cleaned = re.sub(r',\s*,', ',', cleaned)
     cleaned = cleaned.strip(', ')
-    print(f"clean address for speech cleaned1: {cleaned}")
 
     return cleaned
 
@@ -672,38 +670,38 @@ def resolve_wellington_poi_to_address(place_name):
         print(f"🔍 Resolving Wellington POI: {place_name}")
         
         # Try multiple search strategies
-        search_queries = [
-            f"{place_name}, Wellington, New Zealand",
-            f"{place_name}, Lower Hutt, New Zealand", 
-            f"{place_name}, Upper Hutt, New Zealand",
-            f"{place_name}, Porirua, New Zealand"
-        ]
+        # search_queries = [
+        #     f"{place_name}, Wellington, New Zealand",
+        #     f"{place_name}, Lower Hutt, New Zealand", 
+        #     f"{place_name}, Upper Hutt, New Zealand",
+        #     f"{place_name}, Porirua, New Zealand"
+        # ]
         
-        for query in search_queries:
-            try:
-                # First try Places API for businesses/landmarks
-                places_result = gmaps.places(
-                    query=query,
-                    radius=50000,  # 50km radius
-                    location=(-41.2924, 174.7787)  # Wellington coordinates
-                )
+        # for query in search_queries:
+        #     try:
+        #         # First try Places API for businesses/landmarks
+        #         places_result = gmaps.places(
+        #             query=query,
+        #             radius=50000,  # 50km radius
+        #             location=(-41.2924, 174.7787)  # Wellington coordinates
+        #         )
                 
-                if places_result.get('results'):
-                    best_place = places_result['results'][0]
-                    place_address = best_place.get('formatted_address', '')
-                    place_actual_name = best_place.get('name', place_name)
+        #         if places_result.get('results'):
+        #             best_place = places_result['results'][0]
+        #             place_address = best_place.get('formatted_address', '')
+        #             place_actual_name = best_place.get('name', place_name)
                     
-                    print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
-                    clean_address = clean_address_for_speech(place_address)
-                    return {
-                        "full_address": place_address,
-                        "poi_name": place_actual_name,
-                        "clean_address": clean_address,
-                        "speech": f"{place_actual_name} at {clean_address}"
-                    }
-            except Exception as e:
-                print(f"⚠️ Places search failed for {query}: {e}")
-                continue
+        #             print(f"✅ FOUND POI: {place_actual_name} → {place_address}")
+        #             clean_address = clean_address_for_speech(place_address)
+        #             return {
+        #                 "full_address": place_address,
+        #                 "poi_name": place_actual_name,
+        #                 "clean_address": clean_address,
+        #                 "speech": f"{place_actual_name} at {clean_address}"
+        #             }
+        #     except Exception as e:
+        #         print(f"⚠️ Places search failed for {query}: {e}")
+        #         continue
         
         # Fallback to geocoding
         if "wellington" not in place_name.lower():
