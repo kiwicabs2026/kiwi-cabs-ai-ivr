@@ -2204,7 +2204,7 @@ def process_modification_smart(request):
                 print(f"📍 Parsed address - Clean: {clean_address}, Full: {full_address}")
 
                 # Use full address for POI resolution
-                address_to_resolve = clean_address if clean_address else new_value
+                address_to_resolve = full_address if full_address else new_value
                 resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
 
                 # Add error handling for missing POI
@@ -2282,7 +2282,7 @@ def process_modification_smart(request):
                 print(f"📍 Parsed pickup - Clean: {clean_address}, Full: {full_address}")
 
                 # Use full address for POI resolution
-                address_to_resolve = clean_address if clean_address else new_value
+                address_to_resolve = full_address if full_address else new_value
                 resolved_pickup = resolve_wellington_poi_to_address(address_to_resolve)
 
                 # Get the actual address string for storage and clean address for speech
@@ -2764,7 +2764,7 @@ def process_booking():
             print(f"📍 Parsed destination - Clean: {clean_destination}, Full: {full_destination}")
 
             # Use full address for POI resolution
-            address_to_resolve = clean_destination if clean_destination else destination
+            address_to_resolve = full_destination if full_destination else destination
 
         except Exception as e:
             print(f"⚠️ Error parsing destination address: {e}")
