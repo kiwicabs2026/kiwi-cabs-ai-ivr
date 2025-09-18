@@ -493,6 +493,8 @@ RULES:
   2. "full_address": corrected, complete official format including postcode, Wellington, New Zealand.
 - Recognize flats/apartments:
   Example: "flat2 slash 55 melrose road melrose" → clean_address: "255 Melrose Road, Melrose".
+- SPECIAL RULE:
+  * If the address looks like "2/55 Street, Suburb", interpret it as "255 Street, Suburb" only for clean_address(merge numbers instead of flat ).
 - Recognize landmarks/POIs:
   Example: "Wellington Airport" → clean_address: "Wellington Airport, Rongotai".
   Example: "Te Papa" → clean_address: "Te Papa Museum, Wellington Central".
