@@ -608,8 +608,8 @@ def clean_address_for_speech(address):
     cleaned = normalize_unit_slash_address(address)
     print(f"clean address for speech cleaned: {cleaned}")
     # Remove postcodes (4-digit numbers)
-    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', address)
-    cleaned = address.replace("/", "")
+    cleaned = re.sub(r',?\s*\d{4}\s*,?', '', cleaned)
+    cleaned = cleaned.replace("/", "")
 
     # Remove "Wellington" and "New Zealand"
     cleaned = cleaned.replace(", Wellington", "").replace(" Wellington", "")
