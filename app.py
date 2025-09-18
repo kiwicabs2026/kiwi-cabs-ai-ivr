@@ -2492,6 +2492,7 @@ def voice():
             Press 1 for a new taxi booking.
             Press 2 to change or cancel an existing booking.
             Press 3 to speak with our team.
+            Press 4 for email support.
         </Say>
     </Gather>
     <Redirect>/voice</Redirect>
@@ -2511,6 +2512,8 @@ def menu():
         return redirect_to("/modify_booking")
     elif digits == "3":
         return redirect_to("/team")
+    elif digits == "4":
+        return redirect_to("/email_support")
     else:
         return redirect_to("/voice")
 
@@ -3427,6 +3430,38 @@ def no_booking_found():
     <Hangup/>
 </Response>"""
         return Response(response, mimetype="text/xml")
+
+
+@app.route("/team", methods=["POST"])
+def team():
+    """Handle option 3 - Divert call to team number"""
+    print("📞 Diverting call to team: 048966156")
+
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Please hold while I connect you to our team.
+    </Say>
+    <Dial>048966156</Dial>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+
+@app.route("/email_support", methods=["POST"])
+def email_support():
+    """Handle option 4 - Email support information"""
+    print("📧 Providing email support information")
+
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Please email us with as much details as you have to kiwi dot cabs at xtra dot co dot nz.
+        That's k-i-w-i dot c-a-b-s at x-t-r-a dot c-o dot n-z.
+        We appreciate your booking with Kiwi Cabs. Have a great day!
+    </Say>
+    <Hangup/>
+</Response>"""
+    return Response(response, mimetype="text/xml")
 
 
 @app.route("/cancel_booking", methods=["POST"])
