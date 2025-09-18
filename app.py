@@ -3442,7 +3442,7 @@ def team():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Please hold while I connect you to our team.
     </Say>
-    <Dial>+18134732978</Dial>
+    <Dial>+6448966156</Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
 
