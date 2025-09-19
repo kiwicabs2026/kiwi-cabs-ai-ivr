@@ -1673,10 +1673,15 @@ def background_pickup_modification(caller_number, updated_booking, original_book
         except Exception as db_error:
             print(f"❌ FALLBACK: Database update also failed: {db_error}")
 
-def background_time_modification(caller_number, updated_booking, original_booking=None, new_value=None):
-    """Background process to modify pickup time"""
+def background_time_modification(caller_number, updated_booking, original_booking=None, time_string=None):
+    """Background process to modify pickup time using same logic as booking creation"""
     try:
         print("✅ BACKGROUND: Starting time modification...")
+        print(f"📝 Time modification details: {time_string}")
+
+        # Update database first (same as other modifications)
+        update_booking_to_db(caller_number, updated_booking)
+        print("✅ DATABASE UPDATED with new time")
 
         # Get order ID from booking storage (more reliable)
         stored_booking = booking_storage.get(caller_number, {})
@@ -1689,107 +1694,71 @@ def background_time_modification(caller_number, updated_booking, original_bookin
         print(f"🛠️ DEBUG: old_order_id retrieved: {old_order_id}")
 
         if old_order_id:
-            print(f"✅ EDITING BOOKING TIME: {old_order_id}, new_value: {new_value}")
-            # Format the datetime string properly for API
-            current_date = datetime.now(NZ_TZ).strftime("%Y-%m-%d")
+            print(f"✅ CANCELLING OLD BOOKING: {old_order_id}")
 
-            try:
-                # Get current UTC time and calculate NZ time
-                now_utc = datetime.now()
-                now_nz = now_utc + timedelta(hours=12)  # NZ is UTC+12
+            # Always cancel and recreate for time modifications (more reliable)
+            cancel_success = cancel_taxicaller_booking(old_order_id)
 
-                print(f"🕒 Current UTC: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"🕒 Current NZ: {now_nz.strftime('%Y-%m-%d %H:%M:%S')}")
+            if cancel_success:
+                print("✅ OLD BOOKING CANCELLED - creating new one")
+                time.sleep(2)
 
-                # Parse the time value
-                if ":" in new_value:
-                    time_parts = new_value.split(":")
-                    hour = int(time_parts[0])
-                    minute = 0
-
-                    if len(time_parts) > 1:
-                        # Handle "5:30" or "5:30 AM" format
-                        minute_part = time_parts[1].split()
-                        minute = int(minute_part[0])
-
-                        # Handle AM/PM
-                        if len(minute_part) > 1 and minute_part[1].upper() == "PM" and hour < 12:
-                            hour += 12
-                else:
-                    # Handle simple hour format like "5"
-                    time_parts = new_value.split()
-                    hour = int(time_parts[0])
-                    if len(time_parts) > 1 and time_parts[1].upper() == "PM" and hour < 12:
-                        hour += 12
-                    minute = 0
-
-                # Set date for booking in NZ time
-                booking_date_nz = now_nz.strftime('%Y-%m-%d')
-
-                # Create booking time in NZ
-                booking_time_nz_naive = datetime.strptime(f"{booking_date_nz} {hour:02d}:{minute:02d}:00", '%Y-%m-%d %H:%M:%S')
-
-                # If time is in the past for today in NZ, assume tomorrow
-                if booking_time_nz_naive.time() < now_nz.time() and hour < 12:
-                    booking_time_nz_naive = booking_time_nz_naive + timedelta(days=1)
-                    print(f"⏰ Time appears to be for tomorrow")
-
-                # Convert booking time to UTC for the API (subtract 12 hours from NZ time)
-                booking_time_utc = booking_time_nz_naive - timedelta(hours=12)
-
-                # Format times for display and API
-                time_str = booking_time_utc.strftime('%Y-%m-%d %H:%M:%S')
-
-                print(f"🛠️ User requested: {hour:02d}:{minute:02d}")
-                print(f"🛠️ NZ booking time: {booking_time_nz_naive.strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"🛠️ UTC for API: {time_str}")
-
-                # Check if booking has sufficient notice (20+ minutes)
-                time_diff_minutes = (booking_time_nz_naive - now_nz).total_seconds() / 60
-
-                if time_diff_minutes < 20:
-                    print(f"⚠️ Notice too short: {time_diff_minutes:.1f} min (min 20 min)")
-                    adjusted_time_nz = now_nz + timedelta(minutes=25)
-                    adjusted_time_utc = adjusted_time_nz - timedelta(hours=12)
-                    time_str = adjusted_time_utc.strftime('%Y-%m-%d %H:%M:%S')
-                    print(f"🛠️ Adjusted to: {time_str}")
-            except Exception as parse_error:
-                print(f"⚠️ Time parsing error: {parse_error}, using default format")
-                # Fallback in case of parsing error
-                time_str = f"{current_date} {new_value.strip()}:00" if ":" in new_value else f"{current_date} {new_value.strip()}:00:00"
-
-            edit_success = edit_taxicaller_booking(old_order_id, time_str, updated_booking)
-            if edit_success:
-                print("✅ BOOKING TIME EDITED SUCCESSFULLY")
+                # Mark booking as modified
                 updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
                 updated_booking["ai_modified"] = True
                 booking_storage[caller_number] = updated_booking
-            else:
-                print("❌ EDIT FAILED - falling back to cancel+create")
-                cancel_success = cancel_taxicaller_booking(old_order_id)
 
-                if cancel_success:
-                    print("✅ OLD BOOKING CANCELLED - creating new one")
-                    time.sleep(2)
-                    updated_booking["modified_at"] = datetime.now(NZ_TZ).isoformat()
-                    updated_booking["ai_modified"] = True
-                    booking_storage[caller_number] = updated_booking
-                    success, response = send_booking_to_api(updated_booking, caller_number)
+                # Create new booking using the same logic as booking creation
+                success, response = send_booking_to_api(updated_booking, caller_number)
 
-                    if success:
-                        print("✅ NEW BOOKING CREATED")
-                    else:
-                        print("❌ NEW BOOKING FAILED")
+                if success:
+                    print("✅ NEW BOOKING CREATED with new time")
+                    # Store new order ID for future modifications
+                    if response and "orderId" in response:
+                        updated_booking["taxicaller_order_id"] = response["orderId"]
+                        booking_storage[caller_number] = updated_booking
+                        print(f"✅ NEW ORDER ID STORED: {response['orderId']}")
+
+                    # Update database with new order ID
+                    try:
+                        update_booking_to_db(caller_number, updated_booking)
+                        print("✅ DATABASE UPDATED with new order ID")
+                    except Exception as db_error:
+                        print(f"❌ DATABASE UPDATE FAILED: {db_error}")
                 else:
-                    print("❌ Cannot find order ID for time modification")
+                    print("❌ NEW BOOKING FAILED")
+                    # Still keep the database updated even if TaxiCaller fails
+                    try:
+                        update_booking_to_db(caller_number, updated_booking)
+                        print("✅ DATABASE UPDATED (TaxiCaller failed but DB updated)")
+                    except Exception as db_error:
+                        print(f"❌ DATABASE UPDATE ALSO FAILED: {db_error}")
+            else:
+                print("❌ CANCELLATION FAILED - cannot modify booking")
+                # Still update database with time change
+                try:
+                    update_booking_to_db(caller_number, updated_booking)
+                    print("✅ DATABASE UPDATED (TaxiCaller cancellation failed but DB updated)")
+                except Exception as db_error:
+                    print(f"❌ DATABASE UPDATE FAILED: {db_error}")
         else:
-            print("❌ NO ORDER ID FOUND - cannot modify booking")
+            print("❌ NO ORDER ID FOUND - cannot modify TaxiCaller booking")
+            # Still update database with time change
+            try:
+                update_booking_to_db(caller_number, updated_booking)
+                print("✅ DATABASE UPDATED (no TaxiCaller order to modify)")
+            except Exception as db_error:
+                print(f"❌ DATABASE UPDATE FAILED: {db_error}")
 
         print("✅ BACKGROUND: Time modification completed")
-        return True
     except Exception as e:
         print(f"❌ BACKGROUND: Time modification error: {str(e)}")
-        return False
+        # Fallback: at least try to update the database
+        try:
+            update_booking_to_db(caller_number, updated_booking)
+            print("✅ FALLBACK: Database updated despite error")
+        except Exception as db_error:
+            print(f"❌ FALLBACK: Database update also failed: {db_error}")
 
 def parse_booking_speech(speech_text):
     """Parse booking speech using regex to extract details."""
@@ -3612,6 +3581,7 @@ def process_time_modification():
     # Use the same time extraction logic as booking creation
     try:
         parsed_time = extract_time_with_ai(speech_result)
+        print(f"parsed time!!!!!!!!!!:{parsed_time}")
 
         if parsed_time and parsed_time.get("pickup_time") and parsed_time.get("pickup_date"):
             # Update booking with new time
@@ -3635,7 +3605,7 @@ def process_time_modification():
             # Start background thread for TaxiCaller update
             threading.Thread(
                 target=background_time_modification,
-                args=(caller_number, updated_booking, original_booking),
+                args=(caller_number, updated_booking, original_booking, time_string),
                 daemon=True
             ).start()
 
