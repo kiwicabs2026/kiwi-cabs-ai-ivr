@@ -740,21 +740,45 @@ def resolve_wellington_poi_to_address(place_name):
         }
 
 def extract_time_with_ai(speech_text):
-    """Extract time information from speech using existing parsing logic"""
+    """Extract time information from speech using the same logic as booking creation"""
     try:
-        # Create a temporary booking data structure
-        temp_booking = {"name": "temp", "pickup_address": "temp", "destination": "temp"}
+        # Use the same time processing logic as in the booking creation flow
+        time_text = speech_text.lower().strip()
+        result = {}
 
-        # Use the existing parse_booking_speech function to extract time
-        parsed_result = parse_booking_speech(speech_text)
-
-        if parsed_result and parsed_result.get("pickup_time") and parsed_result.get("pickup_date"):
-            return {
-                "pickup_time": parsed_result["pickup_time"],
-                "pickup_date": parsed_result["pickup_date"]
-            }
+        # Check for immediate booking (same as booking creation)
+        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
+        if any(keyword in time_text for keyword in immediate_keywords):
+            result["pickup_time"] = "ASAP"
+            result["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+            return result
         else:
-            return None
+            # Parse time using existing logic (same as booking creation)
+            print(f"📝 Time modification - parsing speech: {speech_text}")
+            parsed_booking = parse_booking_speech(speech_text)
+            print(f"📝 Time modification - parsed result: {parsed_booking}")
+
+            if parsed_booking and parsed_booking.get("pickup_time"):
+                result["pickup_time"] = parsed_booking["pickup_time"]
+
+                if parsed_booking.get("pickup_date"):
+                    result["pickup_date"] = parsed_booking["pickup_date"]
+                else:
+                    # Default to today if no date specified (same as booking creation)
+                    result["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+
+                # Validate that the time is not in the past (same as booking creation)
+                datetime_str = f"{result['pickup_date']} {result['pickup_time']}"
+                booked_time = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
+                booked_time = booked_time.replace(tzinfo=ZoneInfo("Pacific/Auckland"))
+
+                if booked_time < datetime.now(NZ_TZ):
+                    print(f"⚠️ Time modification - time is in the past: {booked_time}")
+                    return None  # Time is in the past
+
+                return result
+            else:
+                return None
 
     except Exception as e:
         print(f"❌ Error extracting time with AI: {e}")
@@ -3585,7 +3609,7 @@ def process_time_modification():
     if not original_booking:
         return redirect_to("/modify_booking")
 
-    # Use AI to extract time from speech
+    # Use the same time extraction logic as booking creation
     try:
         parsed_time = extract_time_with_ai(speech_result)
 
@@ -3595,9 +3619,15 @@ def process_time_modification():
             updated_booking["pickup_time"] = parsed_time["pickup_time"]
             updated_booking["pickup_date"] = parsed_time["pickup_date"]
 
-            # Format time for speech
-            formatted_time = format_time_for_speech(parsed_time["pickup_time"])
-            time_string = f"{parsed_time['pickup_date']} at {formatted_time}"
+            # Format time for speech (same as booking creation)
+            if parsed_time["pickup_time"] == "ASAP":
+                time_string = "right now"
+            else:
+                formatted_time = format_time_for_speech(parsed_time["pickup_time"])
+                if parsed_time["pickup_date"] == datetime.now(NZ_TZ).strftime("%d/%m/%Y"):
+                    time_string = f"today at {formatted_time}"
+                else:
+                    time_string = f"on {parsed_time['pickup_date']} at {formatted_time}"
 
             # Save updated booking
             update_booking_to_db(caller_number, updated_booking)
@@ -3619,7 +3649,21 @@ def process_time_modification():
     <Hangup/>
 </Response>"""
             return Response(response, mimetype="text/xml")
+        elif parsed_time is None:
+            # Handle case where time is in the past (same as booking creation)
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        That time is in the past. Would you like to pick a different time?
+    </Say>
+    <Gather input="speech" action="/process_time_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the new time.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+            return Response(response, mimetype="text/xml")
         else:
+            # Handle case where time couldn't be understood (same as booking creation)
             response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
