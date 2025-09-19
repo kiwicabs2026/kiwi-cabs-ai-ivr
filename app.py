@@ -739,6 +739,27 @@ def resolve_wellington_poi_to_address(place_name):
             "speech": place_name
         }
 
+def extract_time_with_ai(speech_text):
+    """Extract time information from speech using existing parsing logic"""
+    try:
+        # Create a temporary booking data structure
+        temp_booking = {"name": "temp", "pickup_address": "temp", "destination": "temp"}
+
+        # Use the existing parse_booking_speech function to extract time
+        parsed_result = parse_booking_speech(speech_text)
+
+        if parsed_result and parsed_result.get("pickup_time") and parsed_result.get("pickup_date"):
+            return {
+                "pickup_time": parsed_result["pickup_time"],
+                "pickup_date": parsed_result["pickup_date"]
+            }
+        else:
+            return None
+
+    except Exception as e:
+        print(f"❌ Error extracting time with AI: {e}")
+        return None
+
 def extract_modification_intent_with_ai(speech_text, current_booking):
     """Use OpenAI to understand modification requests naturally with Wellington POI knowledge"""
     
@@ -3387,15 +3408,13 @@ def modify_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Hello {name}, I found your booking.
         You have a taxi from {pickup} to {destination} {time_str}.
-        What would you like to change? You can change the time, pickup location, destination, or cancel the booking.
-        Go ahead, I am listening
+        What would you like to change?
+        Press 1 for changing the time.
+        Press 2 for changing pickup location.
+        Press 3 for changing destination.
+        Press 4 for cancel the booking.
     </Say>
-    <Gather input="speech" 
-            action="/process_modification_smart" 
-            method="POST" 
-            timeout="20" 
-            language="en-NZ" 
-            speechTimeout="3">
+    <Gather action="/modification_menu" method="POST" timeout="10" numDigits="1">
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
@@ -3462,6 +3481,309 @@ def email_support():
     <Hangup/>
 </Response>"""
     return Response(response, mimetype="text/xml")
+
+
+@app.route("/modification_menu", methods=["POST"])
+def modification_menu():
+    """Handle modification menu selection"""
+    digits = request.form.get("Digits", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    print(f"📞 Modification menu selection: {digits}")
+
+    # Store the selection in session for later use
+    if call_sid not in user_sessions:
+        user_sessions[call_sid] = {}
+    user_sessions[call_sid]["modification_type"] = digits
+
+    if digits == "1":
+        return redirect_to("/modify_time")
+    elif digits == "2":
+        return redirect_to("/modify_pickup")
+    elif digits == "3":
+        return redirect_to("/modify_destination")
+    elif digits == "4":
+        return redirect_to("/cancel_booking")
+    else:
+        return redirect_to("/modify_booking")
+
+
+@app.route("/modify_time", methods=["POST"])
+def modify_time():
+    """Handle time modification"""
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What time would you like to change your booking to?
+        You can say things like "now", "in 30 minutes", "at 3 PM", or "tomorrow morning".
+    </Say>
+    <Gather input="speech" action="/process_time_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the new time.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+
+@app.route("/modify_pickup", methods=["POST"])
+def modify_pickup():
+    """Handle pickup location modification"""
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What is your new pickup address?
+        For example, unit 1 at 27 melrose road.
+    </Say>
+    <Gather input="speech" action="/process_pickup_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your new pickup address.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+
+@app.route("/modify_destination", methods=["POST"])
+def modify_destination():
+    """Handle destination modification"""
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        What is your new destination?
+        You can say an address or a place name like Wellington Hospital.
+    </Say>
+    <Gather input="speech" action="/process_destination_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your new destination.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+    return Response(response, mimetype="text/xml")
+
+
+@app.route("/process_time_modification", methods=["POST"])
+def process_time_modification():
+    """Process time modification using AI"""
+    speech_result = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    print(f"📝 Time modification request: '{speech_result}'")
+
+    # Get original booking from session
+    session_data = user_sessions.get(call_sid, {})
+    original_booking = session_data.get("modifying_booking", {})
+
+    if not original_booking:
+        return redirect_to("/modify_booking")
+
+    # Use AI to extract time from speech
+    try:
+        parsed_time = extract_time_with_ai(speech_result)
+
+        if parsed_time and parsed_time.get("pickup_time") and parsed_time.get("pickup_date"):
+            # Update booking with new time
+            updated_booking = original_booking.copy()
+            updated_booking["pickup_time"] = parsed_time["pickup_time"]
+            updated_booking["pickup_date"] = parsed_time["pickup_date"]
+
+            # Format time for speech
+            formatted_time = format_time_for_speech(parsed_time["pickup_time"])
+            time_string = f"{parsed_time['pickup_date']} at {formatted_time}"
+
+            # Save updated booking
+            update_booking_to_db(caller_number, updated_booking)
+
+            # Start background thread for TaxiCaller update
+            threading.Thread(
+                target=background_time_modification,
+                args=(caller_number, updated_booking, original_booking),
+                daemon=True
+            ).start()
+
+            response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! I've updated your time to {time_string}.
+        We'll update your booking immediately.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
+            return Response(response, mimetype="text/xml")
+        else:
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. Could you please tell me when you need the taxi?
+        For example, say "now", "in 30 minutes", or "at 3 PM".
+    </Say>
+    <Gather input="speech" action="/process_time_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me the new time.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+            return Response(response, mimetype="text/xml")
+
+    except Exception as e:
+        print(f"❌ Error processing time modification: {e}")
+        return redirect_to("/modify_booking")
+
+
+@app.route("/process_pickup_modification", methods=["POST"])
+def process_pickup_modification():
+    """Process pickup modification using existing logic"""
+    speech_result = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    print(f"📝 Pickup modification request: '{speech_result}'")
+
+    # Get original booking from session
+    session_data = user_sessions.get(call_sid, {})
+    original_booking = session_data.get("modifying_booking", {})
+
+    if not original_booking:
+        return redirect_to("/modify_booking")
+
+    # Parse address to get clean and full versions
+    try:
+        clean_address, full_address = parse_address(speech_result)
+        print(f"📍 Parsed pickup - Clean: {clean_address}, Full: {full_address}")
+
+        # Use full address for POI resolution
+        address_to_resolve = full_address if full_address else speech_result
+        resolved_pickup = resolve_wellington_poi_to_address(address_to_resolve)
+
+        # Get the actual address string for storage and clean address for speech
+        if isinstance(resolved_pickup, dict):
+            exact_address = resolved_pickup.get("full_address", address_to_resolve)
+            speech_address = clean_address if clean_address else resolved_pickup.get("speech", exact_address)
+        else:
+            exact_address = resolved_pickup if resolved_pickup else address_to_resolve
+            speech_address = clean_address if clean_address else clean_address_for_speech(exact_address)
+
+        # Update booking
+        updated_booking = original_booking.copy()
+        updated_booking["pickup_address"] = exact_address
+        updated_booking["pickup_address_clean"] = speech_address
+
+        # Save updated booking
+        update_booking_to_db(caller_number, updated_booking)
+
+        # Start background thread
+        threading.Thread(
+            target=background_pickup_modification,
+            args=(caller_number, updated_booking, original_booking),
+            daemon=True
+        ).start()
+
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! I've updated your pickup to {speech_address}.
+        We'll update your booking immediately.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+
+    except Exception as e:
+        print(f"❌ Error processing pickup modification: {e}")
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Could you please tell me your new pickup address?
+    </Say>
+    <Gather input="speech" action="/process_pickup_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your new pickup address.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+
+
+@app.route("/process_destination_modification", methods=["POST"])
+def process_destination_modification():
+    """Process destination modification using existing logic"""
+    speech_result = request.form.get("SpeechResult", "")
+    call_sid = request.form.get("CallSid", "")
+    caller_number = request.form.get("From", "")
+
+    print(f"📝 Destination modification request: '{speech_result}'")
+
+    # Get original booking from session
+    session_data = user_sessions.get(call_sid, {})
+    original_booking = session_data.get("modifying_booking", {})
+
+    if not original_booking:
+        return redirect_to("/modify_booking")
+
+    # Parse address to get clean and full versions
+    try:
+        clean_address, full_address = parse_address(speech_result)
+        print(f"📍 Parsed destination - Clean: {clean_address}, Full: {full_address}")
+
+        # Use full address for POI resolution
+        address_to_resolve = full_address if full_address else speech_result
+        resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
+
+        # Get the actual address string for storage and clean address for speech
+        if isinstance(resolved_destination, dict):
+            exact_address = resolved_destination.get("full_address", address_to_resolve)
+            speech_address = clean_address if clean_address else resolved_destination.get("speech", exact_address)
+        else:
+            exact_address = resolved_destination if resolved_destination else address_to_resolve
+            speech_address = clean_address if clean_address else clean_address_for_speech(exact_address)
+
+        # Update booking
+        updated_booking = original_booking.copy()
+        updated_booking["destination"] = exact_address
+        updated_booking["destination_clean"] = speech_address
+
+        # Save updated booking
+        update_booking_to_db(caller_number, updated_booking)
+
+        # Start background thread
+        threading.Thread(
+            target=background_destination_modification,
+            args=(caller_number, updated_booking, original_booking),
+            daemon=True
+        ).start()
+
+        response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Great! I've updated your destination to {speech_address}.
+        We'll update your booking immediately.
+        We appreciate your booking with Kiwi Cabs. Have a great day.
+    </Say>
+    <Hangup/>
+</Response>"""
+        return Response(response, mimetype="text/xml")
+
+    except Exception as e:
+        print(f"❌ Error processing destination modification: {e}")
+        response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't catch that. Could you please tell me your new destination?
+    </Say>
+    <Gather input="speech" action="/process_destination_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">Please tell me your new destination.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+        return Response(response, mimetype="text/xml")
 
 
 @app.route("/cancel_booking", methods=["POST"])
