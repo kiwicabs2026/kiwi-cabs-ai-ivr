@@ -3398,16 +3398,17 @@ def modify_booking():
 
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Hello {name}, I found your booking.
-        You have a taxi from {pickup} to {destination} {time_str}.
-        What would you like to change?
-        Press 1 for changing the time.
-        Press 2 for changing pickup location.
-        Press 3 for changing destination.
-        Press 4 for cancel the booking.
-    </Say>
+    
     <Gather action="/modification_menu" method="POST" timeout="10" numDigits="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">
+            Hello {name}, I found your booking.
+            You have a taxi from {pickup} to {destination} {time_str}.
+            What would you like to change?
+            Press 1 for changing the time.
+            Press 2 for changing pickup location.
+            Press 3 for changing destination.
+            Press 4 for cancel the booking.
+        </Say>
     </Gather>
     <Redirect>/modify_booking</Redirect>
 </Response>"""
