@@ -429,7 +429,16 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
 def is_exact_address(result):
     components = result.get("address_components", [])
     types = [t for c in components for t in c["types"]]
-    return "street_number" in types and "route" in types
+
+    # Exact street address: must have street number + route
+    if "street_number" in types and "route" in types:
+        return True
+
+    # POI / landmark: establishment, point_of_interest, etc.
+    if any(t in types for t in ["establishment", "point_of_interest", "transit_station"]):
+        return True
+    
+    return False
 
 def parse_address(address: str):
     import openai
@@ -667,7 +676,7 @@ def resolve_wellington_poi_to_address(place_name):
         geocode_result = gmaps.geocode(search_address, region="nz")
 
         print(f"geocode result!!!!!!!!{geocode_result}")
-        
+
         if(is_exact_address(geocode_result[0]) == False):
             return False
 
