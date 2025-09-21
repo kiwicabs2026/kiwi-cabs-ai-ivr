@@ -787,10 +787,6 @@ Examples:
         return None
 
 
-
-
-
-
 def send_booking_to_taxicaller(booking_data, caller_number):
     """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
@@ -2712,6 +2708,13 @@ def team():
 
 @app.route("/email_support", methods=["POST"])
 def email_support():
+    address_to_validate = "number 100 Rich Street in Miramar Wellington"
+    validated_address = validate_and_format_address(address_to_validate, "pickup")
+    print(f"validated address1111111111111111: {validated_address}")
+    address_to_validate = "High 320 Mansfield Street Newtown"
+    validated_address = validate_and_format_address(address_to_validate, "pickup")
+    print(f"validated address1111111111111111: {validated_address}")
+
     """Handle option 4 - Email support information"""
     print("📧 Providing email support information")
 
