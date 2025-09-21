@@ -428,7 +428,7 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
 
 def is_exact_address(result):
     components = result.get("address_components", [])
-    types = [c["types"][0] for c in components]
+    types = [t for c in components for t in c["types"]]
     return "street_number" in types and "route" in types
 
 def parse_address(address: str):
