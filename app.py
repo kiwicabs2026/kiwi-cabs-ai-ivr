@@ -2720,14 +2720,14 @@ def team():
 @app.route("/email_support", methods=["POST"])
 def email_support():
     address_to_validate = "number 100 Rich Street in Miramar Wellington"
-    validated_address = resolve_wellington_poi_to_address(address_to_validate, "pickup")
+    validated_address = resolve_wellington_poi_to_address(address_to_validate)
     if(validated_address):
         print(f"validated address1111111111111111: {validated_address}")
     else:
         print("opps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
     
     address_to_validate = "High 320 Mansfield Street Newtown"
-    validated_address = resolve_wellington_poi_to_address(address_to_validate, "pickup")
+    validated_address = resolve_wellington_poi_to_address(address_to_validate)
     if(validated_address):
         print(f"validated address22222222222222222: {validated_address}")
     else:
