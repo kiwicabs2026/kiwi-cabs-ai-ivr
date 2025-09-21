@@ -69,7 +69,7 @@ def validate_and_format_address(address, address_type="general"):
 
         print(f"🔍 Google Maps results: {results}")
 
-        if(is_exact_address(results) == False):
+        if(is_exact_address(results[0]) == False):
             return "invalid address"
         
         if results:
