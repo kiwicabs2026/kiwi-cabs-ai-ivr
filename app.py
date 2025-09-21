@@ -1639,7 +1639,10 @@ def parse_booking_speech(speech_text):
         
         # Validate with Google Maps
         if gmaps:
-            pickup = validate_and_format_address(pickup, "pickup")
+            validated_pickup = validate_and_format_address(pickup, "pickup")
+            # Only use validated address if it's a string (not False)
+            if validated_pickup and isinstance(validated_pickup, str):
+                pickup = validated_pickup
         booking_data['pickup_address'] = pickup.strip()
     
     # Clean and validate destination
@@ -1653,7 +1656,10 @@ def parse_booking_speech(speech_text):
         
         # Validate with Google Maps
         if gmaps:
-            destination = validate_and_format_address(destination, "destination")
+            validated_destination = validate_and_format_address(destination, "destination")
+            # Only use validated address if it's a string (not False)
+            if validated_destination and isinstance(validated_destination, str):
+                destination = validated_destination
         booking_data['destination'] = destination.strip()
     
     print(f"📝 PARSED BOOKING DATA: {booking_data}")
