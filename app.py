@@ -666,6 +666,9 @@ def resolve_wellington_poi_to_address(place_name):
 
         geocode_result = gmaps.geocode(search_address, region="nz")
 
+        if(is_exact_address(geocode_result[0]) == False):
+            return False
+
         if geocode_result:
             address = geocode_result[0]['formatted_address']
             print(f"✅ GEOCODED: {place_name} → {address}")
@@ -2717,11 +2720,18 @@ def team():
 @app.route("/email_support", methods=["POST"])
 def email_support():
     address_to_validate = "number 100 Rich Street in Miramar Wellington"
-    validated_address = validate_and_format_address(address_to_validate, "pickup")
-    print(f"validated address1111111111111111: {validated_address}")
+    validated_address = resolve_wellington_poi_to_address(address_to_validate, "pickup")
+    if(validated_address):
+        print(f"validated address1111111111111111: {validated_address}")
+    else:
+        print("opps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    
     address_to_validate = "High 320 Mansfield Street Newtown"
-    validated_address = validate_and_format_address(address_to_validate, "pickup")
-    print(f"validated address1111111111111111: {validated_address}")
+    validated_address = resolve_wellington_poi_to_address(address_to_validate, "pickup")
+    if(validated_address):
+        print(f"validated address22222222222222222: {validated_address}")
+    else:
+        print("opps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
     """Handle option 4 - Email support information"""
     print("📧 Providing email support information")
