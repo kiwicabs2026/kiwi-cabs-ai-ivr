@@ -68,6 +68,9 @@ def validate_and_format_address(address, address_type="general"):
         results = gmaps.geocode(search_address, region="nz")
 
         print(f"🔍 Google Maps results: {results}")
+
+        if(is_exact_address(results) == False):
+            return "invalid address"
         
         if results:
             result = results[0]
@@ -422,6 +425,11 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
     except Exception as e:
         print(f"❌ EDIT ERROR: {e}")
         return False
+
+def is_exact_address(result):
+    components = result.get("address_components", [])
+    types = [c["types"][0] for c in components]
+    return "street_number" in types and "route" in types
 
 def parse_address(address: str):
     import openai
