@@ -666,6 +666,8 @@ def resolve_wellington_poi_to_address(place_name):
 
         geocode_result = gmaps.geocode(search_address, region="nz")
 
+        print(f"geocode result!!!!!!!!{geocode_result}")
+        
         if(is_exact_address(geocode_result[0]) == False):
             return False
 
