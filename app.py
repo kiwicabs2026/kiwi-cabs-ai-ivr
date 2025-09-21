@@ -70,7 +70,7 @@ def validate_and_format_address(address, address_type="general"):
         print(f"🔍 Google Maps results: {results}")
 
         if(is_exact_address(results[0]) == False):
-            return "invalid address"
+            return False
         
         if results:
             result = results[0]
@@ -2026,7 +2026,18 @@ def process_booking():
                     validated_address = validate_and_format_address(address_to_validate, "pickup")
                 else:
                     validated_address = address_to_validate
-
+                
+                if(validated_address == False):
+                    response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, Address not recognized. Could you please tell me your pickup address again?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+                    return Response(response, mimetype="text/xml")
                 # Use clean address for speech
                 pickup_for_speech = clean_pickup if clean_pickup else clean_address_for_speech(validated_address)
 
@@ -2099,6 +2110,19 @@ def process_booking():
         # SMART WELLINGTON POI RESOLUTION
         print(f"🔍 Resolving destination POI: {address_to_resolve}")
         resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
+
+        if(resolved_destination == False):
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, Address not recognized. Where would you like to go?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+            return Response(response, mimetype="text/xml")
+
 
         if isinstance(resolved_destination, dict) and resolved_destination.get('full_address'):
             partial_booking["destination"] = resolved_destination["full_address"]
@@ -2719,20 +2743,6 @@ def team():
 
 @app.route("/email_support", methods=["POST"])
 def email_support():
-    address_to_validate = "number 100 Rich Street in Miramar Wellington"
-    validated_address = resolve_wellington_poi_to_address(address_to_validate)
-    if(validated_address):
-        print(f"validated address1111111111111111: {validated_address}")
-    else:
-        print("opps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-    
-    address_to_validate = "High 320 Mansfield Street Newtown"
-    validated_address = resolve_wellington_poi_to_address(address_to_validate)
-    if(validated_address):
-        print(f"validated address22222222222222222: {validated_address}")
-    else:
-        print("opps!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
     """Handle option 4 - Email support information"""
     print("📧 Providing email support information")
 
@@ -2949,6 +2959,19 @@ def process_pickup_modification():
         address_to_resolve = full_address if full_address else speech_result
         resolved_pickup = resolve_wellington_poi_to_address(address_to_resolve)
 
+        if(resolved_pickup == False):
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, Address not recognized. Could you please tell me your new pickup address again?
+    </Say>
+    <Gather input="speech" action="/process_pickup_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+            return Response(response, mimetype="text/xml")
+
         # Get the actual address string for storage and clean address for speech
         if isinstance(resolved_pickup, dict):
             exact_address = resolved_pickup.get("full_address", address_to_resolve)
@@ -3022,6 +3045,19 @@ def process_destination_modification():
         # Use full address for POI resolution
         address_to_resolve = full_address if full_address else speech_result
         resolved_destination = resolve_wellington_poi_to_address(address_to_resolve)
+
+        if(resolved_destination == False):
+            response = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        Sorry, Address not recognized. Could you please tell me your new destination again?
+    </Say>
+    <Gather input="speech" action="/process_destination_modification" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+    <Redirect>/modify_booking</Redirect>
+</Response>"""
+            return Response(response, mimetype="text/xml")
 
         # Get the actual address string for storage and clean address for speech
         if isinstance(resolved_destination, dict):
