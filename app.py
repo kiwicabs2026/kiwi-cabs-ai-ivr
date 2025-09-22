@@ -2270,7 +2270,7 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         {instructions_prompt}
         Do you have any special instructions for the driver?
-        For example, "wait for me", "call when you arrive", or just say "no instructions".
+        For example, "wait for me", "call when you arrive", "Text on arrival" or just say "no instructions".
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
@@ -2296,7 +2296,7 @@ def process_booking():
 
         # Check if they have instructions or said no
         instructions_lower = instructions.lower()
-        if any(word in instructions_lower for word in ["no", "nothing", "none", "no instructions", "no instruction"]):
+        if any(word in instructions_lower for word in ["no", "nothing", "none", "nope", "no instructions", "no instruction"]):
             partial_booking["driver_instructions"] = ""
             instructions_msg = ""
         else:
@@ -2769,7 +2769,6 @@ def email_support():
         If you’d like to make a complaint or report a lost item, please email us at kiwi.cabs@xtra.co.nz.
         That's k-i-w-i dot c-a-b-s at x-t-r-a dot c-o dot n-z.
         We’ll be happy to help and get back to you as quickly as we can.
-
     </Say>
     <Hangup/>
 </Response>"""
