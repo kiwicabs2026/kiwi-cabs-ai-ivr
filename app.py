@@ -1581,11 +1581,17 @@ def parse_booking_speech(speech_text):
         r"(\d{1,2}:?\d{0,2}\s*(?:am|pm|a\.?m\.?|p\.?m\.?))",
     ]
 
-    # Add special handling for "half hour" BEFORE the pattern matching
+    # Add special handling for "half hour" and "midday/noon" BEFORE the pattern matching
     if any(phrase in speech_text.lower() for phrase in ["half hour", "half an hour", "30 minutes"]):
         booking_time = datetime.now(NZ_TZ) + timedelta(minutes=30)
-        booking_data["pickup_time"] = f"{booking_time.strftime('%I:%M %p')}"
+        booking_data["pickup_time"] = booking_time.strftime('%H:%M')  # Use 24-hour format
         booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
+    elif any(phrase in speech_text.lower() for phrase in ["midday", "noon", "12 noon", "12 midday"]):
+        # Handle midday/noon as 12:00 PM (12:00 in 24-hour format)
+        booking_data["pickup_time"] = "12:00"
+        # Use today's date unless another date is specified
+        if not booking_data.get("pickup_date"):
+            booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
     elif not any(keyword in speech_text.lower() for keyword in immediate_keywords):
         # Then do the pattern matching
         for pattern in time_patterns:
@@ -1594,14 +1600,14 @@ def parse_booking_speech(speech_text):
                 if pattern == r"in\s+(\d+)\s+minutes?":
                     minutes = int(match.group(1))
                     booking_time = datetime.now(NZ_TZ) + timedelta(minutes=minutes)
-                    time_str = f"{booking_time.strftime('%I:%M %p')}"
+                    time_str = booking_time.strftime('%H:%M')  # Use 24-hour format
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
                 elif pattern == r"in\s+(\d+)\s+hours?":
                     hours = int(match.group(1))
                     booking_time = datetime.now(NZ_TZ) + timedelta(hours=hours)
-                    time_str = f"{booking_time.strftime('%I:%M %p')}"
+                    time_str = booking_time.strftime('%H:%M')  # Use 24-hour format
                     booking_data["pickup_time"] = time_str
                     booking_data["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
                     break
@@ -1609,20 +1615,31 @@ def parse_booking_speech(speech_text):
                     # Handle regular time patterns (4 PM, etc.)
                     time_str = match.group(1).strip()
                     time_str = time_str.replace("p.m.", "PM").replace("a.m.", "AM")
-                if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
-                    time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")  # ← ADD 4 SPACES HERE
-                
-                # Convert to 24-hour format for timestamp calculation
-                if "PM" in time_str and not time_str.startswith("12"):
-                    hour = int(time_str.split(":")[0])
-                    time_str = time_str.replace(f"{hour}:", f"{hour + 12}:").replace("PM", "").replace(" PM", "").strip()
-                elif "AM" in time_str:
-                    if time_str.startswith("12"):
-                        time_str = time_str.replace("12:", "00:")
-                    time_str = time_str.replace("AM", "").replace(" AM", "").strip()
-                
-                booking_data["pickup_time"] = time_str
-                break
+
+                    # Add :00 if no minutes specified
+                    if ":" not in time_str and any(x in time_str for x in ["AM", "PM"]):
+                        time_str = time_str.replace(" AM", ":00 AM").replace(" PM", ":00 PM")
+
+                    # Convert to 24-hour format for consistent storage
+                    if "PM" in time_str:
+                        # Handle PM times
+                        hour_part = time_str.split(":")[0].strip()
+                        minute_part = time_str.split(":")[1].replace("PM", "").strip() if ":" in time_str else "00"
+                        hour = int(hour_part)
+                        if hour != 12:  # 12 PM stays as 12
+                            hour += 12
+                        time_str = f"{hour:02d}:{minute_part}"
+                    elif "AM" in time_str:
+                        # Handle AM times
+                        hour_part = time_str.split(":")[0].strip()
+                        minute_part = time_str.split(":")[1].replace("AM", "").strip() if ":" in time_str else "00"
+                        hour = int(hour_part)
+                        if hour == 12:  # 12 AM becomes 00
+                            hour = 0
+                        time_str = f"{hour:02d}:{minute_part}"
+
+                    booking_data["pickup_time"] = time_str
+                    break
     
     # Clean temporal words from addresses
     time_words = ['tomorrow', 'today', 'tonight', 'morning', 'afternoon', 'evening', 'right now', 'now', 'asap']
@@ -2227,8 +2244,22 @@ def process_booking():
                 print(f"current pick up time !!!!!!!!!!!!! {partial_booking['pickup_date']} {partial_booking['pickup_time']}")
                 
                 datetime_str = f"{partial_booking['pickup_date']} {partial_booking['pickup_time']}"
-                booked_time = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
-                booked_time = booked_time.replace(tzinfo=ZoneInfo("Pacific/Auckland"))
+                try:
+                    booked_time = datetime.strptime(datetime_str, "%d/%m/%Y %H:%M")
+                    booked_time = booked_time.replace(tzinfo=ZoneInfo("Pacific/Auckland"))
+                except ValueError as e:
+                    print(f"❌ Error parsing datetime '{datetime_str}': {e}")
+                    # If parsing fails, ask for time again
+                    response = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        I didn't understand the time. Could you please tell me when you need the taxi?
+    </Say>
+    <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I am listening.</Say>
+    </Gather>
+</Response>"""
+                    return Response(response, mimetype="text/xml")
                 if(booked_time < datetime.now(NZ_TZ)):
                     response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
