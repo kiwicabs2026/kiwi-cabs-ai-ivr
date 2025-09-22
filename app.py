@@ -2766,9 +2766,10 @@ def email_support():
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="Polly.Aria-Neural" language="en-NZ">
-        Please email us with as much details as you have to kiwi dot cabs at xtra dot co dot nz.
+        If you’d like to make a complaint or report a lost item, please email us at kiwi.cabs@xtra.co.nz.
         That's k-i-w-i dot c-a-b-s at x-t-r-a dot c-o dot n-z.
-        We appreciate your booking with Kiwi Cabs. Have a great day!
+        We’ll be happy to help and get back to you as quickly as we can.
+
     </Say>
     <Hangup/>
 </Response>"""
