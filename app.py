@@ -675,7 +675,7 @@ def resolve_wellington_poi_to_address(place_name):
 
         geocode_result = gmaps.geocode(search_address, region="nz")
 
-        print(f"geocode result!!!!!!!!{geocode_result}")
+        print(f"geocode result:{geocode_result}")
 
         if(is_exact_address(geocode_result[0]) == False):
             return False
@@ -2225,9 +2225,7 @@ def process_booking():
         else:
             # Parse time using existing logic
 
-            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data before parsing: {speech_data}")
             parsed_booking = parse_booking_speech(speech_data)
-            print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!speech data after parsing: {parsed_booking}")
             
             if parsed_booking.get("pickup_time"):
                 partial_booking["pickup_time"] = parsed_booking["pickup_time"]
@@ -2241,7 +2239,6 @@ def process_booking():
                     time_string = f"today at {formatted_time}"
 
                 valid_time = True
-                print(f"current pick up time !!!!!!!!!!!!! {partial_booking['pickup_date']} {partial_booking['pickup_time']}")
                 
                 datetime_str = f"{partial_booking['pickup_date']} {partial_booking['pickup_time']}"
                 try:
@@ -2784,7 +2781,7 @@ def team():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         Please hold while I connect you to our team.
     </Say>
-    <Dial>+6448966156</Dial>
+    <Dial>+6448873334</Dial>
 </Response>"""
     return Response(response, mimetype="text/xml")
 
@@ -2911,7 +2908,7 @@ def process_time_modification():
     # Use the same time extraction logic as booking creation
     try:
         parsed_time = extract_time_with_ai(speech_result)
-        print(f"parsed time!!!!!!!!!!:{parsed_time}")
+        print(f"parsed time:{parsed_time}")
 
         if parsed_time and parsed_time.get("pickup_time") and parsed_time.get("pickup_date"):
             # Update booking with new time
