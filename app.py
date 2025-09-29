@@ -91,7 +91,7 @@ TAXICALLER_BASE_URL = "https://api.taxicaller.net/api/v1"
 TAXICALLER_API_KEY = os.getenv("TAXICALLER_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 RENDER_ENDPOINT = os.getenv(
-    "RENDER_ENDPOINT", "https://api-rc.taxicaller.net/api/v1/booker/order"
+    "RENDER_ENDPOINT", "https://api.taxicaller.net/api/v1/booker/order"
 )
 
 # Google Cloud and Twilio Configuration
@@ -237,7 +237,7 @@ def get_taxicaller_jwt():
     print("🔄 Generating new JWT token...")
     try:
         jwt_endpoints = [
-            "https://api-rc.taxicaller.net/api/v1/jwt/for-key",
+            "https://api.taxicaller.net/api/v1/jwt/for-key",
         ]
         params = {"key": TAXICALLER_API_KEY, "sub": "*", "ttl": "900"}
 
@@ -284,7 +284,7 @@ def cancel_taxicaller_booking(order_id, original_booking=None):
             token = jwt_token
 
         # Use the correct booker endpoint for cancellation
-        cancel_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
+        cancel_url = f"https://api.taxicaller.net/api/v1/booker/order/{order_id}/cancel"
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -385,7 +385,7 @@ def edit_taxicaller_booking(order_id, new_time_str, booking_data=None):
             # If JWT token is not a JSON string or doesn't contain 'token' key
             token = jwt_token
 
-        edit_url = f"https://api-rc.taxicaller.net/api/v1/booker/order/{order_id}"
+        edit_url = f"https://api.taxicaller.net/api/v1/booker/order/{order_id}"
 
         # Convert new time to Unix timestamp
         new_time_unix = int(datetime.strptime(new_time_str, "%Y-%m-%d %H:%M:%S").timestamp())
@@ -907,7 +907,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             nz_local_phone = "0" + caller_number[2:]  # 64220881234 → 0220881234
         booking_payload = {
             "order": {
-                "company_id": 8257,
+                "company_id": 7371,
                 "provider_id": 0,
                 "items": [
                     {
@@ -971,7 +971,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     token = jwt_token
                 
             possible_endpoints = [
-                "https://api-rc.taxicaller.net/api/v1/booker/order",  # Fallback
+                "https://api.taxicaller.net/api/v1/booker/order",  # Fallback
             ]
             headers_options = [
                 {
@@ -1068,7 +1068,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print("⚠️ Error while defining endpoints or headers:", e)
             try:
                 print(f"📤 SENDING TO TAXICALLER V2:")
-                print(f"   URL: https://api-rc.taxicaller.net/api/v1/booker/order")
+                print(f"   URL: https://api.taxicaller.net/api/v1/booker/order")
                 print(f"   API Key: {TAXICALLER_API_KEY[:8]}..." if TAXICALLER_API_KEY else "No API key")
                 # Safely print booking information if available
                 if 'booking_payload' in locals():
