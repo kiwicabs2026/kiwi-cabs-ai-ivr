@@ -2301,10 +2301,10 @@ def process_booking():
     <Say voice="Polly.Aria-Neural" language="en-NZ">
         {instructions_prompt}
         Do you have any special instructions for the driver?
-        For example, "wait for me", "call when you arrive", "Text on arrival" or just say "no instructions".
+        For example, text on arrival or wait for me.
     </Say>
     <Gather input="speech" action="/process_booking" method="POST" timeout="15" language="en-NZ" speechTimeout="1">
-        <Say voice="Polly.Aria-Neural" language="en-NZ">Any instructions for the driver?</Say>
+        <Say voice="Polly.Aria-Neural" language="en-NZ">I’m listening now.</Say>
     </Gather>
 </Response>"""
         else:
