@@ -878,7 +878,10 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         if gmaps:
             try:
                 # Get pickup coordinates
+                print(f"🔐 geocode result - booking data:: {booking_data.get('pickup_address', '')}")
+                print(f"🔐 geocode result - booking data:: {booking_data.get('destination', '')}")
                 pickup_geocode = gmaps.geocode(booking_data.get('pickup_address', '') + ", Wellington, New Zealand", region="nz")
+                print(f"🔐 geocode result: {pickup_geocode}")
                 if pickup_geocode:
                     pickup_lat = pickup_geocode[0]['geometry']['location']['lat']
                     pickup_lng = pickup_geocode[0]['geometry']['location']['lng']
