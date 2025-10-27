@@ -716,7 +716,7 @@ def extract_time_with_ai(speech_text):
         result = {}
 
         # Check for immediate booking (same as booking creation)
-        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
+        immediate_keywords = ["no", "now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
         if any(keyword in time_text for keyword in immediate_keywords):
             result["pickup_time"] = "ASAP"
             result["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
@@ -1525,7 +1525,7 @@ def parse_booking_speech(speech_text):
 
     # Extract date - FIXED DATE PARSING BUG
     immediate_keywords = [
-        "right now", "now", "asap", "as soon as possible", "immediately", "straight away",
+        "no", "right now", "now", "asap", "as soon as possible", "immediately", "straight away",
     ]
     tomorrow_keywords = [
         "tomorrow morning", "tomorrow afternoon", "tomorrow evening", "tomorrow night", "tomorrow",
@@ -2359,7 +2359,6 @@ def process_booking():
 <Response>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            {confirmation_text}.
             Is everything correct? Say yes to confirm or no to start over.
         </Say>
     </Gather>
@@ -2511,6 +2510,7 @@ def confirm_booking():
         has_immediate_words = any(
             word in booking_data.get("raw_speech", "").lower()
             for word in [
+                "no",
                 "right now",
                 "now",
                 "asap",
