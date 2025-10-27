@@ -2362,7 +2362,9 @@ def process_booking():
 <Response>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            Is everything correct? Say yes to confirm or no to start over.
+            We’ve received your booking details.
+            If everything is correct, please say ‘Yes’ to confirm.
+            If you need to make any changes, please say ‘No’.
         </Say>
     </Gather>
     <Redirect>/process_booking</Redirect>
