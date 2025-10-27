@@ -2216,7 +2216,7 @@ def process_booking():
         valid_time = False
         
         # Check for immediate booking
-        immediate_keywords = ["now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
+        immediate_keywords = ["no", "now", "right now", "immediately", "asap", "as soon as possible", "straight away"]
         if any(keyword in time_text for keyword in immediate_keywords):
             partial_booking["pickup_time"] = "ASAP"
             partial_booking["pickup_date"] = datetime.now(NZ_TZ).strftime("%d/%m/%Y")
