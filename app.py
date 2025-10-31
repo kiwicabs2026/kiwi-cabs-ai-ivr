@@ -809,6 +809,48 @@ Examples:
         return None
 
 
+def get_route_distance_and_duration(pickup_address, destination_address):
+    """
+    Get actual distance and duration from Google Maps Directions API
+    Returns: (distance_in_meters, duration_in_seconds)
+    """
+    if not gmaps:
+        print("⚠️ Google Maps not available, using defaults")
+        return 5000, 600  # Default fallback
+
+    try:
+        # Add Wellington context if not present
+        pickup_full = pickup_address if "wellington" in pickup_address.lower() else f"{pickup_address}, Wellington, New Zealand"
+        destination_full = destination_address if "wellington" in destination_address.lower() else f"{destination_address}, Wellington, New Zealand"
+
+        print(f"📍 Getting route: {pickup_full} → {destination_full}")
+
+        # Get directions
+        directions = gmaps.directions(
+            origin=pickup_full,
+            destination=destination_full,
+            mode="driving",
+            region="nz"
+        )
+
+        if directions and len(directions) > 0:
+            route = directions[0]
+            leg = route['legs'][0]
+
+            distance_meters = leg['distance']['value']
+            duration_seconds = leg['duration']['value']
+
+            print(f"✅ Route found: {distance_meters}m, {duration_seconds}s")
+            return distance_meters, duration_seconds
+        else:
+            print("⚠️ No route found, using defaults")
+            return 5000, 600
+
+    except Exception as e:
+        print(f"⚠️ Error getting route: {e}, using defaults")
+        return 5000, 600
+
+
 def send_booking_to_taxicaller(booking_data, caller_number):
     """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
@@ -901,6 +943,13 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         if not is_immediate:
             pickup_timestamp = int(NZ_TZ.localize(pickup_datetime).timestamp())
 
+        # Get actual route distance and duration from Google Maps
+        distance_meters, duration_seconds = get_route_distance_and_duration(
+            booking_data.get('pickup_address', ''),
+            booking_data.get('destination', '')
+        )
+        print(f"📊 Route data: {distance_meters}m, {duration_seconds}s")
+
         # Create TaxiCaller compliant payload
         # Convert only NZ international numbers to local format
         nz_local_phone = caller_number
@@ -928,7 +977,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     }
                 ],
                 "route": {
-                    "meta": {"est_dur": "600", "dist": "5000"},
+                    "meta": {"est_dur": str(duration_seconds), "dist": str(distance_meters)},
                     "nodes": [
                         {
                             "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
@@ -952,7 +1001,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     "legs": [
                         {
                             "pts": pickup_coords + dropoff_coords,
-                            "meta": {"dist": "5000", "est_dur": "600"},
+                            "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
                             "to_seq": 1
                         }
