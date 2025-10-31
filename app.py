@@ -2409,13 +2409,18 @@ def process_booking():
 
         response = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+    
+    <Say voice="Polly.Aria-Neural" language="en-NZ">
+        We’ve received your booking details.
+        If everything is correct, please say ‘Yes’ to confirm.
+        If you need to make any changes, please say ‘No’.
+    </Say>
     <Gather action="/confirm_booking" input="speech" method="POST" timeout="10" language="en-NZ" speechTimeout="1">
         <Say voice="Polly.Aria-Neural" language="en-NZ">
-            We’ve received your booking details.
-            If everything is correct, please say ‘Yes’ to confirm.
-            If you need to make any changes, please say ‘No’.
+            I am listening.
         </Say>
     </Gather>
+    
     <Redirect>/process_booking</Redirect>
 </Response>"""
     else:
