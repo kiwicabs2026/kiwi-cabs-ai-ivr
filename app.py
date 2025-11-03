@@ -809,14 +809,53 @@ Examples:
         return None
 
 
+def decode_polyline(polyline_str):
+    """
+    Decode Google Maps polyline string to list of [lng*1e6, lat*1e6] coordinates
+    """
+    try:
+        index, lat, lng = 0, 0, 0
+        coordinates = []
+        changes = {'latitude': 0, 'longitude': 0}
+
+        # Decode polyline
+        while index < len(polyline_str):
+            for unit in ['latitude', 'longitude']:
+                shift, result = 0, 0
+
+                while True:
+                    byte = ord(polyline_str[index]) - 63
+                    index += 1
+                    result |= (byte & 0x1f) << shift
+                    shift += 5
+                    if not byte >= 0x20:
+                        break
+
+                if result & 1:
+                    changes[unit] = ~(result >> 1)
+                else:
+                    changes[unit] = result >> 1
+
+            lat += changes['latitude']
+            lng += changes['longitude']
+
+            # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
+            coordinates.append([int(lng * 1e6), int(lat * 1e6)])
+
+        return coordinates
+    except Exception as e:
+        print(f"⚠️ Error decoding polyline: {e}")
+        return []
+
+
 def get_route_distance_and_duration(pickup_address, destination_address):
     """
-    Get actual distance and duration from Google Maps Directions API
-    Returns: (distance_in_meters, duration_in_seconds)
+    Get actual distance, duration, and route polyline from Google Maps Directions API
+    Returns: (distance_in_meters, duration_in_seconds, route_coordinates_list)
     """
     if not gmaps:
         print("⚠️ Google Maps not available, using defaults")
-        return 5000, 600  # Default fallback
+        return 5000, 600, []  # Default fallback
 
     try:
         # Add Wellington context if not present
@@ -825,7 +864,7 @@ def get_route_distance_and_duration(pickup_address, destination_address):
 
         print(f"📍 Getting route: {pickup_full} → {destination_full}")
 
-        # Get directions
+        # Get directions with polyline
         directions = gmaps.directions(
             origin=pickup_full,
             destination=destination_full,
@@ -840,15 +879,19 @@ def get_route_distance_and_duration(pickup_address, destination_address):
             distance_meters = leg['distance']['value']
             duration_seconds = leg['duration']['value']
 
-            print(f"✅ Route found: {distance_meters}m, {duration_seconds}s")
-            return distance_meters, duration_seconds
+            # Extract polyline from the route
+            polyline_str = route.get('overview_polyline', {}).get('points', '')
+            route_coords = decode_polyline(polyline_str) if polyline_str else []
+
+            print(f"✅ Route found: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
+            return distance_meters, duration_seconds, route_coords
         else:
             print("⚠️ No route found, using defaults")
-            return 5000, 600
+            return 5000, 600, []
 
     except Exception as e:
         print(f"⚠️ Error getting route: {e}, using defaults")
-        return 5000, 600
+        return 5000, 600, []
 
 
 def send_booking_to_taxicaller(booking_data, caller_number):
@@ -943,12 +986,12 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         if not is_immediate:
             pickup_timestamp = int(NZ_TZ.localize(pickup_datetime).timestamp())
 
-        # Get actual route distance and duration from Google Maps
-        distance_meters, duration_seconds = get_route_distance_and_duration(
+        # Get actual route distance, duration, and polyline from Google Maps
+        distance_meters, duration_seconds, route_coords = get_route_distance_and_duration(
             booking_data.get('pickup_address', ''),
             booking_data.get('destination', '')
         )
-        print(f"📊 Route data: {distance_meters}m, {duration_seconds}s")
+        print(f"📊 Route data: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
 
         # Create TaxiCaller compliant payload
         # Convert only NZ international numbers to local format
@@ -1000,7 +1043,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     ],
                     "legs": [
                         {
-                            "pts": pickup_coords + dropoff_coords,
+                            "pts": route_coords if route_coords else (pickup_coords + dropoff_coords),
                             "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
                             "to_seq": 1
