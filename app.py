@@ -1043,7 +1043,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     ],
                     "legs": [
                         {
-                            "pts": route_coords if route_coords else (pickup_coords + dropoff_coords),
+                            "pts": route_coords if route_coords else [pickup_coords, dropoff_coords],
                             "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
                             "to_seq": 1
@@ -1088,6 +1088,10 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone']}")
             print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
             print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
+            print(f"   Route Distance: {booking_payload['order']['route']['meta']['dist']}m")
+            print(f"   Route Duration: {booking_payload['order']['route']['meta']['est_dur']}s")
+            print(f"   Route Waypoints: {len(booking_payload['order']['route']['legs'][0]['pts'])} points")
+            print(f"📋 Full Payload: {json.dumps(booking_payload, indent=2)}")
             print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
             
             # Try multiple TaxiCaller endpoints

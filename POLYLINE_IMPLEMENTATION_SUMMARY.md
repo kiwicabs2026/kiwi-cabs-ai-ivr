@@ -55,7 +55,7 @@ distance_meters, duration_seconds, route_coords = get_route_distance_and_duratio
 ```python
 "legs": [
     {
-        "pts": route_coords if route_coords else (pickup_coords + dropoff_coords),
+        "pts": route_coords if route_coords else [pickup_coords, dropoff_coords],
         "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
         "from_seq": 0,
         "to_seq": 1
@@ -65,7 +65,9 @@ distance_meters, duration_seconds, route_coords = get_route_distance_and_duratio
 
 **Key Points:**
 - `"pts"` now contains full polyline with all waypoints
-- Falls back to start/end points if polyline unavailable
+- Format: List of [lng*1e6, lat*1e6] coordinate pairs
+- Falls back to [pickup_coords, dropoff_coords] if polyline unavailable
+- Maintains consistent data structure (list of lists)
 - Maintains backward compatibility
 
 ---
@@ -116,8 +118,9 @@ TaxiCaller Dispatcher Map
 If Google Maps is unavailable or fails:
 - Distance: 5000 meters (default)
 - Duration: 600 seconds (default)
-- Route polyline: Empty list []
+- Route polyline: Falls back to [pickup_coords, dropoff_coords]
 - Booking still succeeds with start/end points only
+- **Important**: Fallback maintains consistent list-of-lists format to prevent API errors
 
 ---
 
