@@ -849,12 +849,17 @@ def get_route_distance_and_duration(pickup_address, destination_address):
             route_coords = []
             if polyline_str:
                 try:
-                    # decode_polyline returns list of (lat, lng) tuples
-                    decoded_points = decode_polyline(polyline_str)
+                    # decode_polyline returns a generator of (lat, lng) tuples
+                    # Convert to list first, then to TaxiCaller format
+                    decoded_points = list(decode_polyline(polyline_str))
+                    print(f"🔍 Decoded {len(decoded_points)} polyline points")
+
                     # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
                     route_coords = [[int(lng * 1e6), int(lat * 1e6)] for lat, lng in decoded_points]
+                    print(f"✅ Converted to {len(route_coords)} TaxiCaller coordinates")
                 except Exception as decode_error:
                     print(f"⚠️ Error decoding polyline: {decode_error}")
+                    print(f"   Polyline string: {polyline_str[:50]}...")
                     route_coords = []
 
             print(f"✅ Route found: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
@@ -966,6 +971,24 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_data.get('destination', '')
         )
         print(f"📊 Route data: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
+        print(f"🔍 Pickup coords: {pickup_coords}")
+        print(f"🔍 Dropoff coords: {dropoff_coords}")
+        print(f"🔍 Route coords (first 3): {route_coords[:3] if route_coords else 'EMPTY'}")
+
+        # Validate coordinates - TaxiCaller doesn't accept [0, 0]
+        if pickup_coords == [0, 0] or dropoff_coords == [0, 0]:
+            print(f"⚠️ WARNING: Invalid coordinates detected!")
+            print(f"   Pickup: {pickup_coords} (should be [lng*1e6, lat*1e6])")
+            print(f"   Dropoff: {dropoff_coords} (should be [lng*1e6, lat*1e6])")
+            print(f"   Attempting to use route coordinates as fallback...")
+
+            # If we have route coordinates, use the first and last as pickup/dropoff
+            if route_coords and len(route_coords) >= 2:
+                pickup_coords = route_coords[0]
+                dropoff_coords = route_coords[-1]
+                print(f"   ✅ Using route coordinates: Pickup={pickup_coords}, Dropoff={dropoff_coords}")
+            else:
+                print(f"   ❌ No valid coordinates available - this will likely cause TaxiCaller API to fail")
 
         # Create TaxiCaller compliant payload
         # Convert only NZ international numbers to local format
@@ -990,7 +1013,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                         "client_id": 0,
                         "account": {"id": 0},
                         "require": {"seats": 1, "wc": 0, "bags": 1},
-                        "pay_info": [{"@t": 0, "data": None}]
+                        "pay_info": [{"@t": 0, "data": ""}]
                     }
                 ],
                 "route": {
@@ -1062,11 +1085,20 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             print(f"   Phone: {booking_payload['order']['items'][0]['passenger']['phone']}")
             print(f"   Pickup: {booking_payload['order']['route']['nodes'][0]['location']['name']}")
             print(f"   Dropoff: {booking_payload['order']['route']['nodes'][1]['location']['name']}")
+            print(f"   Pickup Coords: {booking_payload['order']['route']['nodes'][0]['location']['coords']}")
+            print(f"   Dropoff Coords: {booking_payload['order']['route']['nodes'][1]['location']['coords']}")
             print(f"   Route Distance: {booking_payload['order']['route']['meta']['dist']}m")
             print(f"   Route Duration: {booking_payload['order']['route']['meta']['est_dur']}s")
             print(f"   Route Waypoints: {len(booking_payload['order']['route']['legs'][0]['pts'])} points")
-            print(f"📋 Full Payload: {json.dumps(booking_payload, indent=2)}")
             print(f"   Time: {booking_payload['order']['route']['nodes'][0]['times']['arrive']['target']}")
+
+            # Validate payload structure
+            try:
+                payload_json = json.dumps(booking_payload)
+                print(f"✅ Payload is valid JSON ({len(payload_json)} bytes)")
+            except Exception as json_error:
+                print(f"❌ PAYLOAD JSON ERROR: {json_error}")
+                print(f"📋 Full Payload: {json.dumps(booking_payload, indent=2, default=str)}")
             
             # Try multiple TaxiCaller endpoints
             for endpoint in possible_endpoints:
