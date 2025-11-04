@@ -1047,6 +1047,8 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                                 "name": booking_data.get('destination', ''),
                                 "coords": dropoff_coords
                             },
+                            "times": {"arrive": {"target": 0}},
+                            "info": {"all": ""},
                             "seq": 1
                         }
                     ],
