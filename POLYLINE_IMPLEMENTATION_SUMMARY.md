@@ -7,20 +7,20 @@ Enhanced the TaxiCaller booking system to include **exact route paths** with all
 
 ## What Was Added
 
-### 1. **decode_polyline() Function** (Line 812)
-Decodes Google Maps' compressed polyline format to coordinate pairs.
+### 1. **Import decode_polyline** (Line 16)
+Uses Google Maps' built-in polyline decoder instead of custom implementation.
 
 ```python
-def decode_polyline(polyline_str):
-    """Decode Google Maps polyline string to list of [lng*1e6, lat*1e6] coordinates"""
+from googlemaps.convert import decode_polyline
 ```
 
 **Key Features:**
+- Uses official Google Maps Python client library function
 - Handles Google's polyline encoding algorithm
-- Returns coordinates as [lng*1e6, lat*1e6] pairs (TaxiCaller format)
+- Returns coordinates as (lat, lng) tuples
 - Graceful error handling with empty list fallback
 
-### 2. **Enhanced get_route_distance_and_duration()** (Line 851)
+### 2. **Enhanced get_route_distance_and_duration()** (Line 813)
 Now returns THREE values instead of two:
 
 ```python
@@ -36,8 +36,9 @@ def get_route_distance_and_duration(pickup_address, destination_address):
 **Process:**
 1. Calls Google Maps Directions API
 2. Extracts `overview_polyline.points` from response
-3. Decodes polyline to coordinate list
-4. Returns all three values
+3. Decodes polyline using `googlemaps.convert.decode_polyline()` (returns (lat, lng) tuples)
+4. Converts to TaxiCaller format: `[[lng*1e6, lat*1e6], ...]`
+5. Returns all three values with proper error handling
 
 ---
 
@@ -139,10 +140,11 @@ If Google Maps is unavailable or fails:
 ## Files Modified
 
 - **app.py**
-  - Line 812: Added `decode_polyline()` function
-  - Line 851: Enhanced `get_route_distance_and_duration()` function
-  - Line 990: Updated function call to capture route_coords
-  - Line 1046: Updated "pts" field to use full polyline
+  - Line 16: Added import `from googlemaps.convert import decode_polyline`
+  - Line 813: Enhanced `get_route_distance_and_duration()` function
+  - Line 855: Convert decoded polyline to TaxiCaller format [lng*1e6, lat*1e6]
+  - Line 1002: Updated function call to capture route_coords
+  - Line 1058: Updated "pts" field to use full polyline with fallback
 
 ---
 

@@ -13,7 +13,8 @@ import threading
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import googlemaps
-import pytz 
+from googlemaps.convert import decode_polyline
+import pytz
 from zoneinfo import ZoneInfo
 
 # New Zealand timezone
@@ -809,49 +810,11 @@ Examples:
         return None
 
 
-def decode_polyline(polyline_str):
-    """
-    Decode Google Maps polyline string to list of [lng*1e6, lat*1e6] coordinates
-    """
-    try:
-        index, lat, lng = 0, 0, 0
-        coordinates = []
-        changes = {'latitude': 0, 'longitude': 0}
-
-        # Decode polyline
-        while index < len(polyline_str):
-            for unit in ['latitude', 'longitude']:
-                shift, result = 0, 0
-
-                while True:
-                    byte = ord(polyline_str[index]) - 63
-                    index += 1
-                    result |= (byte & 0x1f) << shift
-                    shift += 5
-                    if not byte >= 0x20:
-                        break
-
-                if result & 1:
-                    changes[unit] = ~(result >> 1)
-                else:
-                    changes[unit] = result >> 1
-
-            lat += changes['latitude']
-            lng += changes['longitude']
-
-            # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
-            coordinates.append([int(lng * 1e6), int(lat * 1e6)])
-
-        return coordinates
-    except Exception as e:
-        print(f"⚠️ Error decoding polyline: {e}")
-        return []
-
-
 def get_route_distance_and_duration(pickup_address, destination_address):
     """
     Get actual distance, duration, and route polyline from Google Maps Directions API
     Returns: (distance_in_meters, duration_in_seconds, route_coordinates_list)
+    route_coordinates_list format: [[lng*1e6, lat*1e6], [lng*1e6, lat*1e6], ...]
     """
     if not gmaps:
         print("⚠️ Google Maps not available, using defaults")
@@ -881,12 +844,23 @@ def get_route_distance_and_duration(pickup_address, destination_address):
 
             # Extract polyline from the route
             polyline_str = route.get('overview_polyline', {}).get('points', '')
-            route_coords = decode_polyline(polyline_str) if polyline_str else []
+
+            # Decode polyline and convert to TaxiCaller format [lng*1e6, lat*1e6]
+            route_coords = []
+            if polyline_str:
+                try:
+                    # decode_polyline returns list of (lat, lng) tuples
+                    decoded_points = decode_polyline(polyline_str)
+                    # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
+                    route_coords = [[int(lng * 1e6), int(lat * 1e6)] for lat, lng in decoded_points]
+                except Exception as decode_error:
+                    print(f"⚠️ Error decoding polyline: {decode_error}")
+                    route_coords = []
 
             print(f"✅ Route found: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
             return distance_meters, duration_seconds, route_coords
         else:
-            print("⚠️ No route found, using defaults")
+            print(f"⚠️ No route found between {pickup_full} and {destination_full}")
             return 5000, 600, []
 
     except Exception as e:
