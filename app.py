@@ -854,13 +854,30 @@ def get_route_distance_and_duration(pickup_address, destination_address):
                     decoded_points = list(decode_polyline(polyline_str))
                     print(f"🔍 Decoded {len(decoded_points)} polyline points")
 
-                    # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
-                    route_coords = [[int(lng * 1e6), int(lat * 1e6)] for lat, lng in decoded_points]
-                    print(f"✅ Converted to {len(route_coords)} TaxiCaller coordinates")
+                    # Debug: check first point
+                    if decoded_points:
+                        first_point = decoded_points[0]
+                        print(f"   First point type: {type(first_point)}, value: {first_point}")
+
                 except Exception as decode_error:
                     print(f"⚠️ Error decoding polyline: {decode_error}")
                     print(f"   Polyline string: {polyline_str[:50]}...")
                     route_coords = []
+                    decoded_points = []
+
+                # Convert to [lng*1e6, lat*1e6] format for TaxiCaller (outside try block)
+                if decoded_points:
+                    try:
+                        route_coords = []
+                        for point in decoded_points:
+                            if isinstance(point, (tuple, list)) and len(point) == 2:
+                                lat, lng = point
+                                route_coords.append([int(lng * 1e6), int(lat * 1e6)])
+                        print(f"✅ Converted to {len(route_coords)} TaxiCaller coordinates")
+                    except Exception as convert_error:
+                        print(f"⚠️ Error converting coordinates: {convert_error}")
+                        print(f"   Point: {point}, Type: {type(point)}")
+                        route_coords = []
 
             print(f"✅ Route found: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
             return distance_meters, duration_seconds, route_coords
