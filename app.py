@@ -856,28 +856,45 @@ def get_route_distance_and_duration(pickup_address, destination_address):
 
                     # Convert to [lng*1e6, lat*1e6] format for TaxiCaller
                     route_coords = []
-                    for point in decoded_points:
-                        if isinstance(point, dict):
-                            # Point is a dict with 'lat' and 'lng' keys
-                            lat = point.get('lat', 0)
-                            lng = point.get('lng', 0)
-                            # Skip invalid/empty coordinates
-                            if lat != 0 or lng != 0:
-                                route_coords.append([int(lng * 1e6), int(lat * 1e6)])
-                        elif isinstance(point, (tuple, list)) and len(point) == 2:
-                            # Point is a tuple/list (lat, lng)
-                            lat, lng = point
-                            # Skip invalid/empty coordinates
-                            if lat != 0 or lng != 0:
-                                route_coords.append([int(lng * 1e6), int(lat * 1e6)])
-                        elif isinstance(point, (tuple, list)) and len(point) > 0:
-                            # Handle edge case of incomplete tuples/lists
-                            if len(point) >= 2:
-                                lat, lng = point[0], point[1]
+                    invalid_points = 0
+                    for i, point in enumerate(decoded_points):
+                        try:
+                            if isinstance(point, dict):
+                                # Point is a dict with 'lat' and 'lng' keys
+                                lat = point.get('lat', 0)
+                                lng = point.get('lng', 0)
+                                # Skip invalid/empty coordinates
                                 if lat != 0 or lng != 0:
                                     route_coords.append([int(lng * 1e6), int(lat * 1e6)])
+                                else:
+                                    invalid_points += 1
+                            elif isinstance(point, (tuple, list)) and len(point) == 2:
+                                # Point is a tuple/list (lat, lng)
+                                lat, lng = point
+                                # Skip invalid/empty coordinates
+                                if lat != 0 or lng != 0:
+                                    route_coords.append([int(lng * 1e6), int(lat * 1e6)])
+                                else:
+                                    invalid_points += 1
+                            elif isinstance(point, (tuple, list)) and len(point) > 0:
+                                # Handle edge case of incomplete tuples/lists
+                                if len(point) >= 2:
+                                    lat, lng = point[0], point[1]
+                                    if lat != 0 or lng != 0:
+                                        route_coords.append([int(lng * 1e6), int(lat * 1e6)])
+                                    else:
+                                        invalid_points += 1
+                                else:
+                                    invalid_points += 1
+                            else:
+                                # Invalid point type
+                                print(f"⚠️ Invalid point at index {i}: type={type(point)}, value={point}")
+                                invalid_points += 1
+                        except Exception as point_error:
+                            print(f"⚠️ Error processing point {i}: {point_error}, point={point}")
+                            invalid_points += 1
 
-                    print(f"✅ Converted to {len(route_coords)} TaxiCaller coordinates")
+                    print(f"✅ Converted to {len(route_coords)} TaxiCaller coordinates ({invalid_points} invalid points filtered)")
 
                 except Exception as decode_error:
                     print(f"⚠️ Error decoding/converting polyline: {decode_error}")
@@ -1072,7 +1089,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     ],
                     "legs": [
                         {
-                            "pts": [pt for pt in (route_coords if route_coords else [pickup_coords, dropoff_coords]) if pt and len(pt) == 2],
+                            "pts": [pt for pt in (route_coords if route_coords else [pickup_coords, dropoff_coords]) if isinstance(pt, list) and len(pt) == 2 and isinstance(pt[0], int) and isinstance(pt[1], int)],
                             "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
                             "to_seq": 1
