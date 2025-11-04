@@ -1009,10 +1009,18 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             nz_local_phone = "0" + caller_number[3:]  # +64220881234 → 0220881234
         elif caller_number.startswith("64") and len(caller_number) == 11:  # Ensure it's NZ format
             nz_local_phone = "0" + caller_number[2:]  # 64220881234 → 0220881234
+
+        # Debug: Print booking_data keys
+        print(f"🔍 DEBUG - booking_data keys: {list(booking_data.keys())}")
+        print(f"🔍 DEBUG - booking_data['name']: {booking_data.get('name', 'MISSING')}")
+        print(f"🔍 DEBUG - booking_data['pickup_address']: {booking_data.get('pickup_address', 'MISSING')}")
+        print(f"🔍 DEBUG - booking_data['destination']: {booking_data.get('destination', 'MISSING')}")
+        print(f"🔍 DEBUG - booking_data['driver_instructions']: {booking_data.get('driver_instructions', 'MISSING')}")
         booking_payload = {
             "order": {
                 "company_id": 7371,
                 "provider_id": 0,
+                "order_id": 0,
                 "items": [
                     {
                         "@type": "passengers",
@@ -1023,7 +1031,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                             "phone": nz_local_phone
                         },
                         "client_id": 0,
-                        "account": {"id": 0},
+                        "account": {"id": 0, "customer_id": 0},
                         "require": {"seats": 1, "wc": 0, "bags": 1},
                         "pay_info": [{"@t": 0, "data": ""}]
                     }
@@ -1110,6 +1118,18 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             try:
                 payload_json = json.dumps(booking_payload)
                 print(f"✅ Payload is valid JSON ({len(payload_json)} bytes)")
+
+                # Debug: Print the actual pts field
+                pts_field = booking_payload['order']['route']['legs'][0]['pts']
+                print(f"🔍 DEBUG - pts field type: {type(pts_field)}")
+                print(f"🔍 DEBUG - pts field length: {len(pts_field)}")
+                if pts_field:
+                    print(f"🔍 DEBUG - pts[0]: {pts_field[0]}")
+                    print(f"🔍 DEBUG - pts[0] type: {type(pts_field[0])}")
+
+                # Print full payload for debugging
+                print(f"📋 FULL PAYLOAD:\n{json.dumps(booking_payload, indent=2)}")
+
             except Exception as json_error:
                 print(f"❌ PAYLOAD JSON ERROR: {json_error}")
                 print(f"📋 Full Payload: {json.dumps(booking_payload, indent=2, default=str)}")
