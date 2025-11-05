@@ -912,6 +912,65 @@ def get_route_distance_and_duration(pickup_address, destination_address):
         return 5000, 600, []
 
 
+def _build_route_nodes(pickup_address, destination_address, pickup_coords, dropoff_coords, pickup_timestamp, driver_instructions, route_coords):
+    """
+    Build route nodes with waypoints for exact route visualization.
+
+    Args:
+        pickup_address: Pickup location name
+        destination_address: Dropoff location name
+        pickup_coords: [lng*1e6, lat*1e6] for pickup
+        dropoff_coords: [lng*1e6, lat*1e6] for dropoff
+        pickup_timestamp: Unix timestamp for pickup time
+        driver_instructions: Special instructions for driver
+        route_coords: List of [lng*1e6, lat*1e6] waypoints from Google Maps polyline
+
+    Returns:
+        List of nodes with pickup, waypoints, and dropoff
+    """
+    nodes = [
+        {
+            "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
+            "location": {
+                "name": pickup_address,
+                "coords": pickup_coords
+            },
+            "times": {"arrive": {"target": pickup_timestamp}},
+            "info": {"all": driver_instructions},
+            "seq": 0
+        }
+    ]
+
+    # Add intermediate waypoints from route polyline
+    if route_coords and len(route_coords) > 2:
+        # Skip first and last points (they're pickup and dropoff)
+        for i, coord in enumerate(route_coords[1:-1], 1):
+            nodes.append({
+                "actions": [],
+                "location": {
+                    "name": f"Waypoint {i}",
+                    "coords": coord
+                },
+                "times": {"arrive": {"target": 0}},
+                "info": {"all": ""},
+                "seq": i
+            })
+
+    # Add dropoff node
+    nodes.append({
+        "actions": [{"@type": "client_action", "item_seq": 0, "action": "out"}],
+        "location": {
+            "name": destination_address,
+            "coords": dropoff_coords
+        },
+        "times": {"arrive": {"target": 0}},
+        "info": {"all": ""},
+        "seq": len(nodes)
+    })
+
+    return nodes
+
+
 def send_booking_to_taxicaller(booking_data, caller_number):
     """Send booking to TaxiCaller API using the correct v1 endpoint"""
     try:
@@ -1009,6 +1068,17 @@ def send_booking_to_taxicaller(booking_data, caller_number):
             booking_data.get('pickup_address', ''),
             booking_data.get('destination', '')
         )
+
+        # Build route nodes with waypoints for exact route visualization
+        route_nodes = _build_route_nodes(
+            booking_data.get('pickup_address', ''),
+            booking_data.get('destination', ''),
+            pickup_coords,
+            dropoff_coords,
+            pickup_timestamp,
+            booking_data.get("driver_instructions", ""),
+            route_coords
+        )
         print(f"📊 Route data: {distance_meters}m, {duration_seconds}s, {len(route_coords)} waypoints")
         print(f"🔍 Pickup coords: {pickup_coords}")
         print(f"🔍 Dropoff coords: {dropoff_coords}")
@@ -1065,34 +1135,13 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                 ],
                 "route": {
                     "meta": {"est_dur": str(duration_seconds), "dist": str(distance_meters)},
-                    "nodes": [
-                        {
-                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "in"}],
-                            "location": {
-                                "name": booking_data.get('pickup_address', ''),
-                                "coords": pickup_coords
-                            },
-                            "times": {"arrive": {"target": pickup_timestamp}},
-                            "info": {"all": booking_data.get("driver_instructions", "")},
-                            "seq": 0
-                        },
-                        {
-                            "actions": [{"@type": "client_action", "item_seq": 0, "action": "out"}],
-                            "location": {
-                                "name": booking_data.get('destination', ''),
-                                "coords": dropoff_coords
-                            },
-                            "times": {"arrive": {"target": 0}},
-                            "info": {"all": ""},
-                            "seq": 1
-                        }
-                    ],
+                    "nodes": route_nodes,
                     "legs": [
                         {
-                            "pts": [pt for pt in (route_coords if route_coords else [pickup_coords, dropoff_coords]) if isinstance(pt, list) and len(pt) == 2 and isinstance(pt[0], int) and isinstance(pt[1], int)],
+                            "pts": [],
                             "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
-                            "to_seq": 1
+                            "to_seq": len(route_nodes) - 1
                         }
                     ]
                 }
