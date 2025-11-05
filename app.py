@@ -1113,6 +1113,18 @@ def send_booking_to_taxicaller(booking_data, caller_number):
         print(f"🔍 DEBUG - booking_data['pickup_address']: {booking_data.get('pickup_address', 'MISSING')}")
         print(f"🔍 DEBUG - booking_data['destination']: {booking_data.get('destination', 'MISSING')}")
         print(f"🔍 DEBUG - booking_data['driver_instructions']: {booking_data.get('driver_instructions', 'MISSING')}")
+
+        # Convert route_coords to flattened pts array for TaxiCaller API
+        # pts should be a flat array: [lng1, lat1, lng2, lat2, lng3, lat3, ...]
+        pts_array = []
+        if route_coords:
+            for coord in route_coords:
+                if isinstance(coord, (list, tuple)) and len(coord) >= 2:
+                    pts_array.append(coord[0])  # lng
+                    pts_array.append(coord[1])  # lat
+
+        print(f"📍 Route pts array: {len(pts_array)//2} coordinate pairs ({len(pts_array)} total values)")
+
         booking_payload = {
             "order": {
                 "company_id": 7371,
@@ -1138,7 +1150,7 @@ def send_booking_to_taxicaller(booking_data, caller_number):
                     "nodes": route_nodes,
                     "legs": [
                         {
-                            "pts": [],
+                            "pts": pts_array,
                             "meta": {"dist": str(distance_meters), "est_dur": str(duration_seconds)},
                             "from_seq": 0,
                             "to_seq": len(route_nodes) - 1
